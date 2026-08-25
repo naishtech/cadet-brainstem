@@ -8,12 +8,12 @@
 
 ## Objective
 
-Implement `token-optimizer config` to view and edit configuration from the CLI.
+Implement `cadet-token-saver config` to view and edit configuration from the CLI.
 
 ## Details
 
-- `token-optimizer config` with no args prints the effective (defaults-applied) configuration.
-- Support viewing/editing individual values, e.g. `token-optimizer config set classifier.model <model>`, `token-optimizer config set session.max_turns 50`, `token-optimizer config set telemetry.enabled true`.
+- `cadet-token-saver config` with no args prints the effective (defaults-applied) configuration.
+- Support viewing/editing individual values, e.g. `cadet-token-saver config set classifier.model <model>`, `cadet-token-saver config set session.max_turns 50`, `cadet-token-saver config set telemetry.enabled true`.
 - Support `get <key>` to read a single value.
 - Validate values before saving (reuse Task 02 schema).
 - Show the config file path in output.

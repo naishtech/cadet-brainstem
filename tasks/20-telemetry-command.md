@@ -14,9 +14,9 @@ Implement the `telemetry` subcommand surface for managing the opt-in setting.
 
 Subcommands:
 
-- `token-optimizer telemetry status` — show whether telemetry is on/off and exactly what is collected.
-- `token-optimizer telemetry on` — opt in.
-- `token-optimizer telemetry off` — opt out.
+- `cadet-token-saver telemetry status` — show whether telemetry is on/off and exactly what is collected.
+- `cadet-token-saver telemetry on` — opt in.
+- `cadet-token-saver telemetry off` — opt out.
 
 - Telemetry must be **OFF by default** unless explicitly opted in during setup.
 - The user must be able to see exactly what is collected.

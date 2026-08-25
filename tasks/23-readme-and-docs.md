@@ -14,7 +14,7 @@ Write the user-facing and architecture documentation required for a usable npm p
 
 Provide:
 
-- README (installation, quick start with `npx token-optimizer init`, command reference)
+- README (installation, quick start with `npx cadet-token-saver init`, command reference)
 - Installation instructions
 - Architecture documentation
 - Configuration reference

@@ -73,14 +73,14 @@ export const defaultConfig: Config = {
 
 // ── Config file location ──────────────────────────────────────────────────
 
-const CONFIG_DIR = '.token-optimizer';
+const CONFIG_DIR = '.cadet-token-saver';
 
 /**
  * Stable local config path.
- * Overridable via TOKEN_OPTIMIZER_CONFIG (useful for tests / non-default setups).
+ * Overridable via CADET_TOKEN_SAVER_CONFIG (useful for tests / non-default setups).
  */
 export function getConfigPath(): string {
-  const env = process.env.TOKEN_OPTIMIZER_CONFIG;
+  const env = process.env.CADET_TOKEN_SAVER_CONFIG;
   if (env !== undefined && env.length > 0) {
     return env;
   }

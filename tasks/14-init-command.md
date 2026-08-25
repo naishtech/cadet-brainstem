@@ -8,7 +8,7 @@
 
 ## Objective
 
-Implement the primary first-run experience: `token-optimizer init`.
+Implement the primary first-run experience: `cadet-token-saver init`.
 
 ## Details
 

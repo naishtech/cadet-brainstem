@@ -39,7 +39,7 @@ tools:
 - Provide a typed config schema (use a validation lib like `zod`, or hand-rolled type guards).
 - `load()` should apply defaults when fields are missing.
 - `save()` should write a clean, human-readable YAML file.
-- `getConfigPath()` should return a stable local path (e.g. `~/.token-optimizer/config.yaml` or project-local `.token-optimizer/config.yaml`). Pick one documented location and keep it consistent across tasks.
+- `getConfigPath()` should return a stable local path (e.g. `~/.cadet-token-saver/config.yaml` or project-local `.cadet-token-saver/config.yaml`). Pick one documented location and keep it consistent across tasks.
 - Provide helpers to read/write individual values (used by the `config` command).
 
 ## Acceptance Criteria

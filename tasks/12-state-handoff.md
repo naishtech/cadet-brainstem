@@ -8,7 +8,7 @@
 
 ## Objective
 
-Generate a very small handoff file `.token-optimizer/state.yaml` instead of a sophisticated State Tree.
+Generate a very small handoff file `.cadet-token-saver/state.yaml` instead of a sophisticated State Tree.
 
 ## Details
 
@@ -38,7 +38,7 @@ next_action: "..."
 
 ## Acceptance Criteria
 
-- [ ] `state.yaml` is written to `.token-optimizer/` with the documented fields.
+- [ ] `state.yaml` is written to `.cadet-token-saver/` with the documented fields.
 - [ ] File is small and human-readable.
 - [ ] It is intentionally simple (no state machine / state tree logic).
 - [ ] Handoff content is produced from tracked session info (objective, decisions, unresolved, pointers, last/next action).

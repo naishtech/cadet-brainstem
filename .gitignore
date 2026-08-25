@@ -5,7 +5,7 @@ node_modules/
 dist/
 
 # Local state (Cadet Token Saver)
-.token-optimizer/
+.cadet-token-saver/
 
 # SQLite metrics databases
 *.db

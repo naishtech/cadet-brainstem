@@ -8,7 +8,7 @@
 
 ## Objective
 
-Implement `token-optimizer dashboard` to launch a lightweight local web dashboard.
+Implement `cadet-token-saver dashboard` to launch a lightweight local web dashboard.
 
 ## Details
 

@@ -8,7 +8,7 @@
 
 ## Objective
 
-Implement `token-optimizer stats` to print a terminal summary of saved/processed metrics from the local store.
+Implement `cadet-token-saver stats` to print a terminal summary of saved/processed metrics from the local store.
 
 ## Details
 

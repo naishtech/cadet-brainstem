@@ -3,10 +3,10 @@
 const VERSION = '0.1.0';
 
 function printHelp(): void {
-  console.log(`token-optimizer — Cadet Token Saver CLI
+  console.log(`cadet-token-saver — Cadet Token Saver CLI
 
 Usage:
-  token-optimizer <command>
+  cadet-token-saver <command>
 
 Commands:
   init        Set up configuration and integrations (first run)
@@ -37,7 +37,7 @@ function main(): void {
   }
 
   console.error(
-    `token-optimizer: unknown command "${args[0]}" — run "token-optimizer --help".`,
+    `cadet-token-saver: unknown command "${args[0]}" — run "cadet-token-saver --help".`,
   );
   process.exitCode = 1;
 }
