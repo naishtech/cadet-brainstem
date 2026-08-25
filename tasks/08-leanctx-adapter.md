@@ -46,10 +46,9 @@ Support the major strategies exposed by LeanCTX:
 
 Prerequisite: LeanCTX (`lean-ctx`) — a local Rust binary (https://github.com/yvgude/lean-ctx).
 
-Install (pick one):
-- `npm i -g lean-ctx-bin` (preferred)
-- `curl -fsSL https://leanctx.com/install.sh | sh`
-- `brew install lean-ctx`
+**Windows:** download `lean-ctx-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/yvgude/lean-ctx/releases), extract it, and put `lean-ctx.exe` on your PATH.
+
+Other platforms: `curl -fsSL https://leanctx.com/install.sh | sh`, `brew install lean-ctx`, or `cargo install lean-ctx`.
 
 Verify: `lean-ctx --version` or `lean-ctx doctor`.
 
