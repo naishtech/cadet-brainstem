@@ -1,13 +1,200 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import os from 'node:os';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+import { getConfigPath, loadConfig, saveConfig } from '../../config';
+import {
+  detectEnvironment,
+  type EnvironmentReport,
+  type ToolAvailability,
+} from '../../core/environment';
+import {
+  LEANCTX_WINDOWS_URL,
+  OLLAMA_MODEL,
+  RTK_WINDOWS_URL,
+  downloadAndExtractZip,
+  pullOllamaModel,
+  startOllamaDocker,
+} from '../../core/installers';
+import { getDefaultMetricsPath, MetricsStore } from '../../metrics';
 import type { CliCommand } from '../types';
+
+export interface InitDeps {
+  /** Override environment detection (tests). */
+  detect?: () => Promise<EnvironmentReport>;
+  /** Consent prompt. Defaults to interactive y/N. */
+  ask?: (question: string) => Promise<boolean>;
+  /** Override where the config is written (tests). */
+  configPath?: string;
+  /** Override where the metrics db is created (tests). */
+  metricsPath?: string;
+  /** Override the log sink (tests). */
+  log?: (line: string) => void;
+}
+
+/**
+ * Default consent prompt: read a y/N answer from stdin. When stdin is not a
+ * TTY (pipelines, CI, redirected fd) or the terminal refuses raw mode, no
+ * answer is possible — the question is printed and "no" is assumed so the
+ * tool never modifies the environment unasked.
+ */
+export async function askYesNo(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    console.log(`${question} [y/N] (non-interactive — assuming no)`);
+    return false;
+  }
+  const rl = createInterface({ input, output });
+  try {
+    const answer = await rl.question(`${question} [y/N] `);
+    return ['y', 'yes'].includes(answer.trim().toLowerCase());
+  } catch {
+    // e.g. "stdin is not a tty" from setRawMode on a console handle that is
+    // not a real TTY (common in Git Bash on Windows) — assume no.
+    console.log(`${question} [y/N] (cannot read a response — assuming no)`);
+    return false;
+  } finally {
+    rl.close();
+  }
+}
+
+function formatAvailability(tool: ToolAvailability): string {
+  if (tool.available) {
+    return tool.detail !== undefined ? tool.detail : 'available';
+  }
+  return 'MISSING';
+}
+
+interface OfferContext {
+  ask: (question: string) => Promise<boolean>;
+  log: (line: string) => void;
+}
+
+/** Consent-gated offers to configure/install missing pieces (design doc §1.8). */
+async function offerInstallations(
+  report: EnvironmentReport,
+  { ask, log }: OfferContext,
+): Promise<void> {
+  // Classifier model pull — only when Ollama is reachable (safe & idempotent).
+  if (report.ollama.available) {
+    if (await ask(`Pull the classifier model (${OLLAMA_MODEL}) via Ollama?`)) {
+      try {
+        const { stdout, stderr } = await pullOllamaModel();
+        log(stdout || stderr);
+      } catch (err) {
+        log(`  failed: ${(err as Error).message}`);
+      }
+    }
+  } else {
+    log('');
+    log('Missing: ollama (classifier)');
+    log('  Native install: https://ollama.com');
+    log(
+      '  Docker: docker run -d --name ollama -v ollama:/root/.ollama -p 11434:11434 --restart unless-stopped ollama/ollama',
+    );
+    if (await ask('Start Ollama via Docker (if Docker is installed)?')) {
+      try {
+        const { stdout, stderr } = await startOllamaDocker();
+        log(stdout || stderr);
+      } catch (err) {
+        log(`  failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  for (const tool of report.missingTools) {
+    log('');
+    log(`Missing: ${tool}`);
+    if (tool === 'rtk' || tool === 'leanctx') {
+      const url = tool === 'rtk' ? RTK_WINDOWS_URL : LEANCTX_WINDOWS_URL;
+      const repoUrl =
+        tool === 'rtk'
+          ? 'https://github.com/rtk-ai/rtk/releases'
+          : 'https://github.com/yvgude/lean-ctx/releases';
+      const binDir = join(os.homedir(), '.local', 'bin');
+      log(
+        `  Manual: download the Windows release zip from ${repoUrl} and extract it to ${binDir}.`,
+      );
+      if (report.platform === 'windows') {
+        if (await ask(`Download and install ${tool} into ${binDir}?`)) {
+          const result = await downloadAndExtractZip(url, binDir, tool);
+          if (result.ok) {
+            log(
+              `  Installed ${tool} -> ${result.binPath}. Add ${binDir} to your PATH if needed.`,
+            );
+          } else {
+            log(
+              `  Auto-install failed (${result.error ?? 'unknown error'}). Install manually from ${repoUrl}.`,
+            );
+          }
+        }
+      }
+    } else if (tool === 'serena') {
+      log('  Install per its own documentation, then verify with: serena --version');
+    }
+  }
+}
+
+/**
+ * Primary first-run experience (design doc §1, Task 14): detect the
+ * environment, create the config + metrics store, and offer consent-gated
+ * installs. Safe to run repeatedly — existing config is never clobbered.
+ */
+export async function runInit(deps: InitDeps = {}): Promise<number> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const ask = deps.ask ?? askYesNo;
+  const detect = deps.detect ?? detectEnvironment;
+
+  const report = await detect();
+
+  // 1. Report what is available.
+  log('');
+  log('[cadet-token-saver] init — environment report');
+  log('--------------------------------------------');
+  log(`Platform: ${report.platform}`);
+  log(`Node:     ${formatAvailability(report.node)}`);
+  log(`npm:      ${formatAvailability(report.npm)}`);
+  log(`Ollama:   ${formatAvailability(report.ollama)}`);
+  log(`RTK:      ${formatAvailability(report.rtk)}`);
+  log(`Serena:   ${formatAvailability(report.serena)}`);
+  log(`LeanCTX:  ${formatAvailability(report.leanctx)}`);
+  log('');
+
+  // 2. Create the config (idempotent — never clobber an existing file).
+  const configPath = deps.configPath ?? getConfigPath();
+  if (existsSync(configPath)) {
+    log(`[cadet-token-saver] config already exists (unchanged): ${configPath}`);
+  } else {
+    saveConfig(loadConfig(configPath), configPath);
+    log(`[cadet-token-saver] config created: ${configPath}`);
+  }
+
+  // 3. Initialise the metrics database (idempotent — CREATE TABLE IF NOT EXISTS).
+  const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
+  const store = new MetricsStore(metricsPath);
+  store.close();
+  log(`[cadet-token-saver] metrics database ready: ${metricsPath}`);
+
+  // 4. Consent-gated configuration/installation of missing pieces.
+  await offerInstallations(report, { ask, log });
+
+  // 5. Summary.
+  log('');
+  log('[cadet-token-saver] init complete.');
+  log(`  Tools available: ${report.availableTools.join(', ') || '(none)'}`);
+  if (report.missingTools.length > 0) {
+    log(`  Tools missing:   ${report.missingTools.join(', ')}`);
+    log('  Run "cadet-token-saver doctor" for details.');
+  }
+  return 0;
+}
 
 export const initCommand: CliCommand = {
   name: 'init',
   description: 'Set up configuration and integrations (first run)',
   usage: 'cadet-token-saver init',
-  run(): number {
-    console.log(
-      '[cadet-token-saver] init: not implemented yet (wired in Task 14).',
-    );
-    return 0;
+  run(): Promise<number> {
+    return runInit();
   },
 };
+

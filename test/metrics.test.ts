@@ -34,6 +34,12 @@ function makeTempDir(): string {
   return dir;
 }
 
+beforeEach(() => {
+  // Guard against a leaked override from the environment (e.g. a prior
+  // `CADET_TOKEN_SAVER_METRICS=... cadet-token-saver init` in the same shell).
+  delete process.env.CADET_TOKEN_SAVER_METRICS;
+});
+
 afterEach(() => {
   delete process.env.CADET_TOKEN_SAVER_METRICS;
   for (const dir of tempDirs.splice(0)) {
