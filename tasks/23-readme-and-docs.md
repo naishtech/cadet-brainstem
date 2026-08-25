@@ -4,7 +4,7 @@
 
 **Status:** Not started
 **Phase:** Final deliverables
-**Source:** `docs/plans/initial_design.md` — §17 Development approach (final docs)
+**Source:** `docs/plans/initial_design.md` — §18 Development approach (final docs)
 
 ## Objective
 
@@ -38,7 +38,7 @@ The docs must also clearly state:
 
 - Everything is orchestration/measurement; RTK, Serena, LeanCTX remain the underlying tools.
 - MVP explicitly does NOT build: cloud MCP server, payments, State Tree, auto-summarisation, custom compression/search/intelligence, remote classifier, model selection, enterprise/team features, complicated UI, billing integration.
-- Reference the §16 success criteria so the docs map features to the measurable goals.
+- Reference the §17 success criteria so the docs map features to the measurable goals.
 
 ## Acceptance Criteria
 

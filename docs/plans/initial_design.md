@@ -37,6 +37,10 @@ cadet-token-saver config
 
 cadet-token-saver telemetry
 
+cadet-token-saver mcp
+
+cadet-token-saver wrap -- <command>
+
 The primary first-run experience should be:
 
 npx cadet-token-saver init
@@ -565,7 +569,7 @@ These are important.
 
 Do NOT build:
 
-- cloud MCP server
+- cloud (hosted/remote) MCP server — a *local* MCP server IS built (see §16)
 - subscription/payment system
 - sophisticated State Tree
 - automatic conversation summarisation
@@ -585,7 +589,72 @@ The MVP is an orchestration + measurement layer.
 
 ---
 
-# 16. Success criteria
+# 16. Integration & interception (VS Code)
+
+## Goal
+
+The end goal is to reduce agent token usage in VS Code. That means reducing
+what actually costs tokens: (a) the context the agent attaches to requests and
+(b) the tool output it feeds back. Cadet Token Saver is not a replacement for
+the model or the agent — it is the orchestration layer they call for context.
+
+## The interception model
+
+Agents waste tokens on huge file reads, symbol dumps and noisy command output.
+Instead of the agent reading those raw, it asks Cadet Token Saver for the
+optimised form:
+
+```
+Agent (VS Code Copilot Chat / any MCP client)
+    ↓  MCP tool calls
+Cadet Token Saver MCP server
+    ↓  classify (Ollama) → policy → LeanCTX / RTK / Serena
+optimised context  +  metrics.db
+```
+
+## Primary integration: local MCP server
+
+VS Code Copilot Chat supports MCP servers natively (`.vscode/mcp.json`), and
+Serena already integrates this way. Expose the existing engine as a local MCP
+server (`cadet-token-saver mcp`) with tools such as:
+
+- `optimize_context` — classify the task, then return the LeanCTX-compressed
+  representation of a file/directory (map/aggressive/cognitive modes).
+- `find_relevant_symbols` — Serena-backed semantic search so the agent reads
+  only the relevant symbols.
+- `compress_command_output` — RTK-style reduction of command output before it
+  becomes context.
+
+This works with any MCP-capable agent (not just Copilot) and requires no
+re-implementation of the tools. Each tool records an optimisation event in the
+metrics store (design doc §8).
+
+## Secondary integration: command wrapper
+
+`cadet-token-saver wrap -- <command>` runs the command and compresses its
+output before it reaches the agent. Use it in VS Code tasks / terminal
+profiles to target the other big sink: build logs, git status, test output.
+
+## Steering the agent
+
+A chat customization (`.prompt.md` / `AGENTS.md`) tells the agent: "before
+reading a large file, call `optimize_context`; before dumping search results,
+use `find_relevant_symbols`." This is what makes the agent choose the cheap
+path in practice.
+
+## Why not an LLM prompt proxy
+
+VS Code Copilot cannot be pointed at a custom LLM endpoint, so an
+OpenAI-compatible HTTP proxy cannot intercept Copilot's prompts. The MCP
+server + wrapper model works where a proxy does not. (Tools with configurable
+endpoints — Cline, Roo, Continue — could use a proxy later, but it is out of
+scope here.)
+
+All of this stays local: no cloud, no telemetry unless the user opts in.
+
+---
+
+# 17. Success criteria
 
 The MVP is successful if we can run real coding tasks and demonstrate:
 
@@ -602,9 +671,12 @@ The MVP is successful if we can run real coding tasks and demonstrate:
 
 npx cadet-token-saver init
 
+11. The MCP server works from VS Code Copilot Chat and the agent demonstrably
+    reduces context via `optimize_context` / `find_relevant_symbols`.
+
 ---
 
-# 17. Development approach
+# 18. Development approach
 
 Build this incrementally.
 
@@ -637,6 +709,15 @@ session tracking + minimal state.yaml
 
 Phase 10:
 telemetry interface
+
+Phase 11:
+MCP server (expose the engine as tools)
+
+Phase 12:
+wrap command (command output compression)
+
+Phase 13:
+VS Code integration (.vscode/mcp.json + chat customization)
 
 After each phase, write tests.
 
