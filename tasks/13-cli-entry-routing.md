@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low risk — thin shell; every command task (14–20) depends on it, so it precedes them in the build order.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/13-cli-entry-routing` (pending review/commit)
 **Phase:** Phase 1
 **Source:** `docs/plans/initial_design.md` — §1 CLI
 
@@ -34,8 +34,8 @@ Top-level commands to support:
 
 ## Acceptance Criteria
 
-- [ ] Running `cadet-token-saver` with no args prints help.
-- [ ] Each subcommand is registered and routes to its own module.
-- [ ] `cadet-token-saver --version` prints the package version.
-- [ ] Unknown subcommand exits non-zero with a helpful message.
-- [ ] `telemetry status/on/off` are routed correctly.
+- [x] Running `cadet-token-saver` with no args prints help.
+- [x] Each subcommand is registered and routes to its own module.
+- [x] `cadet-token-saver --version` prints the package version.
+- [x] Unknown subcommand exits non-zero with a helpful message.
+- [x] `telemetry status/on/off` are routed correctly.
