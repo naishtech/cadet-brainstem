@@ -2,7 +2,7 @@
 
 **Risk rationale:** Semantic navigation (success criterion #4) — only pays off if the added tool is worth its cost; lowest of the three integration risks.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/10-serena-adapter` (pending review/commit)
 **Phase:** Phase 5
 **Source:** `docs/plans/initial_design.md` — §6 Serena integration
 
@@ -32,8 +32,8 @@ LeanCTX
 
 ## Acceptance Criteria
 
-- [ ] `isAvailable()` detects Serena correctly.
-- [ ] Exposes semantic search/navigation only when policy requests it.
-- [ ] Does not reimplement Serena logic (calls through to it).
-- [ ] Results are shaped for downstream LeanCTX consumption.
-- [ ] Serena unavailable → graceful skip with fallback.
+- [x] `isAvailable()` detects Serena correctly.
+- [x] Exposes semantic search/navigation only when policy requests it.
+- [x] Does not reimplement Serena logic (calls through to it).
+- [x] Results are shaped for downstream LeanCTX consumption.
+- [x] Serena unavailable → graceful skip with fallback.
