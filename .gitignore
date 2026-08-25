@@ -7,6 +7,9 @@ dist/
 # Local state (Cadet Token Saver)
 .cadet-token-saver/
 
+# Serena local project state (created on activation)
+.serena/
+
 # SQLite metrics databases
 *.db
 *.sqlite
