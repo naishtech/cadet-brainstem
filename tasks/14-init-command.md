@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low risk — first-run UX that assembles config, metrics and adapters; no new assumptions, just wiring.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/14-init-command` (pending review/commit)
 **Phase:** Phase 1
 **Source:** `docs/plans/initial_design.md` — §1 CLI (primary first-run experience)
 
@@ -33,9 +33,9 @@ The command must, in order:
 
 ## Acceptance Criteria
 
-- [ ] Running `init` on a clean machine reports each tool as available/unavailable clearly.
-- [ ] Config file is created at the documented path.
-- [ ] Metrics database is initialized (empty, valid schema).
-- [ ] Re-running `init` is safe and does not duplicate or corrupt state.
-- [ ] Install/configure actions are consent-gated and never modify project source unnecessarily.
-- [ ] Prints a clear summary of what was found and what was configured.
+- [x] Running `init` on a clean machine reports each tool as available/unavailable clearly.
+- [x] Config file is created at the documented path.
+- [x] Metrics database is initialized (empty, valid schema).
+- [x] Re-running `init` is safe and does not duplicate or corrupt state.
+- [x] Install/configure actions are consent-gated and never modify project source unnecessarily.
+- [x] Prints a clear summary of what was found and what was configured.

@@ -44,8 +44,9 @@ describe('command routing', () => {
     ]);
   });
 
-  it('delegates each command to its own module', async () => {
-    for (const name of ['init', 'doctor', 'stats', 'dashboard', 'config']) {
+  it('delegates each stub command to its own module', async () => {
+    // `init` is wired with real logic in Task 14 — covered in init-command.test.ts.
+    for (const name of ['doctor', 'stats', 'dashboard', 'config']) {
       await expect(runCli([name])).resolves.toBe(0);
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining(`[cadet-token-saver] ${name}: not implemented yet`),
