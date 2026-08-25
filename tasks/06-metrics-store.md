@@ -2,7 +2,7 @@
 
 **Risk rationale:** Measurement validity — the MVP's entire value is proving savings (success criterion #6). If estimates can't be recorded reliably, the thesis can't be proven at all.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/06-metrics-store` (pending review/commit)
 **Phase:** Phase 7
 **Source:** `docs/plans/initial_design.md` — §8 Metrics
 
