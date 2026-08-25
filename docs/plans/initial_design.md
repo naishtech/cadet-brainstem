@@ -25,21 +25,21 @@ Do NOT build a cloud service, MCP server, sophisticated State Tree, cloud classi
 
 Create an npm package that supports:
 
-npx token-optimizer init
+npx cadet-token-saver init
 
-token-optimizer doctor
+cadet-token-saver doctor
 
-token-optimizer stats
+cadet-token-saver stats
 
-token-optimizer dashboard
+cadet-token-saver dashboard
 
-token-optimizer config
+cadet-token-saver config
 
-token-optimizer telemetry
+cadet-token-saver telemetry
 
 The primary first-run experience should be:
 
-npx token-optimizer init
+npx cadet-token-saver init
 
 It should:
 
@@ -349,7 +349,7 @@ The metrics system must work completely offline.
 
 Implement:
 
-token-optimizer dashboard
+cadet-token-saver dashboard
 
 For MVP, a lightweight local web dashboard is sufficient.
 
@@ -419,7 +419,7 @@ For MVP, DO NOT automatically create a sophisticated State Tree.
 
 Instead generate a very small handoff file:
 
-.token-optimizer/state.yaml
+.cadet-token-saver/state.yaml
 
 Example:
 
@@ -477,11 +477,11 @@ Never collect:
 
 Provide:
 
-token-optimizer telemetry status
+cadet-token-saver telemetry status
 
-token-optimizer telemetry on
+cadet-token-saver telemetry on
 
-token-optimizer telemetry off
+cadet-token-saver telemetry off
 
 The dashboard should work without telemetry.
 
@@ -493,7 +493,7 @@ Do not make the cloud backend part of this MVP unless absolutely necessary. Desi
 
 Implement:
 
-token-optimizer doctor
+cadet-token-saver doctor
 
 Example output:
 
@@ -600,7 +600,7 @@ The MVP is successful if we can run real coding tasks and demonstrate:
 9. No source code or prompts leave the machine unless telemetry explicitly allows it.
 10. The developer experience is simple enough that the user can install everything with:
 
-npx token-optimizer init
+npx cadet-token-saver init
 
 ---
 

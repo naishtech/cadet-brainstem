@@ -30,7 +30,7 @@ function requestBodyOf(fetchMock: Mock): Record<string, unknown> {
 }
 
 afterEach(() => {
-  delete process.env.TOKEN_OPTIMIZER_CONFIG;
+  delete process.env.CADET_TOKEN_SAVER_CONFIG;
   vi.unstubAllGlobals();
 });
 
@@ -108,7 +108,7 @@ describe('classify', () => {
     const dir = mkdtempSync(join(tmpdir(), 'to-class-'));
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(cfgFile, 'classifier:\n  model: config-model\n', 'utf8');
-    process.env.TOKEN_OPTIMIZER_CONFIG = cfgFile;
+    process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
         message: { content: JSON.stringify(validClassification) },

@@ -14,18 +14,18 @@ Implement the CLI entry point and route the top-level subcommands so each comman
 
 Top-level commands to support:
 
-- `token-optimizer init`
-- `token-optimizer doctor`
-- `token-optimizer stats`
-- `token-optimizer dashboard`
-- `token-optimizer config`
-- `token-optimizer telemetry`
+- `cadet-token-saver init`
+- `cadet-token-saver doctor`
+- `cadet-token-saver stats`
+- `cadet-token-saver dashboard`
+- `cadet-token-saver config`
+- `cadet-token-saver telemetry`
 
 `telemetry` further takes sub-subcommands:
 
-- `token-optimizer telemetry status`
-- `token-optimizer telemetry on`
-- `token-optimizer telemetry off`
+- `cadet-token-saver telemetry status`
+- `cadet-token-saver telemetry on`
+- `cadet-token-saver telemetry off`
 
 - Use a CLI framework (e.g. `commander`) or a hand-rolled parser — keep it simple and typed.
 - Unknown commands should print usage/help and exit with a non-zero code.
@@ -34,8 +34,8 @@ Top-level commands to support:
 
 ## Acceptance Criteria
 
-- [ ] Running `token-optimizer` with no args prints help.
+- [ ] Running `cadet-token-saver` with no args prints help.
 - [ ] Each subcommand is registered and routes to its own module.
-- [ ] `token-optimizer --version` prints the package version.
+- [ ] `cadet-token-saver --version` prints the package version.
 - [ ] Unknown subcommand exits non-zero with a helpful message.
 - [ ] `telemetry status/on/off` are routed correctly.

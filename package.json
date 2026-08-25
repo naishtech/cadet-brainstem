@@ -1,5 +1,5 @@
 {
-  "name": "token-optimizer",
+  "name": "cadet-token-saver",
   "version": "0.1.0",
   "description": "Cadet Token Saver — an orchestration + measurement layer that reduces AI-agent context consumption.",
   "keywords": [
@@ -16,7 +16,7 @@
     "node": ">=18"
   },
   "bin": {
-    "token-optimizer": "dist/index.js"
+    "cadet-token-saver": "dist/index.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

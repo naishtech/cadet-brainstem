@@ -2,11 +2,11 @@
 
 **Status:** Not started
 **Phase:** Release (post-MVP features)
-**Source:** Reference example — `E:\unity\projects\cadet-agent` (`publish-npm.ps1`, `package.json`); design doc §1 (`npx token-optimizer init`), §17 ("genuinely usable npm package", "build/package scripts")
+**Source:** Reference example — `E:\unity\projects\cadet-agent` (`publish-npm.ps1`, `package.json`); design doc §1 (`npx cadet-token-saver init`), §17 ("genuinely usable npm package", "build/package scripts")
 
 ## Objective
 
-Publish `token-optimizer` to the npm registry so real users can install it with `npx token-optimizer init`, following the `cadet-agent` publishing example.
+Publish `cadet-token-saver` to the npm registry so real users can install it with `npx cadet-token-saver init`, following the `cadet-agent` publishing example.
 
 **Prerequisite:** This task runs last, after all MVP features (Tasks 01–21), the test suite/build scripts (Task 22), and README/docs (Task 23) are complete — the package must be feature-complete, tested, and documented before it ships.
 
@@ -16,7 +16,7 @@ Follow the `cadet-agent` example (`publish-npm.ps1` + `package.json`). Its appro
 
 ### 1. `publish-npm.ps1` (repo root)
 
-Replicate the cadet-agent script, adapted to `token-optimizer`:
+Replicate the cadet-agent script, adapted to `cadet-token-saver`:
 
 - Read the npm token from `~/.npm_token`. The file must contain ONLY the granular access token (created at `https://www.npmjs.com/settings/<user>/tokens` with **Publish** permission and **Bypass 2FA** enabled).
 - If the token file is missing or empty, fail with clear, copy-pasteable setup instructions (do NOT publish without a token).
@@ -34,7 +34,7 @@ Match the example's publishing fields (ours already has most — verify/complete
 - `bin` → `dist/index.js` (already set)
 - `files` → `["dist"]` (already set) — confirm the packed tarball contains only `dist/`, `LICENSE`, `README.md`
 - `license`, `engines`, `keywords` (already set)
-- ADD `repository` and `homepage` fields pointing at the actual GitHub repo once the remote is known (the example uses `naishtech/cadet-agent`; fill in the real token-optimizer URL)
+- ADD `repository` and `homepage` fields pointing at the actual GitHub repo once the remote is known (the example uses `naishtech/cadet-agent`; fill in the real cadet-token-saver URL)
 - ADD a `prepublishOnly` script that runs `typecheck`, `lint`, `test`, `build` before publish so an untested/unbuilt package can never ship (small safety extension to the example)
 
 ### 3. Versioning & changelog
@@ -53,6 +53,6 @@ Match the example's publishing fields (ours already has most — verify/complete
 - [ ] `publish-npm.ps1` exists and follows the cadet-agent example (token file, LF normalization, inline auth, publish, cleanup).
 - [ ] `package.json` has `repository` + `homepage` and a working `prepublishOnly` (typecheck + lint + test + build).
 - [ ] `npm publish --dry-run` shows only intended files (`dist/`, `LICENSE`, `README.md`, `package.json`) and no secrets.
-- [ ] A published/dev-packaged install works: `npx token-optimizer init` runs successfully.
+- [ ] A published/dev-packaged install works: `npx cadet-token-saver init` runs successfully.
 - [ ] Token is never persisted to npm config or committed to the repo.
 - [ ] `CHANGELOG.md` exists and reflects the release.

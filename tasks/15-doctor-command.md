@@ -8,7 +8,7 @@
 
 ## Objective
 
-Implement `token-optimizer doctor` as a read-only environment health check.
+Implement `cadet-token-saver doctor` as a read-only environment health check.
 
 ## Details
 
