@@ -2,7 +2,7 @@
 
 **Risk rationale:** Terminal-output reduction (success criterion #3) — external-tool dependency with a strict no-data-loss constraint.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/09-rtk-adapter` (pending review/commit)
 **Phase:** Phase 4
 **Source:** `docs/plans/initial_design.md` — §5 RTK integration
 
