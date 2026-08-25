@@ -58,9 +58,13 @@ export type Config = z.infer<typeof configSchema>;
  * Effective config when nothing is provided (design doc §13).
  * Single source of truth for defaults — partial configs are deep-merged on top
  * of this before validation.
+ *
+ * Note: the default classifier model is qwen3:1.7b (not §13's qwen3:4b) — a
+ * smaller, faster model that classifies well under the 10s latency budget on
+ * CPU. Thinking is disabled in the Ollama adapter (see classifier/ollama.ts).
  */
 export const defaultConfig: Config = {
-  classifier: { provider: 'ollama', model: 'qwen3:4b' },
+  classifier: { provider: 'ollama', model: 'qwen3:1.7b' },
   session: { max_turns: 30 },
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },

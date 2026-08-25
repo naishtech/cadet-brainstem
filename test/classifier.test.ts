@@ -101,6 +101,7 @@ describe('classify', () => {
     expect(body.model).toBe('custom-model');
     expect(body.format).toBe('json');
     expect(body.stream).toBe(false);
+    expect(body.think).toBe(false);
   });
 
   it('reads the model from config when not provided', async () => {

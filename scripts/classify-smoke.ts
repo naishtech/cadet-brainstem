@@ -10,7 +10,7 @@
  *   npm run classify:smoke -- "your message"  # classify a specific request
  *
  * Prereqs: Ollama installed + running (ollama serve), and a model pulled,
- * e.g. `ollama pull qwen3:4b`. The model is read from config
+ * e.g. `ollama pull qwen3:1.7b`. The model is read from config
  * (~/.token-optimizer/config.yaml) unless TOKEN_OPTIMIZER_CONFIG points
  * elsewhere.
  */
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
         '',
         'Ollama is not reachable (expected at http://localhost:11434).',
         '  - Start it:  ollama serve',
-        '  - Pull a model:  ollama pull qwen3:4b',
+        '  - Pull a model:  ollama pull qwen3:1.7b',
         '  - Then re-run:  npm run classify:smoke',
       ].join('\n'),
     );
