@@ -66,6 +66,28 @@ export async function isOllamaAvailable(
   }
 }
 
+/** True when the configured model is present on the Ollama server. */
+export async function isModelAvailable(
+  model: string,
+  host = process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${host}/api/tags`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const data = (await response.json()) as {
+      models?: Array<{ name: string }>;
+    };
+    const names = data.models?.map((m) => m.name) ?? [];
+    return names.some((n) => n === model || n.startsWith(`${model}:`));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Local Ollama classifier. Uses HTTP only — it never executes or constructs
  * shell commands (safety principle §14.4). Model and host come from config

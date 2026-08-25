@@ -5,6 +5,7 @@ export {
   OllamaClassifier,
   buildPrompt,
   classify,
+  isModelAvailable,
   isOllamaAvailable,
 } from './ollama';
 export {
