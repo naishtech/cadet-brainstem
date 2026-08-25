@@ -2,7 +2,7 @@
 
 **Status:** Not started
 **Phase:** Release (post-MVP features)
-**Source:** Reference example — `E:\unity\projects\cadet-agent` (`publish-npm.ps1`, `package.json`); design doc §1 (`npx cadet-token-saver init`), §17 ("genuinely usable npm package", "build/package scripts")
+**Source:** Reference example — `E:\unity\projects\cadet-agent` (`publish-npm.ps1`, `package.json`); design doc §1 (`npx cadet-token-saver init`), §18 ("genuinely usable npm package", "build/package scripts")
 
 ## Objective
 
