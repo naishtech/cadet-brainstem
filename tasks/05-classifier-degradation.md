@@ -2,7 +2,7 @@
 
 **Risk rationale:** Part of the classifier risk — proves the system still works (conservatively) when Ollama is missing, never silently (safety principles §14).
 
-**Status:** Not started
+**Status:** Implemented on branch `task/05-classifier-degradation` (pending review/commit)
 **Phase:** Phase 2
 **Source:** `docs/plans/initial_design.md` — §3 Local LLM classifier ("If Ollama is unavailable, the system should degrade gracefully and use a conservative default policy. Do not silently fail.")
 

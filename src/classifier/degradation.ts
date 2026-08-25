@@ -1,0 +1,56 @@
+import { classify, ClassifierOptions, ClassifierUnavailableError } from './ollama';
+import { Classification, ClassificationValidationError } from './schema';
+
+/**
+ * Conservative default used when the classifier cannot run (Ollama
+ * unavailable) or returns invalid output. Biased toward the highest context
+ * need and lowest risk so no information is lost (safety principles §14).
+ */
+export const conservativeDefaultClassification: Classification = {
+  task: 'investigation',
+  complexity: 'high',
+  risk: 'low',
+  context_need: 'exhaustive',
+  precision: 'normal',
+};
+
+export interface ClassificationOutcome {
+  classification: Classification;
+  /** True when the classifier degraded to the conservative default. */
+  degraded: boolean;
+  /** Why degradation happened (present when degraded). */
+  reason?: string;
+}
+
+/**
+ * Classify with graceful degradation (Tasks 04–05).
+ *
+ * Never crashes on Ollama being unavailable or on invalid/un-schema'd model
+ * output — it falls back to the conservative default and surfaces the fallback
+ * explicitly (logged), never silently (design doc §3, safety principle §14.1).
+ *
+ * Unrelated/unexpected errors are rethrown rather than swallowed.
+ */
+export async function classifyWithFallback(
+  taskText: string,
+  options: ClassifierOptions = {},
+  classifyFn: (text: string, opts?: ClassifierOptions) => Promise<Classification> = classify,
+): Promise<ClassificationOutcome> {
+  try {
+    const classification = await classifyFn(taskText, options);
+    return { classification, degraded: false };
+  } catch (err) {
+    const known = err instanceof ClassifierUnavailableError || err instanceof ClassificationValidationError;
+    if (!known) {
+      throw err;
+    }
+    const reason = (err as Error).message;
+    // Explicit, never silent.
+    console.warn(`[cadet-token-saver] classifier degraded to conservative default: ${reason}`);
+    return {
+      classification: structuredClone(conservativeDefaultClassification),
+      degraded: true,
+      reason,
+    };
+  }
+}
