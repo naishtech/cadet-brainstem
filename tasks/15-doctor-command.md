@@ -40,7 +40,7 @@ Cadet Token Saver Doctor
 ✓ Configuration
 ```
 
-- Warnings must explain **exactly how to fix them** (e.g. install command or URL).
+- Warnings must explain **exactly how to fix them** (e.g. install command or URL). Reference the documented install commands (see `docs/requirements.md`): RTK via `curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh` (requires Git Bash on Windows), LeanCTX via `npm i -g lean-ctx-bin`.
 - Doctor must **not** automatically modify the user's environment — read-only.
 - Exit code should reflect health (e.g. non-zero if critical checks fail) — decide and document the convention.
 - Reuse adapters' `isAvailable()` and config/metrics checks from other modules.

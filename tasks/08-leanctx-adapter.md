@@ -42,6 +42,19 @@ Support the major strategies exposed by LeanCTX:
   - task classification
 - If LeanCTX is unavailable, fall back gracefully (return unoptimised context, no data loss).
 
+## Requirements & Installation
+
+Prerequisite: LeanCTX (`lean-ctx`) — a local Rust binary (https://github.com/yvgude/lean-ctx).
+
+Install (pick one):
+- `npm i -g lean-ctx-bin` (preferred)
+- `curl -fsSL https://leanctx.com/install.sh | sh`
+- `brew install lean-ctx`
+
+Verify: `lean-ctx --version` or `lean-ctx doctor`.
+
+Full requirements list: `docs/requirements.md`.
+
 ## Acceptance Criteria
 
 - [ ] All listed LeanCTX modes are supported/passable.
