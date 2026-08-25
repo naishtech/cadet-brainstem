@@ -2,7 +2,7 @@
 
 **Risk rationale:** Enabler — the classifier (Task 03) needs a configurable model name and defaults; low risk but required before the riskiest assumption can be exercised.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/02-config-module` (pending review/commit)
 **Phase:** Phase 1
 **Source:** `docs/plans/initial_design.md` — §13 Configuration
 
