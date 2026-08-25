@@ -40,6 +40,22 @@ agent
 - Implement as an adapter behind the shared `ContextOptimizer` interface (see §2), i.e. `name`, `isAvailable()`, optional `install()`/`configure()`.
 - Do NOT fork or reimplement RTK — orchestrate it.
 
+## Requirements & Installation
+
+Prerequisite: RTK (`rtk`) — a single Rust binary (https://github.com/rtk-ai/rtk).
+
+Install (requires **Git Bash on Windows** — the script uses `curl` and `sh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+```
+
+Windows alternative: download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases) and put `rtk.exe` on your PATH.
+
+Verify: `rtk --version`.
+
+Full requirements list: `docs/requirements.md`.
+
 ## Acceptance Criteria
 
 - [ ] `isAvailable()` detects RTK correctly.
