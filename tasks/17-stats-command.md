@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low risk — terminal aggregation over the metrics store; first consumer that proves metrics are usable.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/17-stats-command` (pending review/commit)
 **Phase:** Phase 8
 **Source:** `docs/plans/initial_design.md` — §8 Metrics, §9 Dashboard
 
@@ -30,7 +30,7 @@ Show (from the metrics store, Task 06):
 
 ## Acceptance Criteria
 
-- [ ] Prints all listed summary statistics.
-- [ ] Numbers derived from actual rows in the metrics store.
-- [ ] Estimates clearly labelled as estimates.
-- [ ] Works offline with no cloud dependency.
+- [x] Prints all listed summary statistics.
+- [x] Numbers derived from actual rows in the metrics store.
+- [x] Estimates clearly labelled as estimates.
+- [x] Works offline with no cloud dependency.

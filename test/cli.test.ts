@@ -45,9 +45,9 @@ describe('command routing', () => {
   });
 
   it('delegates each stub command to its own module', async () => {
-    // `init` (Task 14) and `doctor` (Task 15) are wired — covered in their
+    // `init` (14), `doctor` (15) and `stats` (17) are wired — covered in their
     // own test files.
-    for (const name of ['stats', 'dashboard', 'config']) {
+    for (const name of ['dashboard', 'config']) {
       await expect(runCli([name])).resolves.toBe(0);
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining(`[cadet-token-saver] ${name}: not implemented yet`),

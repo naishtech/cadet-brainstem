@@ -40,6 +40,12 @@ export interface MostExpensiveOperation {
   timestamp: string;
 }
 
+export interface SessionSummary {
+  session_id: string;
+  eventCount: number;
+  estimatedTokensSaved: number;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS optimisation_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -177,6 +183,24 @@ export class MetricsStore {
       estimatedInputTokens: Number(row.estimatedInputTokens),
       estimatedTokensSaved: Number(row.estimatedTokensSaved),
       timestamp: String(row.timestamp),
+    }));
+  }
+
+  /** Per-session event counts and estimated savings (largest first). */
+  getSessionSummary(): SessionSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT session_id, COUNT(*) AS eventCount,
+                COALESCE(SUM(estimated_tokens_saved), 0) AS estimatedTokensSaved
+         FROM optimisation_events
+         GROUP BY session_id
+         ORDER BY estimatedTokensSaved DESC`,
+      )
+      .all() as { session_id: string; eventCount: number; estimatedTokensSaved: number }[];
+    return rows.map((row) => ({
+      session_id: String(row.session_id),
+      eventCount: Number(row.eventCount),
+      estimatedTokensSaved: Number(row.estimatedTokensSaved),
     }));
   }
 
