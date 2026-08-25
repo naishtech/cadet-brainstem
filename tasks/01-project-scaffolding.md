@@ -1,6 +1,6 @@
 # Task 01 — Project Scaffolding
 
-**Status:** Not started
+**Status:** Implemented on branch `task/01-project-scaffolding` (pending review/commit)
 **Phase:** Phase 1 (foundation)
 **Source:** `docs/plans/initial_design.md` — §1 CLI, §2 Architecture
 
