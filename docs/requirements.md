@@ -20,13 +20,9 @@ What you need installed to run Cadet Token Saver and its integrations.
 
 A single Rust binary that compresses command output before it reaches the agent.
 
-Install (requires **Git Bash on Windows** — the script uses `curl` and `sh`):
+**Windows:** download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases), extract it, and put `rtk.exe` on your PATH (e.g. `~/.local/bin`).
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-Windows alternative: download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases) and put `rtk.exe` on your PATH.
+Note: the `install.sh` script is **Linux/macOS only** — it does NOT support Windows/Git Bash (errors with "Unsupported operating system"). On Windows use the zip above.
 
 Verify: `rtk --version`
 
@@ -34,13 +30,9 @@ Verify: `rtk --version`
 
 A local Rust binary that decides what context an agent reads and how it is represented.
 
-Install (preferred):
+**Windows:** download `lean-ctx-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/yvgude/lean-ctx/releases), extract it, and put `lean-ctx.exe` on your PATH (e.g. `~/.local/bin`).
 
-```bash
-npm i -g lean-ctx-bin
-```
-
-Alternatives: `curl -fsSL https://leanctx.com/install.sh | sh`, or `brew install lean-ctx`.
+Other platforms: `curl -fsSL https://leanctx.com/install.sh | sh`, `brew install lean-ctx`, or `cargo install lean-ctx`. (`npm i -g lean-ctx-bin` may fail to fetch the binary on Windows.)
 
 Verify: `lean-ctx --version` (or `lean-ctx doctor`)
 

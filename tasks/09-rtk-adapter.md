@@ -44,13 +44,9 @@ agent
 
 Prerequisite: RTK (`rtk`) — a single Rust binary (https://github.com/rtk-ai/rtk).
 
-Install (requires **Git Bash on Windows** — the script uses `curl` and `sh`):
+**Windows:** download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases), extract it, and put `rtk.exe` on your PATH.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-Windows alternative: download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases) and put `rtk.exe` on your PATH.
+Note: the `install.sh` script is Linux/macOS only — it does NOT support Windows/Git Bash.
 
 Verify: `rtk --version`.
 

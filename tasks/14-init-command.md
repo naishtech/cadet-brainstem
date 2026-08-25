@@ -29,7 +29,7 @@ The command must, in order:
 - Must be safe to run repeatedly (idempotent) — re-running should not corrupt config or metrics.
 - Availability checks should reuse the integration adapters' `isAvailable()` where possible (Tasks 08–10).
 - Install/configure steps must be optional and only done with explicit user consent; do not modify the user's environment without confirmation.
-- When offering to install missing components, use the documented commands (see `docs/requirements.md`): RTK via `curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh` (requires Git Bash on Windows), LeanCTX via `npm i -g lean-ctx-bin`.
+- When offering to install missing components, use the documented commands (see `docs/requirements.md`). On Windows: RTK and LeanCTX install via their GitHub release zips (`rtk-x86_64-pc-windows-msvc.zip`, `lean-ctx-x86_64-pc-windows-msvc.zip`) placed in `~/.local/bin`.
 
 ## Acceptance Criteria
 
