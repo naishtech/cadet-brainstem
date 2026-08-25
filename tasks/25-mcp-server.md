@@ -2,7 +2,7 @@
 
 **Risk rationale:** Highest-leverage integration point for VS Code — proves the engine is callable by real agents (Copilot Chat / any MCP client) and is the primary way the tool actually reduces token usage.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/25-mcp-server` (pending review/commit)
 **Phase:** Phase 11
 **Source:** `docs/plans/initial_design.md` — §16 Integration & interception (VS Code)
 
@@ -25,8 +25,8 @@ Expose the existing engine (classifier → policy → LeanCTX / RTK / Serena →
 
 ## Acceptance Criteria
 
-- [ ] `cadet-token-saver mcp` starts a stdio MCP server exposing the three tools.
-- [ ] Each tool delegates to the existing classifier/policy/adapters (no reimplementation).
-- [ ] Tool calls record metrics rows (verify with `stats`).
-- [ ] Degrades gracefully when Ollama/RTK/Serena/LeanCTX is unavailable.
-- [ ] The LLM cannot construct arbitrary commands (fixed, validated tool schemas).
+- [x] `cadet-token-saver mcp` starts a stdio MCP server exposing the three tools.
+- [x] Each tool delegates to the existing classifier/policy/adapters (no reimplementation).
+- [x] Tool calls record metrics rows (verify with `stats`).
+- [x] Degrades gracefully when Ollama/RTK/Serena/LeanCTX is unavailable.
+- [x] The LLM cannot construct arbitrary commands (fixed, validated tool schemas).

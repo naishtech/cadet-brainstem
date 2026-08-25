@@ -41,6 +41,7 @@ describe('command routing', () => {
       'dashboard',
       'config',
       'telemetry',
+      'mcp',
     ]);
   });
 

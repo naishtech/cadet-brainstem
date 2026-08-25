@@ -5,6 +5,7 @@ import { configCommand } from './commands/config';
 import { dashboardCommand } from './commands/dashboard';
 import { doctorCommand } from './commands/doctor';
 import { initCommand } from './commands/init';
+import { mcpCommand } from './commands/mcp';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
 
@@ -17,6 +18,7 @@ export const COMMANDS: readonly CliCommand[] = [
   dashboardCommand,
   configCommand,
   telemetryCommand,
+  mcpCommand,
 ];
 
 const COMMAND_MAP: ReadonlyMap<string, CliCommand> = new Map(
