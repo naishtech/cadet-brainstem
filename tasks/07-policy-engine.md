@@ -2,7 +2,7 @@
 
 **Risk rationale:** Strategy validity (success criterion #2) — deterministic, but the mapping decides real-world outcomes; verified before wiring real tools.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/07-policy-engine` (pending review/commit)
 **Phase:** Phase 3
 **Source:** `docs/plans/initial_design.md` — §4 Policy engine
 

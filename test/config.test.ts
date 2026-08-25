@@ -10,6 +10,7 @@ import {
   saveConfig,
   setConfigValue,
 } from '../src/config/index';
+import { defaultPolicies } from '../src/policy/index';
 
 const tempDirs: string[] = [];
 
@@ -37,6 +38,7 @@ describe('default config', () => {
       optimisation: { enabled: true, default_budget: 12000 },
       telemetry: { enabled: false },
       tools: { rtk: true, serena: true, leanctx: true },
+      policies: defaultPolicies,
     });
   });
 });
