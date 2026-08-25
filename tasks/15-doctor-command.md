@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low risk — read-only health check; exposes environment state with actionable warnings.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/15-doctor-command` (pending review/commit)
 **Phase:** Phase 1
 **Source:** `docs/plans/initial_design.md` — §12 Doctor command
 
@@ -47,7 +47,7 @@ Cadet Token Saver Doctor
 
 ## Acceptance Criteria
 
-- [ ] All listed checks are performed and displayed with ✓ / warning.
-- [ ] Warnings include actionable fix instructions.
-- [ ] Doctor performs no writes or installs.
-- [ ] Exit code reflects overall health per documented convention.
+- [x] All listed checks are performed and displayed with ✓ / warning.
+- [x] Warnings include actionable fix instructions.
+- [x] Doctor performs no writes or installs.
+- [x] Exit code reflects overall health per documented convention.
