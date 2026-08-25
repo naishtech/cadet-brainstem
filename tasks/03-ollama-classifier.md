@@ -2,7 +2,7 @@
 
 **Risk rationale:** RISKIEST ASSUMPTION — a small local Ollama model reliably returns valid structured JSON classifications (success criterion #1). If this fails, every downstream decision is built on sand.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/03-ollama-classifier` (pending review/commit)
 **Phase:** Phase 2
 **Source:** `docs/plans/initial_design.md` — §3 Local LLM classifier
 
