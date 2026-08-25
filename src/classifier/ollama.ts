@@ -6,7 +6,7 @@ import {
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
-export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000;
+export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 10_000;
 
 /** Raised when Ollama is unreachable or returns a non-OK/invalid response. */
 export class ClassifierUnavailableError extends Error {
@@ -100,6 +100,9 @@ export class OllamaClassifier {
           messages: [{ role: 'user', content: buildPrompt(taskText) }],
           stream: false,
           format: 'json',
+          // Disable qwen3 reasoning/thinking — we only need a classification,
+          // so thinking wastes tokens and latency (keeps us under 10s on CPU).
+          think: false,
           options: { temperature: 0 },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),

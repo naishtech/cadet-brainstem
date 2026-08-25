@@ -32,7 +32,7 @@ afterEach(() => {
 describe('default config', () => {
   it('matches the design doc §13 defaults', () => {
     expect(defaultConfig).toEqual({
-      classifier: { provider: 'ollama', model: 'qwen3:4b' },
+      classifier: { provider: 'ollama', model: 'qwen3:1.7b' },
       session: { max_turns: 30 },
       optimisation: { enabled: true, default_budget: 12000 },
       telemetry: { enabled: false },
@@ -93,7 +93,7 @@ describe('saveConfig + round-trip', () => {
 
 describe('value access helpers', () => {
   it('reads individual values by dot path', () => {
-    expect(getConfigValue(defaultConfig, 'classifier.model')).toBe('qwen3:4b');
+    expect(getConfigValue(defaultConfig, 'classifier.model')).toBe('qwen3:1.7b');
     expect(getConfigValue(defaultConfig, 'session.max_turns')).toBe(30);
     expect(getConfigValue(defaultConfig, 'tools.rtk')).toBe(true);
     expect(getConfigValue(defaultConfig, 'nope.missing')).toBeUndefined();
