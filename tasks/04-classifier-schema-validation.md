@@ -2,7 +2,7 @@
 
 **Risk rationale:** Part of the classifier risk — guards against malformed/unreliable LLM output; cheap insurance that the riskiest assumption is actually being validated.
 
-**Status:** Not started
+**Status:** Implemented (schema shipped in Task 03; fallback wiring on branch `task/05-classifier-degradation`, pending review/commit)
 **Phase:** Phase 2
 **Source:** `docs/plans/initial_design.md` — §3 Local LLM classifier ("The output must be validated against a JSON schema")
 

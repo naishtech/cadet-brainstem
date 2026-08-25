@@ -17,7 +17,9 @@ export {
   riskSchema,
   taskTypeSchema,
 } from './schema';
+export { classifyWithFallback, conservativeDefaultClassification } from './degradation';
 export type { ClassifierOptions } from './ollama';
+export type { ClassificationOutcome } from './degradation';
 export type {
   Classification,
   Complexity,
