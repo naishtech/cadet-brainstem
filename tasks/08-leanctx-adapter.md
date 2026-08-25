@@ -2,7 +2,7 @@
 
 **Risk rationale:** Primary savings lever (success criterion #5) — the biggest contributor to context reduction, so its integration risk is de-risked first.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/08-leanctx-adapter` (pending review/commit)
 **Phase:** Phase 6
 **Source:** `docs/plans/initial_design.md` — §7 LeanCTX integration
 
