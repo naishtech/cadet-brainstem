@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { defaultPolicies, policiesSchema } from '../policy/schema';
 
 /** Raised when a config file is missing, empty, or contains invalid values. */
 export class ConfigError extends Error {
@@ -50,6 +51,7 @@ export const configSchema = z.object({
   optimisation: optimisationSchema,
   telemetry: telemetrySchema,
   tools: toolsSchema,
+  policies: policiesSchema,
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -69,6 +71,7 @@ export const defaultConfig: Config = {
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },
   tools: { rtk: true, serena: true, leanctx: true },
+  policies: defaultPolicies,
 };
 
 // ── Config file location ──────────────────────────────────────────────────
