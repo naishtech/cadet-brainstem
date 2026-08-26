@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore, getDefaultMemoryPath } from '../src/memory/index';
-import { runMemoryClear } from '../src/cli/commands/memory';
+import { runMemoryClear, runMemoryStats } from '../src/cli/commands/memory';
 
 const tempDirs: string[] = [];
 
@@ -241,5 +241,38 @@ describe('runMemoryClear', () => {
     const reopened = new MemoryStore(dbPath);
     expect(reopened.count()).toBe(2);
     reopened.close();
+  });
+});
+
+describe('runMemoryStats', () => {
+  it('shows the memory count and database size', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    const seedStore = new MemoryStore(dbPath);
+    seedStore.store({ content: 'a' });
+    seedStore.store({ content: 'b' });
+    seedStore.close();
+
+    const lines: string[] = [];
+    const exit = await runMemoryStats({
+      memoryPath: dbPath,
+      log: (line) => lines.push(line),
+    });
+    const out = lines.join('\n');
+
+    expect(exit).toBe(0);
+    expect(out).toContain('Cadet Token Saver Memory');
+    expect(out).toContain('Memories: 2');
+    expect(out).toMatch(/Size:\s+\d+(\.\d+)? (B|KB|MB)/);
+  });
+
+  it('reports no memories when the database is absent', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    const lines: string[] = [];
+    const exit = await runMemoryStats({
+      memoryPath: dbPath,
+      log: (line) => lines.push(line),
+    });
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('No memories stored yet.');
   });
 });
