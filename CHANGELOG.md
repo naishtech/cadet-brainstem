@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.6] — 2026-08-26
+
+### Added
+
+- **Persistent Serena session** — cadet-token-saver now spawns serena once and
+  reuses the connection for the whole MCP session (auto-reconnects on
+  failure), instead of starting/stopping a serena process per call. Project
+  activation happens once and switches cheaply if a different project is
+  passed.
+- **`serena_call`** — generic passthrough that forwards any call to any Serena
+  tool verbatim, so all current and future Serena tools work with no wrapper
+  updates. Search convenience remains `find_relevant_symbols`.
+- **`serena_list_tools`** — lists what Serena currently exposes (names +
+  schemas) so the agent can discover and call any tool at runtime.
+- Agent steering (AGENTS.md) tells the agent to use `serena_list_tools` +
+  `serena_call` for the full Serena capability.
+
 ## [0.1.5] — 2026-08-26
 
 ### Added
