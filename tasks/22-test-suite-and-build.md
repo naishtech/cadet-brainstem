@@ -4,7 +4,7 @@
 
 **Status:** Implemented (test suite, build, typecheck and lint all pass)
 **Phase:** Final deliverables
-**Source:** `docs/plans/initial_design.md` — §18 Development approach ("After each phase, write tests", "Prefer integration tests using mocked external tools")
+**Source:** `docs/plans/initial_design.md` — §19 Development approach ("After each phase, write tests", "Prefer integration tests using mocked external tools")
 
 ## Objective
 

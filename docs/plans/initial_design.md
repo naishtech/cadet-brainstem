@@ -31,6 +31,8 @@ cadet-token-saver doctor
 
 cadet-token-saver stats
 
+cadet-token-saver stats clear
+
 cadet-token-saver dashboard
 
 cadet-token-saver config
@@ -40,6 +42,8 @@ cadet-token-saver telemetry
 cadet-token-saver mcp
 
 cadet-token-saver wrap -- <command>
+
+cadet-token-saver memory clear
 
 The primary first-run experience should be:
 
@@ -346,6 +350,9 @@ Do NOT store:
 unless explicitly enabled by a future debug mode.
 
 The metrics system must work completely offline.
+
+`cadet-token-saver stats clear` empties the metrics database after an
+interactive confirmation prompt (non-interactive runs default to "no").
 
 ---
 
@@ -654,7 +661,63 @@ All of this stays local: no cloud, no telemetry unless the user opts in.
 
 ---
 
-# 17. Success criteria
+# 17. Chat memory store (local, agent-readable)
+
+## Goal
+
+Persistent memory for the agent so it does not re-derive facts that are
+**expensive to rediscover** — expensive meaning high token cost or high
+reasoning effort. Storing a fact once and retrieving it later is cheaper than
+re-reading files and re-deriving the same conclusion every session.
+
+## What to store
+
+Store things that cost tokens or reasoning to re-derive:
+
+- decisions and their rationale ("why X, not Y")
+- constraints and gotchas (build flags, tooling quirks, ordering rules)
+- verified commands and procedures (working build/test/CLI invocations)
+- architecture and API facts (module layout, conventions, public symbols)
+- non-obvious facts discovered during a session
+
+Do **not** store: trivial or immediately re-derivable facts, file contents,
+large code blocks, secrets, credentials, or personal data (safety §14).
+
+## Storage
+
+A local SQLite database (`~/.cadet-token-saver/memory.db`, same directory as
+`metrics.db`) with a `memories` table. Each memory has an id, content text,
+optional tags and project scope, created/updated/last-accessed timestamps, and
+a hit counter. Local-only — never leaves the machine unless the user opts into
+telemetry, and telemetry never includes memory contents.
+
+## MCP endpoint
+
+A single MCP tool `chat_memory_store` exposing CRUD + search:
+
+- `store` — create a memory (content, optional tags/project).
+- `update` — replace/append a memory by id.
+- `get` — retrieve a memory by id.
+- `search` — find memories by substring and/or tags/project.
+- `list` — list recent memories (optionally scoped by project).
+- `delete` — remove a memory by id.
+
+Each operation records an event in the metrics store (tool: `memory`).
+
+`cadet-token-saver memory clear` empties the memory database after an
+interactive confirmation prompt (non-interactive runs default to "no").
+
+## Steering
+
+The `classify` response policy gains a **`memory_policy`** field (a sibling of
+`response_policy`) telling the agent: before starting work, check
+`chat_memory_store` for relevant memories; store anything expensive to
+rediscover; prefer retrieving over re-deriving. Agent instructions
+(`AGENTS.md` / `init` output) repeat this.
+
+---
+
+# 18. Success criteria
 
 The MVP is successful if we can run real coding tasks and demonstrate:
 
@@ -673,10 +736,12 @@ npx cadet-token-saver init
 
 11. The MCP server works from VS Code Copilot Chat and the agent demonstrably
     reduces context via `optimize_context` / `find_relevant_symbols`.
+12. The agent persists and retrieves project memories via `chat_memory_store`
+    and avoids re-deriving expensive facts across sessions.
 
 ---
 
-# 18. Development approach
+# 19. Development approach
 
 Build this incrementally.
 
