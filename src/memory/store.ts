@@ -237,11 +237,16 @@ export class MemoryStore {
     return result.changes > 0;
   }
 
-  /** Total number of memories. */
-  count(): number {
-    const row = this.db.prepare('SELECT COUNT(*) AS c FROM memories').get() as {
-      c: number;
-    };
+  /** Total number of memories, optionally scoped to a project. */
+  count(project?: string): number {
+    const row =
+      project === undefined
+        ? (this.db.prepare('SELECT COUNT(*) AS c FROM memories').get() as {
+            c: number;
+          })
+        : (this.db
+            .prepare('SELECT COUNT(*) AS c FROM memories WHERE project = ?')
+            .get(project) as { c: number });
     return Number(row.c);
   }
 
@@ -249,9 +254,12 @@ export class MemoryStore {
     this.db.close();
   }
 
-  /** Delete all memories; returns the number of rows removed. */
-  clear(): number {
-    const result = this.db.prepare('DELETE FROM memories').run();
+  /** Delete memories, optionally scoped to a project; returns rows removed. */
+  clear(project?: string): number {
+    const result =
+      project === undefined
+        ? this.db.prepare('DELETE FROM memories').run()
+        : this.db.prepare('DELETE FROM memories WHERE project = ?').run(project);
     return Number(result.changes);
   }
 

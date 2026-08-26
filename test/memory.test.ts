@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore, getDefaultMemoryPath } from '../src/memory/index';
+import { MemoryStore, getDefaultMemoryPath, resolveProjectId } from '../src/memory/index';
 import { runMemoryClear, runMemoryStats } from '../src/cli/commands/memory';
 
 const tempDirs: string[] = [];
@@ -32,6 +32,36 @@ describe('getDefaultMemoryPath', () => {
   it('honours the CADET_TOKEN_SAVER_MEMORY override', () => {
     process.env.CADET_TOKEN_SAVER_MEMORY = 'C:/custom/memory.db';
     expect(getDefaultMemoryPath()).toBe('C:/custom/memory.db');
+  });
+});
+
+describe('resolveProjectId', () => {
+  it('uses the package.json name when present', () => {
+    const read = (p: string): string => {
+      if (p.endsWith('package.json')) return '{"name":"my-app"}';
+      throw new Error('not found');
+    };
+    expect(resolveProjectId('/x/my-app', read)).toBe('my-app');
+  });
+
+  it('falls back to the git origin remote', () => {
+    const read = (p: string): string => {
+      if (p.endsWith('package.json')) throw new Error('no pkg');
+      if (p.endsWith('config')) {
+        return '[remote "origin"]\n  url = https://github.com/acme/widget.git\n';
+      }
+      throw new Error('not found');
+    };
+    expect(resolveProjectId('/x/widget', read)).toBe('github.com/acme/widget');
+  });
+
+  it('falls back to <basename>-<hash> otherwise', () => {
+    const read = (): string => {
+      throw new Error('not found');
+    };
+    expect(resolveProjectId(join('x', 'no-pkg'), read)).toMatch(
+      /^no-pkg-[0-9a-f]{8}$/,
+    );
   });
 });
 
@@ -145,6 +175,17 @@ describe('MemoryStore (in-memory)', () => {
     expect(store.count()).toBe(0);
     expect(store.clear()).toBe(0);
   });
+
+  it('count and clear can be scoped to a project', () => {
+    store.store({ content: 'a', project: 'p1' });
+    store.store({ content: 'b', project: 'p1' });
+    store.store({ content: 'c', project: 'p2' });
+    expect(store.count()).toBe(3);
+    expect(store.count('p1')).toBe(2);
+    expect(store.clear('p1')).toBe(2);
+    expect(store.count()).toBe(1);
+    expect(store.count('p2')).toBe(1);
+  });
 });
 
 describe('MemoryStore (file-backed)', () => {
@@ -174,10 +215,10 @@ describe('MemoryStore (file-backed)', () => {
 });
 
 describe('runMemoryClear', () => {
-  function seed(dbPath: string, n: number): void {
+  function seed(dbPath: string, n: number, project = 'test-project'): void {
     const store = new MemoryStore(dbPath);
     for (let i = 0; i < n; i += 1) {
-      store.store({ content: `memory ${i}` });
+      store.store({ content: `memory ${i}`, project });
     }
     store.close();
   }
@@ -189,6 +230,52 @@ describe('runMemoryClear', () => {
 
     const exit = await runMemoryClear({
       memoryPath: dbPath,
+      project: 'test-project',
+      ask: async () => true,
+      log: (line) => lines.push(line),
+    });
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Cleared 2 memory entries.');
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(0);
+    reopened.close();
+  });
+
+  it('clears only the requested project', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    const store = new MemoryStore(dbPath);
+    store.store({ content: 'a', project: 'p1' });
+    store.store({ content: 'b', project: 'p2' });
+    store.close();
+
+    const lines: string[] = [];
+    const exit = await runMemoryClear({
+      memoryPath: dbPath,
+      project: 'p1',
+      ask: async () => true,
+      log: (line) => lines.push(line),
+    });
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Cleared 1 memory entries.');
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(1);
+    expect(reopened.count('p2')).toBe(1);
+    reopened.close();
+  });
+
+  it('--all clears every project after confirmation', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    const store = new MemoryStore(dbPath);
+    store.store({ content: 'a', project: 'p1' });
+    store.store({ content: 'b', project: 'p2' });
+    store.close();
+
+    const lines: string[] = [];
+    const exit = await runMemoryClear({
+      memoryPath: dbPath,
+      all: true,
       ask: async () => true,
       log: (line) => lines.push(line),
     });
@@ -207,6 +294,7 @@ describe('runMemoryClear', () => {
 
     const exit = await runMemoryClear({
       memoryPath: dbPath,
+      project: 'test-project',
       ask: async () => false,
       log: (line) => lines.push(line),
     });
@@ -230,6 +318,7 @@ describe('runMemoryClear', () => {
     try {
       const exit = await runMemoryClear({
         memoryPath: dbPath,
+        project: 'test-project',
         log: (line) => lines.push(line),
       });
       expect(exit).toBe(0);
@@ -245,22 +334,24 @@ describe('runMemoryClear', () => {
 });
 
 describe('runMemoryStats', () => {
-  it('shows the memory count and database size', async () => {
+  it('shows the memory count and database size for the project', async () => {
     const dbPath = join(makeTempDir(), 'memory.db');
     const seedStore = new MemoryStore(dbPath);
-    seedStore.store({ content: 'a' });
-    seedStore.store({ content: 'b' });
+    seedStore.store({ content: 'a', project: 'test-project' });
+    seedStore.store({ content: 'b', project: 'test-project' });
     seedStore.close();
 
     const lines: string[] = [];
     const exit = await runMemoryStats({
       memoryPath: dbPath,
+      project: 'test-project',
       log: (line) => lines.push(line),
     });
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
     expect(out).toContain('Cadet Token Saver Memory');
+    expect(out).toContain('Project: test-project');
     expect(out).toContain('Memories: 2');
     expect(out).toMatch(/Size:\s+\d+(\.\d+)? (B|KB|MB)/);
   });
@@ -270,6 +361,7 @@ describe('runMemoryStats', () => {
     const lines: string[] = [];
     const exit = await runMemoryStats({
       memoryPath: dbPath,
+      project: 'test-project',
       log: (line) => lines.push(line),
     });
     expect(exit).toBe(0);

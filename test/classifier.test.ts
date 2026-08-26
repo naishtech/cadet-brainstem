@@ -70,6 +70,23 @@ describe('parseClassification', () => {
     expect(parsed.tool_plan).toEqual({ use: [], skip: [] });
     expect(parsed.response_policy).toEqual(['compact', 'no_filler', 'no_repetition']);
   });
+
+  it('drops invalid tool_plan/response_policy entries instead of failing', () => {
+    const parsed = parseClassification({
+      task: 'debug',
+      complexity: 'medium',
+      risk: 'medium',
+      context_need: 'broad',
+      precision: 'normal',
+      tool_plan: {
+        use: ['optimize_context', 'classify', 42, null],
+        skip: ['bogus'],
+      },
+      response_policy: ['delta_only', 'not_a_directive', 7],
+    });
+    expect(parsed.tool_plan).toEqual({ use: ['optimize_context'], skip: [] });
+    expect(parsed.response_policy).toEqual(['delta_only']);
+  });
 });
 
 describe('buildPrompt', () => {
