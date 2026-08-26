@@ -37,6 +37,7 @@
     "test:watch": "vitest",
     "lint": "eslint src test scripts --max-warnings 0",
     "classify:smoke": "tsx scripts/classify-smoke.ts",
+    "mcp:smoke": "npm run build && tsx scripts/mcp-classify-e2e.ts",
     "prepublishOnly": "npm run build && npm run typecheck && npm run lint && npm test"
   },
   "publishConfig": {

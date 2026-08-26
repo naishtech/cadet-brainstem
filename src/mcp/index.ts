@@ -1,5 +1,6 @@
 export {
   MCP_SESSION_ID,
+  classifyTool,
   compressCommandOutputTool,
   createMcpServer,
   findRelevantSymbolsTool,
@@ -8,6 +9,7 @@ export {
   runMcpServer,
 } from './server';
 export type {
+  ClassifyArgs,
   CompressOutputArgs,
   FindSymbolsArgs,
   McpDeps,

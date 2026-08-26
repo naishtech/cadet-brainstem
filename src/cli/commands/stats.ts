@@ -120,7 +120,9 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     }
 
     log('');
-    log('All figures are ESTIMATES — see docs/plans/initial_design.md §8.');
+    log(
+      'All figures are ESTIMATES — see https://github.com/naishtech/cadet-token-saver/blob/main/docs/plans/initial_design.md#8-measurement-and-metrics',
+    );
     return 0;
   } finally {
     store.close();

@@ -214,18 +214,20 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('}');
   log('');
   log('The "cadet-token-saver" MCP server will then appear in Copilot Chat,');
-  log('exposing optimize_context, find_relevant_symbols and compress_command_output.');
-  log('See docs/integration-vscode.md for details.');
+  log('exposing classify, optimize_context, find_relevant_symbols and compress_command_output.');
+  log('Docs: https://github.com/naishtech/cadet-token-saver/blob/main/docs/integration-vscode.md');
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
-  log('  "To save tokens, prefer Cadet Token Saver tools: call optimize_context before');
-  log('   reading a large file; use find_relevant_symbols before broad searches; call');
-  log('   compress_command_output for noisy command output (pass "shell": "bash" if you');
-  log('   are in git-bash on Windows). If a tool is unavailable, fall back to the normal');
-  log('   read."');
+  log('  "Always classify the user request first with the `classify` tool — it runs the');
+  log('   local LLM and returns the recommended strategy. Then use the Cadet Token Saver');
+  log('   tools to save context: call optimize_context before reading a large file; use');
+  log('   find_relevant_symbols before broad searches; call compress_command_output for');
+  log('   noisy command output (pass "shell": "bash" if you are in git-bash on Windows).');
+  log('   If a tool is unavailable, fall back to the normal read."');
   log('');
   log('Notes: commands run in the platform shell (cmd.exe on Windows) unless a shell is');
   log('specified; compression only helps on large/noisy output — small output is pass-through.');
+  log('Design: https://github.com/naishtech/cadet-token-saver/blob/main/docs/plans/initial_design.md');
   return 0;
 }
 

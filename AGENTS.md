@@ -5,6 +5,15 @@ model. It is available as a **local MCP server** (`cadet-token-saver mcp`,
 registered in `.vscode/mcp.json`) and as a **command wrapper**
 (`cadet-token-saver wrap`). Use the cheap paths below whenever possible.
 
+## Classify first
+
+- Before gathering any context, always call the `classify` MCP tool with the
+  user's request. It runs the local LLM and returns the recommended
+  `strategy` (LeanCTX mode, compression, search approach). Use that strategy
+  to decide how to use the tools below.
+- If `classify` is unavailable, continue with the tools below using defaults —
+  never block on it.
+
 ## Context reads (MCP tools)
 
 - Before reading a **large file**, call the `optimize_context` MCP tool with the

@@ -128,7 +128,7 @@ export class RtkAdapter implements ContextOptimizer {
   async install(): Promise<void> {
     // Never auto-install — surface the documented command instead.
     console.log(
-      '[cadet-token-saver] rtk not installed. See docs/requirements.md — on Windows download ' +
+      '[cadet-token-saver] rtk not installed. See https://github.com/naishtech/cadet-token-saver/blob/main/docs/requirements.md — on Windows download ' +
         'rtk-x86_64-pc-windows-msvc.zip and add rtk.exe to your PATH.',
     );
   }

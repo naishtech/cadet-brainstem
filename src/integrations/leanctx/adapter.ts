@@ -123,7 +123,7 @@ export class LeanCtxAdapter implements ContextOptimizer {
   async install(): Promise<void> {
     // Never auto-install — surface the documented command instead.
     console.log(
-      '[cadet-token-saver] leanctx not installed. See docs/requirements.md — on Windows download ' +
+      '[cadet-token-saver] leanctx not installed. See https://github.com/naishtech/cadet-token-saver/blob/main/docs/requirements.md — on Windows download ' +
         'lean-ctx-x86_64-pc-windows-msvc.zip and add lean-ctx.exe to your PATH.',
     );
   }

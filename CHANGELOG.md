@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [0.1.4] — 2026-08-26
 
+### Added
+
+- New **`classify`** MCP tool: run the local LLM on the user request and get
+  the recommended optimisation strategy (LeanCTX mode, compression, search
+  approach). The agent instructions (AGENTS.md / `init` output) now tell the
+  agent to **always classify the request first** so the local LLM actually
+  runs and the right strategy is picked before using the other tools.
+- Doc links in the CLI output (init, stats, adapter hints) now point to the
+  full GitHub URLs instead of relative paths.
+
 ### Fixed
 
 - The local classifier (Ollama) kept timing out (and silently degrading to the

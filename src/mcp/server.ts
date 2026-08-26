@@ -82,6 +82,35 @@ export interface OptimizeContextArgs {
   lines?: string;
 }
 
+/**
+ * Record a local-LLM (classifier) call — only when the LLM actually ran, so
+ * the "local calls" counter reflects real Ollama usage (degraded = not
+ * reached; the fallback is not a real LLM call).
+ */
+function recordClassifierCall(
+  record: (event: OptimisationEvent) => void,
+  outcome: ClassificationOutcome,
+  taskText: string,
+): void {
+  if (outcome.degraded) {
+    return;
+  }
+  record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: outcome.classification.task,
+    complexity: outcome.classification.complexity,
+    risk: outcome.classification.risk,
+    tool: 'ollama',
+    operation: 'classify',
+    estimated_input_tokens: Math.round(Buffer.byteLength(taskText) / 4) + 50,
+    estimated_output_tokens: 25,
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+  });
+}
+
 /** `optimize_context` — classify, pick a LeanCTX mode from the policy, compile. */
 export async function optimizeContextTool(
   args: OptimizeContextArgs,
@@ -96,24 +125,7 @@ export async function optimizeContextTool(
   const d = resolveDeps(deps);
   const outcome = await d.classify(args.task);
   const strategy = d.getStrategy(outcome.classification);
-  // Record the local LLM (classifier) call — only when it actually ran, so the
-  // "local calls" counter reflects real Ollama usage (degraded = not reached).
-  if (!outcome.degraded) {
-    d.record({
-      timestamp: new Date().toISOString(),
-      session_id: MCP_SESSION_ID,
-      task_type: outcome.classification.task,
-      complexity: outcome.classification.complexity,
-      risk: outcome.classification.risk,
-      tool: 'ollama',
-      operation: 'classify',
-      estimated_input_tokens: Math.round(Buffer.byteLength(args.task) / 4) + 50,
-      estimated_output_tokens: 25,
-      estimated_tokens_saved: 0,
-      compression_ratio: null,
-      optimisation_strategy: null,
-    });
-  }
+  recordClassifierCall(d.record, outcome, args.task);
   const result = await d.leanctx.optimize({
     target: args.target,
     mode: strategy.leanctx_mode,
@@ -144,6 +156,30 @@ export async function optimizeContextTool(
     degraded: result.degraded,
     classification: outcome.classification,
     strategy,
+  };
+}
+
+export interface ClassifyArgs {
+  task: string;
+}
+
+/** `classify` — classify a task with the local LLM, pick the strategy. */
+export async function classifyTool(
+  args: ClassifyArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.task !== 'string' || args.task.length === 0) {
+    throw new Error('classify requires a non-empty string "task"');
+  }
+  const d = resolveDeps(deps);
+  const outcome = await d.classify(args.task);
+  const strategy = d.getStrategy(outcome.classification);
+  recordClassifierCall(d.record, outcome, args.task);
+  return {
+    classification: outcome.classification,
+    strategy,
+    degraded: outcome.degraded,
+    ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };
 }
 
@@ -260,6 +296,23 @@ export async function compressCommandOutputTool(
 
 const TOOL_DEFS = [
   {
+    name: 'classify',
+    description:
+      'Classify the user request with the local LLM and return the recommended ' +
+      'optimisation strategy (LeanCTX mode, compression, search approach). Call ' +
+      'this first on the user request before using the other tools.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: {
+          type: 'string',
+          description: 'The user request / task to classify.',
+        },
+      },
+      required: ['task'],
+    },
+  },
+  {
     name: 'optimize_context',
     description:
       'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
@@ -350,6 +403,9 @@ export async function handleToolCall(
   try {
     let result: Record<string, unknown>;
     switch (name) {
+      case 'classify':
+        result = await classifyTool(args as unknown as ClassifyArgs, deps);
+        break;
       case 'optimize_context':
         result = await optimizeContextTool(
           args as unknown as OptimizeContextArgs,
