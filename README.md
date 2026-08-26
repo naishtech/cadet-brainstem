@@ -55,6 +55,7 @@ cadet-token-saver doctor    # read-only health check with actionable fixes
 | `optimize_context` | Classify the task, return the LeanCTX-compressed context for a file/dir |
 | `find_relevant_symbols` | Serena semantic search → only the relevant symbols/files |
 | `compress_command_output` | RTK-reduced output for a command |
+| `chat_memory_store` | Persist / retrieve agent memories (local SQLite) — check before work, store expensive-to-rediscover facts |
 
 The intended flow is to call `classify` once at the start of each agent turn,
 then use its strategy to choose the context tools. MCP is client-driven: the
@@ -87,11 +88,14 @@ Paste this into your agent's prompts or `AGENTS.md` so it classifies every turn
 and prefers the cheap paths:
 
 > At the start of every turn, call the Cadet Token Saver `classify` MCP tool
-> with the user's request and use its returned strategy. Then call
-> `optimize_context` before reading a large file, `find_relevant_symbols`
-> before broad searches, and `compress_command_output` for noisy command
-> output (pass `"shell": "bash"` if you are in git-bash on Windows). If an
-> MCP tool is unavailable, fall back to the normal operation.
+> with the user's request and use its returned strategy; parse its
+> `response_policy` and `memory_policy`. Then call `optimize_context` before
+> reading a large file, `find_relevant_symbols` before broad searches, and
+> `compress_command_output` for noisy command output (pass `"shell": "bash"`
+> if you are in git-bash on Windows). Use `chat_memory_store` to check memory
+> before starting work and to store facts that are expensive to rediscover
+> (decisions, constraints, verified commands, gotchas) — never store secrets.
+> If an MCP tool is unavailable, fall back to the normal operation.
 
 ---
 
@@ -107,6 +111,7 @@ task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised c
 - **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
 - **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-token-saver/metrics.db`), fully offline, with estimates clearly labelled.
+- **Memory** — a local SQLite memory store (`~/.cadet-token-saver/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`.
 
 ### Project layout
 
@@ -117,6 +122,7 @@ src/
   policy/       deterministic strategy engine
   integrations/ RTK / Serena / LeanCTX adapters
   metrics/      local SQLite metrics store
+  memory/       local SQLite agent-memory store
   mcp/          local MCP server exposing the engine as tools
   config/       YAML configuration
 docs/
@@ -137,4 +143,4 @@ The project is built incrementally from the task files in `tasks/`; see the desi
 
 ---
 
-**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, and `compress_command_output`.
+**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, `compress_command_output`, and `chat_memory_store`.

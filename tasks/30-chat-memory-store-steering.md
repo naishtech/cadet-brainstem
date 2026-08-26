@@ -4,7 +4,7 @@
 response policy) and the docs must explain when/why to store, so the feature
 saves tokens in practice rather than sitting unused.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/29-31-chat-memory-store` (pending review/commit)
 **Phase:** Phase 12
 **Source:** `docs/plans/initial_design.md` — §17 Chat memory store
 
@@ -31,9 +31,9 @@ is discoverable and actually used.
 
 ## Acceptance Criteria
 
-- [ ] `AGENTS.md` + `init` snippet reference `chat_memory_store` / `memory_policy`.
-- [ ] README + integration docs cover the memory feature and the
+- [x] `AGENTS.md` + `init` snippet reference `chat_memory_store` / `memory_policy`.
+- [x] README + integration docs cover the memory feature and the
       store-only-expensive-facts guidance.
-- [ ] `stats` "Local tool calls" includes `memory`.
-- [ ] Version bumped + CHANGELOG updated.
-- [ ] Full validation: build, typecheck, lint, tests all green.
+- [x] `stats` "Local tool calls" includes `memory`.
+- [x] Version bumped + CHANGELOG updated.
+- [x] Full validation: build, typecheck, lint, tests all green.

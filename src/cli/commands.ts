@@ -6,6 +6,7 @@ import { dashboardCommand } from './commands/dashboard';
 import { doctorCommand } from './commands/doctor';
 import { initCommand } from './commands/init';
 import { mcpCommand } from './commands/mcp';
+import { memoryCommand } from './commands/memory';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
 import { wrapCommand } from './commands/wrap';
@@ -16,6 +17,7 @@ export const COMMANDS: readonly CliCommand[] = [
   initCommand,
   doctorCommand,
   statsCommand,
+  memoryCommand,
   dashboardCommand,
   configCommand,
   telemetryCommand,

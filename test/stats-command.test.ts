@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runStats } from '../src/cli/commands/stats';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runStats, runStatsClear } from '../src/cli/commands/stats';
 import {
   MetricsStore,
   type OptimisationEvent,
@@ -159,5 +159,68 @@ describe('runStats', () => {
 
     expect(exit).toBe(1);
     expect(lines.join('\n')).toContain('could not open metrics database');
+  });
+});
+
+describe('runStatsClear', () => {
+  function runClear(
+    metricsPath: string,
+    ask: (question: string) => Promise<boolean>,
+  ): Promise<{ exit: number; lines: string[] }> {
+    const lines: string[] = [];
+    return runStatsClear({ metricsPath, ask, log: (line) => lines.push(line) }).then(
+      (exit) => ({ exit, lines }),
+    );
+  }
+
+  it('clears metrics after confirmation and reports the count', async () => {
+    const metricsPath = join(dir, 'metrics.db');
+    seedStore(metricsPath, [makeEvent(), makeEvent()]);
+
+    const { exit, lines } = await runClear(metricsPath, async () => true);
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Cleared 2 event(s).');
+    const store = new MetricsStore(metricsPath);
+    expect(store.count()).toBe(0);
+    store.close();
+  });
+
+  it('leaves metrics intact when confirmation is declined', async () => {
+    const metricsPath = join(dir, 'metrics.db');
+    seedStore(metricsPath, [makeEvent()]);
+
+    const { exit, lines } = await runClear(metricsPath, async () => false);
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Aborted');
+    const store = new MetricsStore(metricsPath);
+    expect(store.count()).toBe(1);
+    store.close();
+  });
+
+  it('defaults to no (no data loss) when non-interactive', async () => {
+    const metricsPath = join(dir, 'metrics.db');
+    seedStore(metricsPath, [makeEvent()]);
+    const lines: string[] = [];
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      get: () => false,
+    });
+    try {
+      const exit = await runStatsClear({
+        metricsPath,
+        log: (line) => lines.push(line),
+      });
+      expect(exit).toBe(0);
+    } finally {
+      delete (process.stdin as { isTTY?: boolean }).isTTY;
+      consoleSpy.mockRestore();
+    }
+    expect(lines.join('\n')).toContain('Aborted');
+    const store = new MetricsStore(metricsPath);
+    expect(store.count()).toBe(1);
+    store.close();
   });
 });

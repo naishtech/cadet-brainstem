@@ -22,6 +22,8 @@ can then call:
   representation of a file/directory.
 - `find_relevant_symbols` — Serena semantic search for task-relevant symbols.
 - `compress_command_output` — RTK-reduced output for a command.
+- `chat_memory_store` — persist / retrieve agent memories (local SQLite):
+  check before starting work, store facts that are expensive to rediscover.
 
 Verify it works by running `cadet-token-saver mcp` in a terminal (it stays
 running until the client disconnects).
@@ -30,8 +32,12 @@ running until the client disconnects).
 
 `AGENTS.md` (repo root) tells the agent to call `classify` at the start of
 every turn, then prefer `optimize_context` / `find_relevant_symbols` for large
-context reads and `wrap` for noisy commands. Copy the relevant section into
-your own project's `AGENTS.md`.
+context reads and `wrap` for noisy commands. It also tells the agent to check
+`chat_memory_store` before starting work and, at the end of each response, to
+review the conversation and store memories that match the `memory_policy` —
+facts that are expensive to rediscover (decisions, constraints, verified
+commands, gotchas), never secrets. Copy the relevant section into your own
+project's `AGENTS.md`.
 
 This is an instruction-level preference, not a protocol guarantee. Copilot
 Chat decides whether to call an MCP tool; the MCP server cannot intercept or

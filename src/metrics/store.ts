@@ -344,6 +344,12 @@ export class MetricsStore {
     this.db.close();
   }
 
+  /** Delete all rows from the optimisation_events table; returns rows removed. */
+  clear(): number {
+    const result = this.db.prepare('DELETE FROM optimisation_events').run();
+    return Number(result.changes);
+  }
+
   private groupedSavings(column: 'tool' | 'task_type'): GroupedSavings[] {
     const rows = this.db
       .prepare(
