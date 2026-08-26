@@ -165,7 +165,7 @@ export async function runStatsClear(deps: StatsDeps = {}): Promise<number> {
     log('');
     log(`Metrics database: ${metricsPath}`);
     log(`Will clear ${count} recorded event(s).`);
-    const confirmed = await ask('Clear ALL metrics? This cannot be undone. [y/N]');
+    const confirmed = await ask('Clear ALL metrics? This cannot be undone.');
     if (!confirmed) {
       log('Aborted — no data was cleared.');
       return 0;
