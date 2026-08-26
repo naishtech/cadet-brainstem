@@ -39,7 +39,10 @@ const CLASSIFICATION_SHAPE = `{
   "context_need": "minimal | targeted | broad | exhaustive",
   "precision": "approximate | normal | exact",
   "tool_plan": { "use": ["<tool>", "<tool>"], "skip": ["<tool>", "<tool>"] },
-  "response_policy": ["<directive>", "<directive>"]
+  "response_policy": ["<directive>", "<directive>"],
+  "retrieval": { "queries": ["<search term>", "<search term>"], "scope": "<initial scope>" },
+  "confidence": 0.0,
+  "needs_more_context": false
 }`;
 
 /** Build the classifier prompt. It instructs the model to classify ONLY. */
@@ -61,6 +64,14 @@ export function buildPrompt(taskText: string): string {
     '',
     `Respond with exactly this JSON shape:\n${CLASSIFICATION_SHAPE}`,
     '',
+    'task: "review" is for reviewing existing code, changes, or a PR. For exploring',
+    'a repo, confirming a convention, or designing/planning something, prefer',
+    '"investigation" or "planning" instead of "review".',
+    '',
+    'context_need: size it to THIS request. A narrow question about one convention',
+    'or area is "targeted"; reserve "broad"/"exhaustive" for tasks that genuinely',
+    'need the whole repository.',
+    '',
     `tool_plan: recommend the context tools to use and to skip, from: ${tools}.`,
     'Only recommend a tool when it clearly helps this request; be aggressive with skip.',
     '',
@@ -69,6 +80,14 @@ export function buildPrompt(taskText: string): string {
     'a minimal set (delta_only, no_filler, no_tool_narration). A research-heavy',
     'request should include preserve_evidence and progressive_disclosure.',
     directives,
+    '',
+    'retrieval: list the specific search terms (identifiers, file/dir names, config',
+    'keys) the agent should search for first, and a short "scope" (e.g. "project',
+    'root + config + memory implementation"). Omit when no search is needed.',
+    '',
+    'confidence: a number 0..1 for how sure you are of this classification.',
+    'needs_more_context: true only when you cannot classify well without seeing',
+    'more of the repository.',
     '',
     'User request:',
     '"""',

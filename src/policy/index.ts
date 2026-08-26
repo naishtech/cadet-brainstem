@@ -1,4 +1,4 @@
-export { PolicyEngine, getDefaultStrategy, getStrategy } from './engine';
+export { PolicyEngine, getDefaultStrategy, getStrategy, refineStrategy } from './engine';
 export {
   codeSearchSchema,
   compressionSchema,

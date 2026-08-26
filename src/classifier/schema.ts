@@ -32,22 +32,17 @@ export const TOOL_NAMES = [
 export const toolNameSchema = z.enum(TOOL_NAMES);
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
-  optimize_context:
-    'Classify a task and return the LeanCTX-compressed representation of a file/directory instead of reading it raw.',
-  find_relevant_symbols:
-    'Serena semantic search that returns only the relevant symbols/files for the task.',
-  compress_command_output:
-    'Run a read-only command and return its RTK-reduced output (for noisy output like git status or tests).',
-  chat_memory_store:
-    'Persist / retrieve agent memories in local SQLite (check before work, store expensive-to-rediscover facts).',
-};
-
 export const toolPlanSchema = z.object({
   use: z.array(toolNameSchema),
   skip: z.array(toolNameSchema),
 });
 export type ToolPlan = z.infer<typeof toolPlanSchema>;
+
+/** Search queries + initial scope the agent should start with (retrieval plan). */
+export interface RetrievalPlan {
+  queries: string[];
+  scope?: string;
+}
 
 /** Controller verdict: gather more context, or the signal is sufficient. */
 export const verdictSchema = z.enum(['continue', 'stop']);
@@ -106,6 +101,7 @@ export const DEFAULT_RESPONSE_POLICY_KEYS: ResponsePolicyKey[] = [
   'compact',
   'no_filler',
   'no_repetition',
+  'no_tool_narration',
 ];
 
 /**
@@ -121,6 +117,9 @@ export const classificationSchema = z.object({
   precision: precisionSchema,
   tool_plan: z.unknown().optional(),
   response_policy: z.unknown().optional(),
+  confidence: z.unknown().optional(),
+  needs_more_context: z.unknown().optional(),
+  retrieval: z.unknown().optional(),
 });
 
 export interface Classification {
@@ -131,6 +130,12 @@ export interface Classification {
   precision: Precision;
   tool_plan: ToolPlan;
   response_policy: ResponsePolicyKey[];
+  /** Model's self-assessed confidence in this classification (0..1). */
+  confidence?: number;
+  /** True when the model needs more context to classify well. */
+  needs_more_context?: boolean;
+  /** Search queries + initial scope to start retrieval with. */
+  retrieval?: RetrievalPlan;
 }
 
 export type TaskType = z.infer<typeof taskTypeSchema>;
@@ -186,6 +191,37 @@ function sanitizeResponsePolicy(raw: unknown): ResponsePolicyKey[] {
   return keys.length > 0 ? keys : DEFAULT_RESPONSE_POLICY_KEYS;
 }
 
+/** Keep a finite 0..1 confidence, else undefined (model said nothing useful). */
+function sanitizeConfidence(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 1
+    ? raw
+    : undefined;
+}
+
+function sanitizeBoolean(raw: unknown): boolean | undefined {
+  return typeof raw === 'boolean' ? raw : undefined;
+}
+
+/** Keep a retrieval plan only when it carries at least one query or a scope. */
+function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const plan = raw as { queries?: unknown; scope?: unknown };
+  const queries = sanitizeStringList(
+    plan.queries,
+    (value): value is string => typeof value === 'string',
+  );
+  const scope =
+    typeof plan.scope === 'string' && plan.scope.length > 0
+      ? plan.scope
+      : undefined;
+  if (queries.length === 0 && scope === undefined) {
+    return undefined;
+  }
+  return { queries, ...(scope !== undefined ? { scope } : {}) };
+}
+
 /** Raised when classifier output does not match the classification schema. */
 export class ClassificationValidationError extends Error {
   constructor(message: string) {
@@ -216,6 +252,9 @@ export function parseClassification(raw: unknown): Classification {
   if (!result.success) {
     throw new ClassificationValidationError(formatIssues(result.error));
   }
+  const confidence = sanitizeConfidence(result.data.confidence);
+  const needsMoreContext = sanitizeBoolean(result.data.needs_more_context);
+  const retrieval = sanitizeRetrieval(result.data.retrieval);
   return {
     task: result.data.task,
     complexity: result.data.complexity,
@@ -224,6 +263,9 @@ export function parseClassification(raw: unknown): Classification {
     precision: result.data.precision,
     tool_plan: sanitizeToolPlan(result.data.tool_plan),
     response_policy: sanitizeResponsePolicy(result.data.response_policy),
+    ...(confidence !== undefined ? { confidence } : {}),
+    ...(needsMoreContext !== undefined ? { needs_more_context: needsMoreContext } : {}),
+    ...(retrieval !== undefined ? { retrieval } : {}),
   };
 }
 

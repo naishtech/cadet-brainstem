@@ -10,12 +10,10 @@ import pkg from '../../package.json';
 import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
 import {
   RESPONSE_POLICY_DIRECTIVES,
-  TOOL_DESCRIPTIONS,
   assessWithFallback,
   type ContextAssessmentOutcome,
   type ResponsePolicyKey,
-  type ToolName,
-  type ToolPlan,
+  type RetrievalPlan,
 } from '../classifier';
 import type { Classification } from '../classifier';
 import { PolicyEngine } from '../policy';
@@ -58,49 +56,61 @@ export function compileResponsePolicy(
 export type CoreClassification = Pick<
   Classification,
   'task' | 'complexity' | 'risk' | 'context_need' | 'precision'
->;
+> & {
+  confidence?: number;
+  needs_more_context?: boolean;
+};
 
-/** Project a classification to its five core fields (no tool_plan/response_policy). */
+/** Project a classification to its core fields plus the new confidence signals. */
 export function coreClassification(
   classification: Classification,
 ): CoreClassification {
-  return {
+  const core: CoreClassification = {
     task: classification.task,
     complexity: classification.complexity,
     risk: classification.risk,
     context_need: classification.context_need,
     precision: classification.precision,
   };
+  if (classification.confidence !== undefined) {
+    core.confidence = classification.confidence;
+  }
+  if (classification.needs_more_context !== undefined) {
+    core.needs_more_context = classification.needs_more_context;
+  }
+  return core;
 }
 
-export interface ToolPlanEntry {
-  name: ToolName;
-  description: string;
-}
-
-/** Enrich a tool plan with descriptions so each entry is explicit to the agent. */
-export function compileToolPlan(
-  toolPlan: ToolPlan,
-): { use: ToolPlanEntry[]; skip: ToolPlanEntry[] } {
-  const entry = (name: ToolName): ToolPlanEntry => ({
-    name,
-    description: TOOL_DESCRIPTIONS[name],
-  });
-  return {
-    use: toolPlan.use.map(entry),
-    skip: toolPlan.skip.map(entry),
-  };
+/** Surface the retrieval plan (queries + scope) as a plain object, or null. */
+export function compileRetrieval(
+  retrieval: RetrievalPlan | undefined,
+): { queries: string[]; scope?: string } | null {
+  if (retrieval === undefined || retrieval.queries.length === 0) {
+    return null;
+  }
+  return retrieval.scope !== undefined
+    ? { queries: retrieval.queries, scope: retrieval.scope }
+    : { queries: retrieval.queries };
 }
 
 /**
- * Memory policy the agent must parse and follow. Returned by `classify` and
- * `optimize_context` so the agent knows to check memory before working and
- * store facts that are expensive to rediscover.
+ * Memory policy the agent must parse and follow. Memory is *optional evidence,
+ * never authoritative state* — the agent retrieves hints and verifies them
+ * against the current project before acting.
  */
 export const MEMORY_POLICY =
-  'Check chat_memory_store before starting work and prefer retrieving over re-deriving. ' +
-  'Store facts that are expensive to rediscover: decisions, constraints, verified commands, ' +
-  'and gotchas. Never store secrets or credentials.';
+  'Memory is optional evidence, never authoritative state. Retrieve hints before work ' +
+  'and verify them against the current project state; store facts that are expensive to ' +
+  'rediscover (decisions, constraints, verified commands, gotchas). Never store secrets.';
+
+/** Policy when the tool plan skips memory: don't even check it. */
+export const MEMORY_POLICY_SKIP =
+  'Memory is optional evidence, never authoritative state. Skip chat_memory_store for this request.';
+
+/** Pick the memory-policy text based on whether the tool plan uses memory. */
+export function memoryPolicyFor(usesMemory: boolean): string {
+  return usesMemory ? MEMORY_POLICY : MEMORY_POLICY_SKIP;
+}
 
 export interface SerenaTools {
   search: SerenaAdapter['search'];
@@ -277,9 +287,12 @@ export async function optimizeContextTool(
     request_id: requestId,
     classification: coreClassification(outcome.classification),
     strategy,
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
+    tool_plan: outcome.classification.tool_plan,
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
-    memory_policy: MEMORY_POLICY,
+    retrieval: compileRetrieval(outcome.classification.retrieval),
+    memory_policy: memoryPolicyFor(
+      outcome.classification.tool_plan.use.includes('chat_memory_store'),
+    ),
   };
 }
 
@@ -306,9 +319,12 @@ export async function classifyTool(
   return {
     classification: coreClassification(outcome.classification),
     strategy,
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
+    tool_plan: outcome.classification.tool_plan,
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
-    memory_policy: MEMORY_POLICY,
+    retrieval: compileRetrieval(outcome.classification.retrieval),
+    memory_policy: memoryPolicyFor(
+      outcome.classification.tool_plan.use.includes('chat_memory_store'),
+    ),
     degraded: outcome.degraded,
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
@@ -859,7 +875,7 @@ export async function assessContextTool(
   return {
     request_id: requestId,
     verdict: outcome.assessment.verdict,
-    tool_plan: compileToolPlan(outcome.assessment.tool_plan),
+    tool_plan: outcome.assessment.tool_plan,
     reason: outcome.assessment.reason,
     degraded: outcome.degraded,
     inventory: inventory.map(summarizeEvent),
