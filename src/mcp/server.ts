@@ -179,12 +179,15 @@ export async function findRelevantSymbolsTool(
 export interface CompressOutputArgs {
   command: string;
   cwd?: string;
+  shell?: string;
 }
 
 /**
  * `compress_command_output` — run a read-only command and return its
  * RTK-reduced output. The full raw output is never sent back (that is the
- * point); its size is reported so savings are measurable.
+ * point); its size is reported so savings are measurable. The command is
+ * passed through as-is to the platform shell (cmd.exe on Windows) unless a
+ * `shell` is given (e.g. "bash" for git-bash).
  */
 export async function compressCommandOutputTool(
   args: CompressOutputArgs,
@@ -199,6 +202,7 @@ export async function compressCommandOutputTool(
   const result = await d.rtk.optimize({
     command: args.command,
     ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
+    ...(args.shell !== undefined ? { shell: String(args.shell) } : {}),
   });
   d.record({
     timestamp: new Date().toISOString(),
@@ -217,6 +221,10 @@ export async function compressCommandOutputTool(
         : null,
     optimisation_strategy: null,
   });
+  const note =
+    result.estimatedTokensSaved === 0 && !result.degraded
+      ? 'nothing to compress — output is small or already compact (0 tokens saved)'
+      : undefined;
   return {
     command: result.command,
     optimisedOutput: result.optimisedOutput,
@@ -226,6 +234,7 @@ export async function compressCommandOutputTool(
     estimatedTokensAfter: result.estimatedTokensAfter,
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
+    ...(note !== undefined ? { note } : {}),
   };
 }
 
@@ -283,8 +292,9 @@ const TOOL_DEFS = [
   {
     name: 'compress_command_output',
     description:
-      'Run a read-only command and return its RTK-compressed output. Use for noisy commands ' +
-      '(git status, ls, tests) before sending their output as context.',
+      'Run a read-only command and return its RTK-compressed output. Only helps on noisy/large ' +
+      'output (git status, ls, tests). On Windows commands run in cmd by default — pass '
+      + '"shell": "bash" to use git-bash. The command is passed through as-is.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,6 +305,11 @@ const TOOL_DEFS = [
         cwd: {
           type: 'string',
           description: 'Optional working directory.',
+        },
+        shell: {
+          type: 'string',
+          description:
+            'Shell to run the command in (defaults to the platform shell, cmd.exe on Windows; pass "bash" for git-bash).',
         },
       },
       required: ['command'],

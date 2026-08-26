@@ -20,22 +20,32 @@ export interface WrapOptions {
   raw?: boolean;
   /** Working directory to run the command in. */
   cwd?: string;
+  /** Shell to run the command in (defaults to the platform shell, cmd.exe on Windows). */
+  shell?: string;
 }
 
 export interface ParsedWrapArgs {
   command?: string;
   raw: boolean;
+  shell?: string;
 }
+
 /**
  * Parse `wrap` arguments. Everything after a `--` separator (or any
  * non-flag argument) is treated as the command, so command flags like
- * `git status --short` are preserved. `--raw` / `-r` are wrap flags.
+ * `git status --short` are preserved. `--raw` / `-r` and `--shell <name>`
+ * are wrap flags (they must appear before `--`).
  */
 export function parseWrapArgs(args: readonly string[]): ParsedWrapArgs {
   let raw = false;
+  let shell: string | undefined;
   let afterSeparator = false;
   const commandTokens: string[] = [];
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === undefined) {
+      continue;
+    }
     if (afterSeparator) {
       commandTokens.push(arg);
       continue;
@@ -48,6 +58,14 @@ export function parseWrapArgs(args: readonly string[]): ParsedWrapArgs {
       raw = true;
       continue;
     }
+    if (arg === '--shell') {
+      const value = args[i + 1];
+      if (value !== undefined) {
+        shell = value;
+        i += 1;
+      }
+      continue;
+    }
     commandTokens.push(arg);
   }
   const command =
@@ -55,6 +73,7 @@ export function parseWrapArgs(args: readonly string[]): ParsedWrapArgs {
   return {
     raw,
     ...(command !== undefined ? { command } : {}),
+    ...(shell !== undefined ? { shell } : {}),
   };
 }
 
@@ -106,8 +125,14 @@ export async function runWrap(
   const result = await rtk.optimize({
     command,
     ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+    ...(options.shell !== undefined ? { shell: options.shell } : {}),
   });
   recordWrapEvent(metricsPath, result);
+  if (result.estimatedTokensSaved === 0 && !result.degraded) {
+    console.error(
+      '[cadet-token-saver] nothing to compress — output is small or already compact (0 tokens saved).',
+    );
+  }
   log(options.raw ? result.rawOutput : result.optimisedOutput);
   return 0;
 }
@@ -115,14 +140,17 @@ export async function runWrap(
 export const wrapCommand: CliCommand = {
   name: 'wrap',
   description: 'Run a command and print its RTK-reduced output',
-  usage: 'cadet-token-saver wrap [--raw] -- <command>',
+  usage: 'cadet-token-saver wrap [--raw] [--shell <name>] -- <command>',
   run(args: readonly string[]): Promise<number> {
-    const { command, raw } = parseWrapArgs(args);
+    const { command, raw, shell } = parseWrapArgs(args);
     if (command === undefined || command.length === 0) {
       console.error('[cadet-token-saver] wrap: missing command.');
-      console.error('Usage: cadet-token-saver wrap [--raw] -- <command>');
+      console.error('Usage: cadet-token-saver wrap [--raw] [--shell <name>] -- <command>');
       return Promise.resolve(1);
     }
-    return runWrap(command, { raw });
+    return runWrap(command, {
+      raw,
+      ...(shell !== undefined ? { shell } : {}),
+    });
   },
 };

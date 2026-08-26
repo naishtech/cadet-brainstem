@@ -11,6 +11,11 @@ export interface RtkOptimizeRequest {
   command: string;
   /** Working directory to run in. */
   cwd?: string;
+  /**
+   * Shell to run the command in. Defaults to the platform shell (cmd.exe on
+   * Windows) — pass e.g. "bash" to run in git-bash. 
+   */
+  shell?: string;
 }
 
 export interface RtkResult {
@@ -29,12 +34,17 @@ export interface RtkResult {
   degraded: boolean;
 }
 
-async function runShell(command: string, cwd?: string): Promise<string> {
+async function runShell(
+  command: string,
+  cwd?: string,
+  shell?: string,
+): Promise<string> {
   const { stdout, stderr } = await exec(command, {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     timeout: 60_000,
-    cwd,
+    ...(cwd !== undefined ? { cwd } : {}),
+    ...(shell !== undefined ? { shell } : {}),
   });
   return stderr ? `${stdout}\n${stderr}` : stdout;
 }
@@ -66,7 +76,7 @@ export class RtkAdapter implements ContextOptimizer {
     const timestamp = new Date().toISOString();
     const available = await this.isAvailable();
 
-    const rawOutput = await runShell(request.command, request.cwd);
+    const rawOutput = await runShell(request.command, request.cwd, request.shell);
     const rawOutputSize = Buffer.byteLength(rawOutput);
     const tokensBefore = estimateTokens(rawOutputSize);
 
@@ -89,7 +99,11 @@ export class RtkAdapter implements ContextOptimizer {
 
     let optimisedOutput: string;
     try {
-      optimisedOutput = await runShell(`${RTK_BIN} ${request.command}`, request.cwd);
+      optimisedOutput = await runShell(
+        `${RTK_BIN} ${request.command}`,
+        request.cwd,
+        request.shell,
+      );
     } catch {
       // RTK failed → transparent fallback to the normal command path.
       return fallback();

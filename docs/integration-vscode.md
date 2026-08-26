@@ -44,7 +44,13 @@ Or run manually in the integrated terminal:
 ```
 cadet-token-saver wrap -- git status
 cadet-token-saver wrap --raw -- git status
+cadet-token-saver wrap --shell bash -- grep -r foo
 ```
+
+> Commands run in the platform shell (`cmd.exe` on Windows) unless you pass
+> `--shell <name>` (e.g. `bash` for git-bash). Compression only helps on
+> large/noisy output — small output is pass-through (0 tokens saved). The
+> command is passed through as-is (it is not validated).
 
 ## Users of other repos
 

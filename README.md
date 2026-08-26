@@ -58,15 +58,30 @@ cadet-token-saver doctor    # read-only health check with actionable fixes
 **From the terminal:**
 
 ```bash
-cadet-token-saver wrap -- git status          # print RTK-reduced output
-cadet-token-saver wrap --raw -- git status    # print the original output
+cadet-token-saver wrap -- git status                # print RTK-reduced output
+cadet-token-saver wrap --raw -- git status          # print the original output
+cadet-token-saver wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
 ```
+
+> Commands run in the platform shell (`cmd.exe` on Windows) unless you pass
+> `--shell <name>` (e.g. `bash` for git-bash). Compression only helps on
+> large/noisy output (git status, build/test logs) — small output is pass-through.
 
 ### 4. See the results
 
 ```bash
 cadet-token-saver stats    # events, tokens saved, reduction %, savings by tool / task / session
 ```
+
+### 5. Tell your agent how to use it
+
+Paste this into your agent's prompts or `AGENTS.md` so it prefers the cheap paths:
+
+> To save tokens, prefer Cadet Token Saver tools: call `optimize_context` before
+> reading a large file; use `find_relevant_symbols` before broad searches; call
+> `compress_command_output` for noisy command output (pass `"shell": "bash"` if
+> you are in git-bash on Windows). If a tool is unavailable, fall back to the
+> normal read.
 
 ---
 

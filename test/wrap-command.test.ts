@@ -75,6 +75,14 @@ describe('parseWrapArgs', () => {
   it('returns no command when nothing is provided', () => {
     expect(parseWrapArgs([])).toEqual({ command: undefined, raw: false });
   });
+
+  it('parses --shell before the separator', () => {
+    expect(parseWrapArgs(['--shell', 'bash', '--', 'git', 'status'])).toEqual({
+      command: 'git status',
+      raw: false,
+      shell: 'bash',
+    });
+  });
 });
 
 describe('runWrap', () => {
@@ -132,6 +140,28 @@ describe('runWrap', () => {
     await runWrap('git status', {}, { ...deps, rtk: degradedRtk });
 
     expect(savedRtkTokens(metricsPath)).toBe(0);
+  });
+
+  it('forwards a shell and notes on stderr when nothing is compressed', async () => {
+    const { deps, lines } = makeDeps();
+    const rtk = {
+      optimize: vi.fn(async (req: { command: string }) =>
+        makeFakeResult({ command: req.command, estimatedTokensSaved: 0 }),
+      ),
+    };
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await runWrap('git status', { shell: 'bash' }, { ...deps, rtk });
+      expect(rtk.optimize).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'git status', shell: 'bash' }),
+      );
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('nothing to compress'),
+      );
+      expect(lines).toEqual(['REDUCED\n']);
+    } finally {
+      error.mockRestore();
+    }
   });
 });
 

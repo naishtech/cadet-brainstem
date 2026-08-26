@@ -71,6 +71,24 @@ describe('RtkAdapter', () => {
     expect(calls).toContain('git status');
   });
 
+  it('forwards a custom shell to the command execution', async () => {
+    mockExec((cmd) => ({ stdout: cmd.startsWith('rtk ') ? 'compact\n' : 'raw\n' }));
+
+    const result = await adapter.optimize({
+      command: 'grep -r foo',
+      shell: 'bash',
+    });
+
+    expect(result.degraded).toBe(false);
+    const shells = execMock.mock.calls
+      .map((c) => {
+        const options = c[1] as { shell?: string } | undefined;
+        return options?.shell;
+      })
+      .filter((s): s is string => s !== undefined);
+    expect(shells).toEqual(expect.arrayContaining(['bash']));
+  });
+
   it('falls back to the normal command path when RTK is missing', async () => {
     mockExec((cmd) =>
       cmd.startsWith('rtk ') ? new Error('not found') : { stdout: 'raw output\n' },

@@ -178,6 +178,32 @@ describe('compress_command_output', () => {
       compressCommandOutputTool({ command: '   ' }, deps),
     ).rejects.toThrow('non-empty string "command"');
   });
+
+  it('forwards a shell and notes when nothing is compressed', async () => {
+    const { deps, rtkOptimize } = makeDeps();
+    rtkOptimize.mockImplementation(async (req: { command: string }) => ({
+      command: req.command,
+      rawOutput: 'raw',
+      optimisedOutput: 'raw',
+      rawOutputSize: 100,
+      optimisedOutputSize: 100,
+      estimatedTokensBefore: 25,
+      estimatedTokensAfter: 25,
+      estimatedTokensSaved: 0,
+      timestamp: new Date().toISOString(),
+      degraded: false,
+    }));
+
+    const result = await compressCommandOutputTool(
+      { command: 'grep -r foo', shell: 'bash' },
+      deps,
+    );
+
+    expect(rtkOptimize).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'grep -r foo', shell: 'bash' }),
+    );
+    expect(result.note).toContain('nothing to compress');
+  });
 });
 
 describe('handleToolCall', () => {

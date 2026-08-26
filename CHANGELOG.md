@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.2] — 2026-08-26
+
+### Added
+
+- `compress_command_output` (MCP) and `wrap` now accept a `shell` option
+  (`--shell <name>` for `wrap`) so commands can run in a chosen shell — pass
+  `"bash"` on Windows to use git-bash instead of the default `cmd.exe`.
+- When no tokens are saved (small/already-compact output), the tool now says so
+  explicitly instead of silently returning the same size.
+
+### Changed
+
+- `init` now ends with a "tell your agent how to use it" snippet, and the
+  README/integration docs document the shell behaviour and the
+  small-output-expectation (compression only helps on large/noisy output).
+
 ## [0.1.1] — 2026-08-26
 
 ### Fixed
