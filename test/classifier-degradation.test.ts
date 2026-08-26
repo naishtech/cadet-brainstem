@@ -4,15 +4,18 @@ import {
   ClassifierUnavailableError,
   classifyWithFallback,
   conservativeDefaultClassification,
+  type Classification,
 } from '../src/classifier/index';
 
-const okClassification = {
+const okClassification: Classification = {
   task: 'debug',
   complexity: 'medium',
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
-} as const;
+  tool_plan: { use: [], skip: [] },
+  response_policy: [],
+};
 
 describe('conservativeDefaultClassification', () => {
   it('biases toward the highest context need and lowest risk', () => {

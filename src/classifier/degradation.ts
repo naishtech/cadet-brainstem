@@ -12,6 +12,8 @@ export const conservativeDefaultClassification: Classification = {
   risk: 'low',
   context_need: 'exhaustive',
   precision: 'normal',
+  tool_plan: { use: [], skip: [] },
+  response_policy: ['preserve_evidence', 'progressive_disclosure', 'no_repetition'],
 };
 
 export interface ClassificationOutcome {

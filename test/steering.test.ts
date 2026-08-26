@@ -20,6 +20,7 @@ const REQUIRED_PHRASES = [
   'call the `classify` MCP tool',
   'not the verbatim message',
   'response_policy',
+  'tool_plan',
   'memory_policy',
   'chat_memory_store',
 ] as const;

@@ -11,11 +11,12 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   calls, no file reads), call the `classify` MCP tool exactly once. Pass a
   short, faithful restatement of the request — what the user wants done, in
   one or two sentences — not the verbatim message.
-- Use the returned `strategy` (LeanCTX mode, compression, search approach) to
-  decide how to use the tools below for the rest of that request.
-- Parse the returned `response_policy` and follow it in every reply: write for
-  another LLM (compact, information-dense, no decoration, filler or repeated
-  info), since your response may become future LLM context.
+- Use the returned `strategy` (LeanCTX mode, compression, search approach)
+  and `tool_plan` (tools to use / skip) to decide how to use the tools below
+  for the rest of that request.
+- The returned `response_policy` is a set of per-task directives (e.g.
+  `delta_only`, `no_filler`, `no_tool_narration`). Follow every directive
+  given in your reply.
 - Parse the returned `memory_policy` and follow it too: check memory before
   starting work, and store expensive-to-rediscover facts when done.
 - If `classify` is unavailable, continue with the tools below using defaults —

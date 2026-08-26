@@ -14,6 +14,8 @@ function makeClassification(task: string): Classification {
     risk: 'medium',
     context_need: 'targeted',
     precision: 'normal',
+    tool_plan: { use: [], skip: [] },
+    response_policy: [],
   };
 }
 
@@ -23,6 +25,8 @@ const debugClassification: Classification = {
   risk: 'high',
   context_need: 'broad',
   precision: 'approximate',
+  tool_plan: { use: [], skip: [] },
+  response_policy: [],
 };
 
 const questionClassification: Classification = {
@@ -31,6 +35,8 @@ const questionClassification: Classification = {
   risk: 'low',
   context_need: 'minimal',
   precision: 'approximate',
+  tool_plan: { use: [], skip: [] },
+  response_policy: [],
 };
 
 describe('PolicyEngine', () => {

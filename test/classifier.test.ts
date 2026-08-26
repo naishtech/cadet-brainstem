@@ -18,6 +18,8 @@ const validClassification = {
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
+  tool_plan: { use: ['find_relevant_symbols'], skip: ['compress_command_output'] },
+  response_policy: ['compact', 'no_filler'],
 };
 
 function mockFetchJson(body: unknown, ok = true, status = 200): Mock {
@@ -55,6 +57,18 @@ describe('parseClassification', () => {
     expect(() => parseClassification('this is not json')).toThrow(
       ClassificationValidationError,
     );
+  });
+
+  it('fills defaults when tool_plan/response_policy are omitted', () => {
+    const parsed = parseClassification({
+      task: 'debug',
+      complexity: 'medium',
+      risk: 'medium',
+      context_need: 'broad',
+      precision: 'normal',
+    });
+    expect(parsed.tool_plan).toEqual({ use: [], skip: [] });
+    expect(parsed.response_policy).toEqual(['compact', 'no_filler', 'no_repetition']);
   });
 });
 

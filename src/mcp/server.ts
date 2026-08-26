@@ -8,6 +8,13 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
+import {
+  RESPONSE_POLICY_DIRECTIVES,
+  TOOL_DESCRIPTIONS,
+  type ResponsePolicyKey,
+  type ToolName,
+  type ToolPlan,
+} from '../classifier';
 import type { Classification } from '../classifier';
 import { PolicyEngine } from '../policy';
 import type { OptimisationStrategy } from '../policy';
@@ -25,20 +32,60 @@ import { MemoryStore } from '../memory';
 export const MCP_SESSION_ID = 'mcp';
 
 /**
- * Response policy the agent must parse and follow when replying after using
- * this tool. Returned by `classify` (and `optimize_context`) so the agent can
- * read it and stick to it. Targets token-efficient, LLM-consumable responses.
+ * Compile the selected response-policy keys into their directive descriptions.
+ * The classifier picks the subset per request; this returns only those.
  */
-export const RESPONSE_POLICY =
-  'Write for another LLM, not for presentation. Preserve decisions, constraints, actions, errors ' +
-  'and evidence. Remove decoration, repetition and conversational filler. Keep output compact and ' +
-  'information-dense. Avoid decorative formatting, unnecessary emojis, repeated information, and ' +
-  'explanations that do not affect the task. Assume your response may become future LLM context.';
+export function compileResponsePolicy(
+  keys: readonly ResponsePolicyKey[],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of keys) {
+    result[key] = RESPONSE_POLICY_DIRECTIVES[key];
+  }
+  return result;
+}
+
+export type CoreClassification = Pick<
+  Classification,
+  'task' | 'complexity' | 'risk' | 'context_need' | 'precision'
+>;
+
+/** Project a classification to its five core fields (no tool_plan/response_policy). */
+export function coreClassification(
+  classification: Classification,
+): CoreClassification {
+  return {
+    task: classification.task,
+    complexity: classification.complexity,
+    risk: classification.risk,
+    context_need: classification.context_need,
+    precision: classification.precision,
+  };
+}
+
+export interface ToolPlanEntry {
+  name: ToolName;
+  description: string;
+}
+
+/** Enrich a tool plan with descriptions so each entry is explicit to the agent. */
+export function compileToolPlan(
+  toolPlan: ToolPlan,
+): { use: ToolPlanEntry[]; skip: ToolPlanEntry[] } {
+  const entry = (name: ToolName): ToolPlanEntry => ({
+    name,
+    description: TOOL_DESCRIPTIONS[name],
+  });
+  return {
+    use: toolPlan.use.map(entry),
+    skip: toolPlan.skip.map(entry),
+  };
+}
 
 /**
- * Memory policy the agent must parse and follow. Sibling of RESPONSE_POLICY;
- * returned by `classify` and `optimize_context` so the agent knows to check
- * memory before working and store facts that are expensive to rediscover.
+ * Memory policy the agent must parse and follow. Returned by `classify` and
+ * `optimize_context` so the agent knows to check memory before working and
+ * store facts that are expensive to rediscover.
  */
 export const MEMORY_POLICY =
   'Check chat_memory_store before starting work and prefer retrieving over re-deriving. ' +
@@ -197,9 +244,10 @@ export async function optimizeContextTool(
     returnedSize: result.returnedSize,
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
-    classification: outcome.classification,
+    classification: coreClassification(outcome.classification),
     strategy,
-    response_policy: RESPONSE_POLICY,
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
+    response_policy: compileResponsePolicy(outcome.classification.response_policy),
     memory_policy: MEMORY_POLICY,
   };
 }
@@ -224,9 +272,10 @@ export async function classifyTool(
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
   return {
-    classification: outcome.classification,
+    classification: coreClassification(outcome.classification),
     strategy,
-    response_policy: RESPONSE_POLICY,
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
+    response_policy: compileResponsePolicy(outcome.classification.response_policy),
     memory_policy: MEMORY_POLICY,
     degraded: outcome.degraded,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
@@ -644,8 +693,9 @@ const TOOL_DEFS = [
     name: 'classify',
     description:
       'Classify the user request with the local LLM and return the recommended ' +
-      'optimisation strategy (LeanCTX mode, compression, search approach). Call ' +
-      'this first on the user request before using the other tools.',
+      'optimisation strategy (LeanCTX mode, compression, search approach), a ' +
+      'tool_plan (tools to use/skip) and a response_policy (directives to follow ' +
+      'when replying). Call this first on the user request before using the other tools.',
     inputSchema: {
       type: 'object',
       properties: {
