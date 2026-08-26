@@ -3,6 +3,8 @@ export {
   DEFAULT_OLLAMA_HOST,
   ClassifierUnavailableError,
   OllamaClassifier,
+  assess,
+  buildAssessPrompt,
   buildPrompt,
   classify,
   isModelAvailable,
@@ -18,21 +20,33 @@ export {
   TOOL_NAMES,
   classificationSchema,
   complexitySchema,
+  contextAssessmentSchema,
   contextNeedSchema,
   parseClassification,
+  parseContextAssessment,
   precisionSchema,
   responsePolicyKeySchema,
   riskSchema,
   taskTypeSchema,
   toolNameSchema,
   toolPlanSchema,
+  verdictSchema,
 } from './schema';
-export { classifyWithFallback, conservativeDefaultClassification } from './degradation';
+export {
+  assessWithFallback,
+  classifyWithFallback,
+  conservativeDefaultAssessment,
+  conservativeDefaultClassification,
+} from './degradation';
 export type { ClassifierOptions } from './ollama';
-export type { ClassificationOutcome } from './degradation';
+export type {
+  ClassificationOutcome,
+  ContextAssessmentOutcome,
+} from './degradation';
 export type {
   Classification,
   Complexity,
+  ContextAssessment,
   ContextNeed,
   Precision,
   ResponsePolicyKey,
@@ -40,4 +54,5 @@ export type {
   TaskType,
   ToolName,
   ToolPlan,
+  Verdict,
 } from './schema';

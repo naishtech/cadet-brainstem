@@ -5,6 +5,7 @@ export type {
   GroupedSavings,
   MostExpensiveOperation,
   OptimisationEvent,
+  RequestEvent,
   SessionSummary,
   Totals,
 } from './store';

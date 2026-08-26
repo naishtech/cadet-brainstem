@@ -5,6 +5,8 @@ import {
   RESPONSE_POLICY_DIRECTIVES,
   TOOL_NAMES,
   parseClassification,
+  parseContextAssessment,
+  type ContextAssessment,
   type ResponsePolicyKey,
 } from './schema';
 
@@ -75,6 +77,40 @@ export function buildPrompt(taskText: string): string {
   ].join('\n');
 }
 
+const ASSESSMENT_SHAPE = `{
+  "verdict": "continue | stop",
+  "tool_plan": { "use": ["<tool>"], "skip": ["<tool>"] },
+  "reason": "<one short sentence>"
+}`;
+
+/** Build the context-assessment prompt: is the gathered signal sufficient? */
+export function buildAssessPrompt(taskText: string, inventoryText: string): string {
+  const tools = TOOL_NAMES.join(', ');
+  return [
+    'You are the context controller for an AI coding agent.',
+    'Decide what context the cloud model needs next.',
+    'Rules:',
+    '- decide only; do not solve, answer, or explain the task',
+    '- return JSON only, with no commentary and no markdown fences',
+    '- "stop" only when the gathered context is likely sufficient; otherwise "continue" with the single highest-value tool',
+    '- be aggressive: put any tool that clearly will not help into skip',
+    '',
+    `Available context tools: ${tools}`,
+    '',
+    `Respond with exactly this JSON shape:\n${ASSESSMENT_SHAPE}`,
+    '',
+    'Task:',
+    '"""',
+    taskText,
+    '"""',
+    '',
+    'Context gathered so far:',
+    '"""',
+    inventoryText,
+    '"""',
+  ].join('\n');
+}
+
 /** Lightweight ping — true when the Ollama server responds to /api/tags. */
 export async function isOllamaAvailable(
   host = process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST,
@@ -137,6 +173,21 @@ export class OllamaClassifier {
   }
 
   async classify(taskText: string): Promise<Classification> {
+    return parseClassification(await this.chatJson(buildPrompt(taskText)));
+  }
+
+  /** Decide whether the context gathered so far is sufficient (assess_context). */
+  async assess(
+    taskText: string,
+    inventoryText: string,
+  ): Promise<ContextAssessment> {
+    return parseContextAssessment(
+      await this.chatJson(buildAssessPrompt(taskText, inventoryText)),
+    );
+  }
+
+  /** One chat round-trip returning the model's JSON text content. */
+  private async chatJson(prompt: string): Promise<string> {
     let response: Response;
     try {
       response = await fetch(`${this.host}/api/chat`, {
@@ -144,14 +195,14 @@ export class OllamaClassifier {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: this.model,
-          messages: [{ role: 'user', content: buildPrompt(taskText) }],
+          messages: [{ role: 'user', content: prompt }],
           stream: false,
           format: 'json',
-          // Disable qwen3 reasoning/thinking — we only need a classification,
-          // so thinking wastes tokens and latency.
+          // Disable qwen3 reasoning/thinking — we only need a short structured
+          // decision, so thinking wastes tokens and latency.
           think: false,
           // Keep the model warm between calls so a cold reload (which can take
-          // ~10s on CPU) doesn't blow the timeout on the next classify.
+          // ~10s on CPU) doesn't blow the timeout.
           keep_alive: this.keepAlive,
           options: { temperature: 0 },
         }),
@@ -182,7 +233,7 @@ export class OllamaClassifier {
       throw new ClassifierUnavailableError('Ollama returned no message content');
     }
 
-    return parseClassification(data.message.content);
+    return data.message.content;
   }
 }
 
@@ -214,6 +265,15 @@ export function classify(
   options: ClassifierOptions = {},
 ): Promise<Classification> {
   return new OllamaClassifier(options).classify(taskText);
+}
+
+/** Convenience function — assess whether gathered context is sufficient. */
+export function assess(
+  taskText: string,
+  inventoryText: string,
+  options: ClassifierOptions = {},
+): Promise<ContextAssessment> {
+  return new OllamaClassifier(options).assess(taskText, inventoryText);
 }
 
 // Re-export so callers can distinguish "unavailable" from "invalid output"

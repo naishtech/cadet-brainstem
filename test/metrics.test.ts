@@ -85,6 +85,20 @@ describe('MetricsStore (in-memory)', () => {
     expect(store.getCallsByTool()).toEqual([]);
   });
 
+  it('getEventsByRequestId returns only the requested request events', () => {
+    store.record(makeEvent({ request_id: 'r1', operation: 'a' }));
+    store.record(
+      makeEvent({ request_id: 'r1', operation: 'b', symbols_found: 2, files_found: 1 }),
+    );
+    store.record(makeEvent({ request_id: 'r2', operation: 'c' }));
+
+    const events = store.getEventsByRequestId('r1');
+    expect(events).toHaveLength(2);
+    expect(events[0]?.operation).toBe('a');
+    expect(events[1]?.symbolsFound).toBe(2);
+    expect(store.getEventsByRequestId('missing')).toEqual([]);
+  });
+
   it('records events and totals them', () => {
     store.record(makeEvent({ estimated_input_tokens: 1000, estimated_tokens_saved: 800 }));
     store.record(makeEvent({ estimated_input_tokens: 2000, estimated_tokens_saved: 1200 }));

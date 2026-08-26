@@ -1,5 +1,14 @@
-import { classify, ClassifierOptions, ClassifierUnavailableError } from './ollama';
-import { Classification, ClassificationValidationError } from './schema';
+import {
+  assess,
+  classify,
+  ClassifierOptions,
+  ClassifierUnavailableError,
+} from './ollama';
+import {
+  Classification,
+  ClassificationValidationError,
+  ContextAssessment,
+} from './schema';
 
 /**
  * Conservative default used when the classifier cannot run (Ollama
@@ -51,6 +60,56 @@ export async function classifyWithFallback(
     console.warn(`[cadet-token-saver] classifier degraded to conservative default: ${reason}`);
     return {
       classification: structuredClone(conservativeDefaultClassification),
+      degraded: true,
+      reason,
+    };
+  }
+}
+
+/** Conservative assessment used when the controller cannot run: stop the loop. */
+export const conservativeDefaultAssessment: ContextAssessment = {
+  verdict: 'stop',
+  tool_plan: { use: [], skip: [] },
+  reason: 'controller unavailable — no loop',
+};
+
+export interface ContextAssessmentOutcome {
+  assessment: ContextAssessment;
+  /** True when the controller degraded to the conservative default. */
+  degraded: boolean;
+  /** Why degradation happened (present when degraded). */
+  reason?: string;
+}
+
+/**
+ * Assess context sufficiency with graceful degradation. Never crashes on
+ * Ollama being unavailable or on invalid output — it falls back to a
+ * conservative "stop" (no loop) and surfaces the fallback explicitly.
+ */
+export async function assessWithFallback(
+  taskText: string,
+  inventoryText: string,
+  options: ClassifierOptions = {},
+  assessFn: (
+    t: string,
+    i: string,
+    opts?: ClassifierOptions,
+  ) => Promise<ContextAssessment> = assess,
+): Promise<ContextAssessmentOutcome> {
+  try {
+    const assessment = await assessFn(taskText, inventoryText, options);
+    return { assessment, degraded: false };
+  } catch (err) {
+    const known =
+      err instanceof ClassifierUnavailableError ||
+      err instanceof ClassificationValidationError;
+    if (!known) {
+      throw err;
+    }
+    const reason = (err as Error).message;
+    console.warn(`[cadet-token-saver] assess degraded to conservative default: ${reason}`);
+    return {
+      assessment: structuredClone(conservativeDefaultAssessment),
       degraded: true,
       reason,
     };
