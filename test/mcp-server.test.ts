@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  classifyTool,
   compressCommandOutputTool,
   findRelevantSymbolsTool,
   handleToolCall,
@@ -156,6 +157,41 @@ describe('optimize_context', () => {
   });
 });
 
+describe('classify', () => {
+  it('classifies, returns the strategy, and records an ollama call', async () => {
+    const { deps } = makeDeps();
+    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    expect(result.classification).toEqual(makeClassification().classification);
+    expect(result.strategy).toEqual(makeStrategy());
+    expect(result.degraded).toBe(false);
+    expect(callsByTool(metricsPath).ollama).toBe(1);
+  });
+
+  it('does not record an ollama call when classification degrades', async () => {
+    const { deps } = makeDeps();
+    const degradedDeps = {
+      ...deps,
+      classify: vi.fn(async () => ({
+        classification: makeClassification().classification,
+        degraded: true,
+        reason: 'ollama unreachable',
+      })),
+    };
+    const result = await classifyTool(
+      { task: 'debug the loader' },
+      degradedDeps,
+    );
+    expect(result.degraded).toBe(true);
+    expect(result.reason).toBe('ollama unreachable');
+    expect(callsByTool(metricsPath).ollama).toBeUndefined();
+  });
+
+  it('rejects an empty task', async () => {
+    const { deps } = makeDeps();
+    await expect(classifyTool({ task: '' }, deps)).rejects.toThrow('task');
+  });
+});
+
 describe('find_relevant_symbols', () => {
   it('returns symbols/files and records a serena event', async () => {
     const { deps, serenaSearch } = makeDeps();
@@ -256,6 +292,15 @@ describe('handleToolCall', () => {
     );
     expect(res.isError).toBe(true);
     expect(res.content[0]?.text).toContain('non-empty string "task"');
+  });
+
+  it('dispatches classify and returns JSON text with the strategy', async () => {
+    const { deps } = makeDeps();
+    const res = await handleToolCall('classify', { task: 'x' }, deps);
+    expect(res.isError).toBeUndefined();
+    expect(res.content[0]?.text).toContain('"classification"');
+    expect(res.content[0]?.text).toContain('"strategy"');
+    expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
   it('returns isError for an unknown tool', async () => {

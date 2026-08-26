@@ -102,6 +102,7 @@ describe('classify', () => {
     expect(body.format).toBe('json');
     expect(body.stream).toBe(false);
     expect(body.think).toBe(false);
+    expect(body.keep_alive).toBe('30m');
   });
 
   it('reads the model from config when not provided', async () => {
@@ -116,6 +117,34 @@ describe('classify', () => {
       vi.stubGlobal('fetch', fetchMock);
       await classify('hello', { host: 'http://localhost:11434' });
       expect(requestBodyOf(fetchMock).model).toBe('config-model');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads timeout_ms and keep_alive from config when not provided', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'to-class-'));
+    const cfgFile = join(dir, 'config.yaml');
+    writeFileSync(
+      cfgFile,
+      'classifier:\n  model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
+      'utf8',
+    );
+    process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;
+    try {
+      const fetchMock = mockFetchJson({
+        message: { content: JSON.stringify(validClassification) },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await classify('hello', { host: 'http://localhost:11434' });
+      const body = requestBodyOf(fetchMock);
+      expect(body.model).toBe('config-model');
+      expect(body.keep_alive).toBe('15m');
+      const classifier = new OllamaClassifier({
+        host: 'http://localhost:11434',
+      });
+      expect(classifier.timeoutMs).toBe(45000);
+      expect(classifier.keepAlive).toBe('15m');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

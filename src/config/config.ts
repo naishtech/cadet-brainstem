@@ -18,6 +18,11 @@ export class ConfigError extends Error {
 const classifierSchema = z.object({
   provider: z.enum(['ollama']),
   model: z.string().min(1, 'model must be a non-empty string'),
+  timeout_ms: z
+    .number()
+    .int('timeout_ms must be an integer')
+    .positive('timeout_ms must be positive'),
+  keep_alive: z.string().min(1, 'keep_alive must be a non-empty string'),
 });
 
 const sessionSchema = z.object({
@@ -62,11 +67,18 @@ export type Config = z.infer<typeof configSchema>;
  * of this before validation.
  *
  * Note: the default classifier model is qwen3:1.7b (not §13's qwen3:4b) — a
- * smaller, faster model that classifies well under the 10s latency budget on
- * CPU. Thinking is disabled in the Ollama adapter (see classifier/ollama.ts).
+ * smaller, faster model that classifies well within the 30s latency budget on
+ * CPU. Thinking is disabled in the Ollama adapter (see classifier/ollama.ts),
+ * and keep_alive keeps the model warm between calls so a cold model reload
+ * doesn't blow the timeout (see classifier/ollama.ts).
  */
 export const defaultConfig: Config = {
-  classifier: { provider: 'ollama', model: 'qwen3:1.7b' },
+  classifier: {
+    provider: 'ollama',
+    model: 'qwen3:1.7b',
+    timeout_ms: 30_000,
+    keep_alive: '30m',
+  },
   session: { max_turns: 30 },
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },

@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.4] — 2026-08-26
+
+### Added
+
+- New **`classify`** MCP tool: run the local LLM on the user request and get
+  the recommended optimisation strategy (LeanCTX mode, compression, search
+  approach). The agent instructions (AGENTS.md / `init` output) now tell the
+  agent to **always classify the request first** so the local LLM actually
+  runs and the right strategy is picked before using the other tools.
+- Doc links in the CLI output (init, stats, adapter hints) now point to the
+  full GitHub URLs instead of relative paths.
+
+### Fixed
+
+- The local classifier (Ollama) kept timing out (and silently degrading to the
+  conservative default) because `qwen3:1.7b` can take ~10s to load from cold
+  on CPU, over the old 10s budget — so `stats` showed `ollama 0 call(s)`.
+  - The classifier now sends `keep_alive` (`30m` by default) so the model
+    stays loaded between calls, keeping classify latency ~3-4s.
+  - The timeout is raised to 30s by default and is now configurable via
+    `classifier.timeout_ms` (and `classifier.keep_alive`) in the config file.
+
 ## [0.1.3] — 2026-08-26
 
 ### Added
