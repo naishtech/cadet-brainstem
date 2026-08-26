@@ -1,6 +1,7 @@
 export {
   MCP_SESSION_ID,
   MEMORY_POLICY,
+  activateProjectTool,
   assessContextTool,
   chatMemoryStoreTool,
   classifyTool,
@@ -14,6 +15,7 @@ export {
   serenaListToolsTool,
 } from './server';
 export type {
+  ActivateProjectArgs,
   AssessContextArgs,
   ChatMemoryArgs,
   ClassifyArgs,

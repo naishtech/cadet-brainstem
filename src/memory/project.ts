@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { getDefaultMemoryPath } from './store';
 
 /** Explicit scope for memories shared across all projects. */
 export const GLOBAL_PROJECT = '__global__';
@@ -49,4 +50,64 @@ export function resolveProjectId(
   }
 
   return `${basename(cwd)}-${shortHash(cwd)}`;
+}
+
+/**
+ * Resolve the project root for a working directory: the nearest ancestor
+ * containing `package.json` or `.git`; falls back to the cwd itself.
+ */
+export function resolveProjectRoot(cwd: string): string {
+  let dir = resolve(cwd);
+  for (;;) {
+    if (existsSync(join(dir, 'package.json')) || existsSync(join(dir, '.git'))) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return resolve(cwd);
+    }
+    dir = parent;
+  }
+}
+
+/** Per-project memory db path (mirrors Serena's `.serena/` convention). */
+export function getProjectMemoryPath(projectRoot: string): string {
+  return join(projectRoot, '.cadet', 'token-saver', 'memory.db');
+}
+
+/** Resolve a project name or path to a project root (uses the config registry). */
+export function resolveProjectRootFor(
+  nameOrPath: string,
+  cwd: string,
+  projects: Record<string, string> | undefined = {},
+): string {
+  const asPath = resolve(nameOrPath);
+  if (existsSync(asPath)) {
+    return asPath;
+  }
+  const registered = projects?.[nameOrPath];
+  if (registered !== undefined) {
+    return resolve(registered);
+  }
+  return resolveProjectRoot(cwd);
+}
+
+/**
+ * Resolve the memory db path for a scope: explicit `project`, the active
+ * project, or the cwd-derived project. `__global__` uses the global db.
+ */
+export function resolveMemoryDbPath(
+  cwd: string,
+  project: string | undefined,
+  activeProject: string | undefined,
+  projects: Record<string, string> | undefined,
+): string {
+  const scope = project ?? activeProject;
+  if (scope === GLOBAL_PROJECT) {
+    return getDefaultMemoryPath();
+  }
+  if (scope !== undefined) {
+    return getProjectMemoryPath(resolveProjectRootFor(scope, cwd, projects));
+  }
+  return getProjectMemoryPath(resolveProjectRoot(cwd));
 }

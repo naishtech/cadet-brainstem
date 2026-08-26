@@ -1,5 +1,11 @@
 import { existsSync, statSync } from 'node:fs';
-import { getDefaultMemoryPath, MemoryStore, resolveProjectId } from '../../memory';
+import {
+  GLOBAL_PROJECT,
+  MemoryStore,
+  resolveMemoryDbPath,
+  resolveProjectId,
+} from '../../memory';
+import { loadConfig } from '../../config';
 import type { CliCommand, CliCommandContext } from '../types';
 import { askYesNo } from './init';
 
@@ -12,8 +18,8 @@ export interface MemoryDeps {
   ask?: (question: string) => Promise<boolean>;
   /** Override the project scope (tests); defaults to cwd-derived. */
   project?: string;
-  /** Operate on every project, not just the current one. */
-  all?: boolean;
+  /** Operate on the global store instead of a project. */
+  global?: boolean;
   /** Working directory used to derive the project (tests). */
   cwd?: string;
 }
@@ -25,11 +31,22 @@ function formatBytes(n: number): string {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-/** Resolve the project scope for an operation. */
-function resolveScope(deps: MemoryDeps): { project: string; all: boolean } {
-  const all = deps.all === true;
-  const project = deps.project ?? resolveProjectId(deps.cwd ?? process.cwd());
-  return { project, all };
+/** Resolve the memory db path and a human label for the scope. */
+function resolveTarget(deps: MemoryDeps): { memoryPath: string; projectLabel: string } {
+  const cwd = deps.cwd ?? process.cwd();
+  const global = deps.global === true;
+  const memoryPath =
+    deps.memoryPath ??
+    resolveMemoryDbPath(
+      cwd,
+      global ? GLOBAL_PROJECT : deps.project,
+      loadConfig().memory.active_project,
+      loadConfig().memory.projects,
+    );
+  const projectLabel = global
+    ? 'global'
+    : (deps.project ?? resolveProjectId(cwd));
+  return { memoryPath, projectLabel };
 }
 
 /**
@@ -38,14 +55,13 @@ function resolveScope(deps: MemoryDeps): { project: string; all: boolean } {
  */
 export async function runMemoryStats(deps: MemoryDeps = {}): Promise<number> {
   const log = deps.log ?? ((line: string) => console.log(line));
-  const memoryPath = deps.memoryPath ?? getDefaultMemoryPath();
-  const { project } = resolveScope(deps);
+  const { memoryPath, projectLabel } = resolveTarget(deps);
 
   log('');
   log('Cadet Token Saver Memory');
   log('------------------------');
   log(`Memory database: ${memoryPath}`);
-  log(`Project: ${project}`);
+  log(`Project: ${projectLabel}`);
 
   if (!existsSync(memoryPath)) {
     log('');
@@ -63,8 +79,7 @@ export async function runMemoryStats(deps: MemoryDeps = {}): Promise<number> {
   }
 
   try {
-    const count = store.count(project);
-    log(`Memories: ${count.toLocaleString('en-US')}`);
+    log(`Memories: ${store.count().toLocaleString('en-US')}`);
     log(`Size:     ${formatBytes(statSync(memoryPath).size)}`);
     return 0;
   } finally {
@@ -73,15 +88,14 @@ export async function runMemoryStats(deps: MemoryDeps = {}): Promise<number> {
 }
 
 /**
- * `memory clear` — empty the current project's memories after an explicit
- * confirmation (or every project with `--all`). Non-interactive (or declined)
- * runs clear nothing.
+ * `memory clear` — empty the current project's memories (or the global store
+ * with `--global`) after an explicit confirmation. Non-interactive (or
+ * declined) runs clear nothing.
  */
 export async function runMemoryClear(deps: MemoryDeps = {}): Promise<number> {
   const log = deps.log ?? ((line: string) => console.log(line));
   const ask = deps.ask ?? askYesNo;
-  const memoryPath = deps.memoryPath ?? getDefaultMemoryPath();
-  const { project, all } = resolveScope(deps);
+  const { memoryPath, projectLabel } = resolveTarget(deps);
 
   let store: MemoryStore;
   try {
@@ -95,20 +109,19 @@ export async function runMemoryClear(deps: MemoryDeps = {}): Promise<number> {
   }
 
   try {
-    const count = all ? store.count() : store.count(project);
+    const count = store.count();
     log('');
     log(`Memory database: ${memoryPath}`);
-    log(`Project: ${all ? 'all' : project}`);
+    log(`Project: ${projectLabel}`);
     log(`Will clear ${count} stored memory entries.`);
-    const question = all
-      ? 'Clear ALL memories (every project)? This cannot be undone.'
-      : `Clear ALL memories for project "${project}"? This cannot be undone.`;
-    const confirmed = await ask(question);
+    const confirmed = await ask(
+      `Clear ALL memories for project "${projectLabel}"? This cannot be undone.`,
+    );
     if (!confirmed) {
       log('Aborted — no data was cleared.');
       return 0;
     }
-    const removed = all ? store.clear() : store.clear(project);
+    const removed = store.clear();
     log(`Cleared ${removed} memory entries.`);
     return 0;
   } finally {
@@ -118,13 +131,13 @@ export async function runMemoryClear(deps: MemoryDeps = {}): Promise<number> {
 
 interface ParsedMemoryArgs {
   clear: boolean;
-  all: boolean;
+  global: boolean;
   project?: string;
 }
 
 /** Parse `memory` arguments; returns null for unknown arguments. */
 function parseMemoryArgs(args: readonly string[]): ParsedMemoryArgs | null {
-  const result: ParsedMemoryArgs = { clear: false, all: false };
+  const result: ParsedMemoryArgs = { clear: false, global: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === undefined) {
@@ -132,8 +145,8 @@ function parseMemoryArgs(args: readonly string[]): ParsedMemoryArgs | null {
     }
     if (arg === 'clear') {
       result.clear = true;
-    } else if (arg === '--all' || arg === '-a') {
-      result.all = true;
+    } else if (arg === '--global' || arg === '-g') {
+      result.global = true;
     } else if (arg === '--project') {
       const value = args[i + 1];
       if (value === undefined || value.length === 0) {
@@ -157,27 +170,31 @@ function parseMemoryArgs(args: readonly string[]): ParsedMemoryArgs | null {
 export const memoryCommand: CliCommand = {
   name: 'memory',
   description: 'Show/manage agent memories (clear to wipe them)',
-  usage: 'cadet-token-saver memory [clear] [--project <name>] [--all]',
+  usage: 'cadet-token-saver memory [clear] [--project <name>] [--global]',
   run(
     args: readonly string[],
     context: CliCommandContext,
   ): Promise<number> | number {
     const parsed = parseMemoryArgs(args);
     if (parsed === null) {
-      console.error('Usage: cadet-token-saver memory [clear] [--project <name>] [--all]');
+      console.error(
+        'Usage: cadet-token-saver memory [clear] [--project <name>] [--global]',
+      );
       return 1;
     }
     if (parsed.clear) {
       return runMemoryClear({
         ...(parsed.project !== undefined ? { project: parsed.project } : {}),
-        all: parsed.all,
+        global: parsed.global,
         cwd: context.cwd,
       });
     }
     return runMemoryStats({
       ...(parsed.project !== undefined ? { project: parsed.project } : {}),
+      global: parsed.global,
       cwd: context.cwd,
     });
   },
 };
+
 

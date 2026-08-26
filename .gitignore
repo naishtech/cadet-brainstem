@@ -6,6 +6,7 @@ dist/
 
 # Local state (Cadet Token Saver)
 .cadet-token-saver/
+.cadet/
 
 # Serena local project state (created on activation)
 .serena/

@@ -50,12 +50,18 @@ const toolsSchema = z.object({
   leanctx: z.boolean(),
 });
 
+const memorySchema = z.object({
+  active_project: z.string().min(1).optional(),
+  projects: z.record(z.string(), z.string()).optional(),
+});
+
 export const configSchema = z.object({
   classifier: classifierSchema,
   session: sessionSchema,
   optimisation: optimisationSchema,
   telemetry: telemetrySchema,
   tools: toolsSchema,
+  memory: memorySchema,
   policies: policiesSchema,
 });
 
@@ -83,6 +89,7 @@ export const defaultConfig: Config = {
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },
   tools: { rtk: true, serena: true, leanctx: true },
+  memory: {},
   policies: defaultPolicies,
 };
 

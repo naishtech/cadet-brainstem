@@ -1,8 +1,13 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore, getDefaultMemoryPath, resolveProjectId } from '../src/memory/index';
+import {
+  MemoryStore,
+  getDefaultMemoryPath,
+  resolveMemoryDbPath,
+  resolveProjectId,
+} from '../src/memory/index';
 import { runMemoryClear, runMemoryStats } from '../src/cli/commands/memory';
 
 const tempDirs: string[] = [];
@@ -61,6 +66,29 @@ describe('resolveProjectId', () => {
     };
     expect(resolveProjectId(join('x', 'no-pkg'), read)).toMatch(
       /^no-pkg-[0-9a-f]{8}$/,
+    );
+  });
+});
+
+describe('resolveMemoryDbPath', () => {
+  it('returns the global db for __global__', () => {
+    expect(
+      resolveMemoryDbPath('/x', '__global__', undefined, undefined),
+    ).toBe(getDefaultMemoryPath());
+  });
+
+  it('returns the per-project db for a project path', () => {
+    const dir = makeTempDir();
+    expect(resolveMemoryDbPath(process.cwd(), dir, undefined, undefined)).toBe(
+      join(dir, '.cadet', 'token-saver', 'memory.db'),
+    );
+  });
+
+  it('derives the project db from cwd when no scope is given', () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, 'package.json'), '{"name":"x"}', 'utf8');
+    expect(resolveMemoryDbPath(dir, undefined, undefined, undefined)).toBe(
+      join(dir, '.cadet', 'token-saver', 'memory.db'),
     );
   });
 });
@@ -242,7 +270,7 @@ describe('runMemoryClear', () => {
     reopened.close();
   });
 
-  it('clears only the requested project', async () => {
+  it('--global clears the store after confirmation', async () => {
     const dbPath = join(makeTempDir(), 'memory.db');
     const store = new MemoryStore(dbPath);
     store.store({ content: 'a', project: 'p1' });
@@ -252,35 +280,13 @@ describe('runMemoryClear', () => {
     const lines: string[] = [];
     const exit = await runMemoryClear({
       memoryPath: dbPath,
-      project: 'p1',
+      global: true,
       ask: async () => true,
       log: (line) => lines.push(line),
     });
 
     expect(exit).toBe(0);
-    expect(lines.join('\n')).toContain('Cleared 1 memory entries.');
-    const reopened = new MemoryStore(dbPath);
-    expect(reopened.count()).toBe(1);
-    expect(reopened.count('p2')).toBe(1);
-    reopened.close();
-  });
-
-  it('--all clears every project after confirmation', async () => {
-    const dbPath = join(makeTempDir(), 'memory.db');
-    const store = new MemoryStore(dbPath);
-    store.store({ content: 'a', project: 'p1' });
-    store.store({ content: 'b', project: 'p2' });
-    store.close();
-
-    const lines: string[] = [];
-    const exit = await runMemoryClear({
-      memoryPath: dbPath,
-      all: true,
-      ask: async () => true,
-      log: (line) => lines.push(line),
-    });
-
-    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Project: global');
     expect(lines.join('\n')).toContain('Cleared 2 memory entries.');
     const reopened = new MemoryStore(dbPath);
     expect(reopened.count()).toBe(0);

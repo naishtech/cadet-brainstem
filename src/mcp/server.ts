@@ -29,7 +29,14 @@ import {
   type OptimisationEvent,
   type RequestEvent,
 } from '../metrics';
-import { MemoryStore, resolveProjectId } from '../memory';
+import { loadConfig, saveConfig } from '../config';
+import {
+  MemoryStore,
+  getProjectMemoryPath,
+  resolveMemoryDbPath,
+  resolveProjectId,
+  resolveProjectRootFor,
+} from '../memory';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -451,7 +458,16 @@ export async function chatMemoryStoreTool(
   validateMemoryAction(action, args);
   const d = resolveDeps(deps);
   const ownsStore = deps.memory === undefined;
-  const store = deps.memory ?? new MemoryStore();
+  const store =
+    deps.memory ??
+    new MemoryStore(
+      resolveMemoryDbPath(
+        process.cwd(),
+        args.project,
+        loadConfig().memory.active_project,
+        loadConfig().memory.projects,
+      ),
+    );
   const requestId = resolveRequestId(args.request_id);
   const start = performance.now();
   try {
@@ -488,6 +504,36 @@ export async function chatMemoryStoreTool(
       store.close();
     }
   }
+}
+
+export interface ActivateProjectArgs {
+  project: string;
+}
+
+/**
+ * `activate_project` — set the active project for memory (Serena-style).
+ * Accepts a project path or a registered project name; resolves it to a root
+ * and persists it so subsequent memory ops default to that project.
+ */
+export async function activateProjectTool(
+  args: ActivateProjectArgs,
+): Promise<Record<string, unknown>> {
+  if (typeof args.project !== 'string' || args.project.length === 0) {
+    throw new Error('activate_project requires a non-empty string "project"');
+  }
+  const cwd = process.cwd();
+  const root = resolveProjectRootFor(
+    args.project,
+    cwd,
+    loadConfig().memory.projects,
+  );
+  const config = loadConfig();
+  saveConfig({ ...config, memory: { ...config.memory, active_project: root } });
+  return {
+    project: resolveProjectId(root),
+    root,
+    memory_db: getProjectMemoryPath(root),
+  };
 }
 
 export interface FindSymbolsArgs {
@@ -1037,6 +1083,21 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'activate_project',
+    description:
+      'Set the active project for memory storage (like Serena). Accepts a project path or a registered project name; subsequent chat_memory_store calls default to that project. "__global__" is reserved for cross-project facts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project path or registered name to activate.',
+        },
+      },
+      required: ['project'],
+    },
+  },
+  {
     name: 'assess_context',
     description:
       'Assess whether the context gathered so far for a request_id is sufficient, using the local LLM. Returns verdict (continue|stop), a next tool_plan, and a reason. Call between context-gathering tools to close the loop.',
@@ -1109,6 +1170,11 @@ export async function handleToolCall(
         result = await assessContextTool(
           args as unknown as AssessContextArgs,
           deps,
+        );
+        break;
+      case 'activate_project':
+        result = await activateProjectTool(
+          args as unknown as ActivateProjectArgs,
         );
         break;
       default:
