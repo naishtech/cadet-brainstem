@@ -29,7 +29,7 @@ import {
   type OptimisationEvent,
   type RequestEvent,
 } from '../metrics';
-import { MemoryStore } from '../memory';
+import { MemoryStore, resolveProjectId } from '../memory';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -116,6 +116,8 @@ export interface McpDeps {
   metricsPath?: string;
   /** Injectable memory store; defaults to a live MemoryStore when omitted. */
   memory?: MemoryStore;
+  /** Default project scope for memory operations (defaults to cwd-derived). */
+  defaultProject?: string;
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
 }
@@ -131,6 +133,7 @@ interface ResolvedDeps {
   rtk: Pick<RtkAdapter, 'optimize'>;
   serena: Partial<SerenaTools>;
   metricsPath: string;
+  defaultProject: string;
   record: (event: OptimisationEvent) => void;
   log: (line: string) => void;
 }
@@ -162,6 +165,7 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
     rtk: deps.rtk ?? new RtkAdapter(),
     serena: deps.serena ?? new SerenaAdapter(),
     metricsPath,
+    defaultProject: deps.defaultProject ?? resolveProjectId(process.cwd()),
     record: deps.record ?? defaultRecorder(metricsPath),
     log: deps.log ?? ((line: string) => console.error(line)),
   };
@@ -451,7 +455,11 @@ export async function chatMemoryStoreTool(
   const requestId = resolveRequestId(args.request_id);
   const start = performance.now();
   try {
-    const result = executeMemoryAction(store, action, args);
+    const effectiveArgs: ChatMemoryArgs = {
+      ...args,
+      project: args.project ?? d.defaultProject,
+    };
+    const result = executeMemoryAction(store, action, effectiveArgs);
     recordMemoryCall(
       d.record,
       action,

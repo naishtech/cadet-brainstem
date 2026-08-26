@@ -32,6 +32,8 @@ tool for every user request.
   re-deriving facts that are expensive to rediscover.
 - Store facts that are expensive to rediscover: decisions, constraints,
   verified commands, and gotchas. Never store secrets or credentials.
+- Memories are scoped to the current project by default. Pass `project` to
+  override, or `project: "__global__"` for facts shared across projects.
 - At the end of every response, review the conversation you just had and store
   any memories that match the policy via `chat_memory_store`
   (`action: "store"`), scoping with `project` and `tags` where useful.

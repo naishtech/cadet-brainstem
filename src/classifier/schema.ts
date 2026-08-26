@@ -56,13 +56,18 @@ export type Verdict = z.infer<typeof verdictSchema>;
 /**
  * Output of the context-assessment step (`assess_context`): decide whether the
  * gathered context is sufficient and, if not, what to gather next.
+ * `tool_plan` is lenient here (sanitised by `parseContextAssessment`).
  */
 export const contextAssessmentSchema = z.object({
   verdict: verdictSchema,
-  tool_plan: toolPlanSchema,
+  tool_plan: z.unknown().optional(),
   reason: z.string(),
 });
-export type ContextAssessment = z.infer<typeof contextAssessmentSchema>;
+export interface ContextAssessment {
+  verdict: Verdict;
+  tool_plan: ToolPlan;
+  reason: string;
+}
 
 /** Response directives the agent can be told to follow (split response policy). */
 export const RESPONSE_POLICY_KEYS = [
@@ -104,9 +109,9 @@ export const DEFAULT_RESPONSE_POLICY_KEYS: ResponsePolicyKey[] = [
 ];
 
 /**
- * Raw model output schema. `tool_plan` and `response_policy` are optional so
- * older/partial model output still validates; `parseClassification` fills the
- * defaults. The public `Classification` type always carries both.
+ * Raw model output schema. The five core fields are strict; `tool_plan` and
+ * `response_policy` are lenient (sanitised by `parseClassification`) so an
+ * invalid tool name or directive key never throws away a good classification.
  */
 export const classificationSchema = z.object({
   task: taskTypeSchema,
@@ -114,8 +119,8 @@ export const classificationSchema = z.object({
   risk: riskSchema,
   context_need: contextNeedSchema,
   precision: precisionSchema,
-  tool_plan: toolPlanSchema.optional(),
-  response_policy: z.array(responsePolicyKeySchema).optional(),
+  tool_plan: z.unknown().optional(),
+  response_policy: z.unknown().optional(),
 });
 
 export interface Classification {
@@ -133,6 +138,53 @@ export type Complexity = z.infer<typeof complexitySchema>;
 export type Risk = z.infer<typeof riskSchema>;
 export type ContextNeed = z.infer<typeof contextNeedSchema>;
 export type Precision = z.infer<typeof precisionSchema>;
+
+function isToolName(value: unknown): value is ToolName {
+  return (
+    typeof value === 'string' &&
+    (TOOL_NAMES as readonly string[]).includes(value)
+  );
+}
+
+function isResponsePolicyKey(value: unknown): value is ResponsePolicyKey {
+  return (
+    typeof value === 'string' &&
+    (RESPONSE_POLICY_KEYS as readonly string[]).includes(value)
+  );
+}
+
+/** Keep only entries that pass the predicate; drop invalid / non-string ones. */
+function sanitizeStringList<T extends string>(
+  raw: unknown,
+  predicate: (value: unknown) => value is T,
+): T[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const result: T[] = [];
+  for (const item of raw) {
+    if (predicate(item)) {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+function sanitizeToolPlan(raw: unknown): ToolPlan {
+  if (typeof raw !== 'object' || raw === null) {
+    return { use: [], skip: [] };
+  }
+  const plan = raw as { use?: unknown; skip?: unknown };
+  return {
+    use: sanitizeStringList(plan.use, isToolName),
+    skip: sanitizeStringList(plan.skip, isToolName),
+  };
+}
+
+function sanitizeResponsePolicy(raw: unknown): ResponsePolicyKey[] {
+  const keys = sanitizeStringList(raw, isResponsePolicyKey);
+  return keys.length > 0 ? keys : DEFAULT_RESPONSE_POLICY_KEYS;
+}
 
 /** Raised when classifier output does not match the classification schema. */
 export class ClassificationValidationError extends Error {
@@ -170,8 +222,8 @@ export function parseClassification(raw: unknown): Classification {
     risk: result.data.risk,
     context_need: result.data.context_need,
     precision: result.data.precision,
-    tool_plan: result.data.tool_plan ?? DEFAULT_TOOL_PLAN,
-    response_policy: result.data.response_policy ?? DEFAULT_RESPONSE_POLICY_KEYS,
+    tool_plan: sanitizeToolPlan(result.data.tool_plan),
+    response_policy: sanitizeResponsePolicy(result.data.response_policy),
   };
 }
 
@@ -189,7 +241,11 @@ export function parseContextAssessment(raw: unknown): ContextAssessment {
   if (!result.success) {
     throw new ClassificationValidationError(formatIssues(result.error));
   }
-  return result.data;
+  return {
+    verdict: result.data.verdict,
+    tool_plan: sanitizeToolPlan(result.data.tool_plan),
+    reason: result.data.reason,
+  };
 }
 
 function formatIssues(error: z.ZodError): string {
