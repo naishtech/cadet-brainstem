@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — config/steering only; makes the MCP server actually usable from VS Code.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/27-vscode-integration` (pending review/commit)
 **Phase:** Phase 13
 **Source:** `docs/plans/initial_design.md` — §16 Integration & interception (VS Code)
 
@@ -19,6 +19,6 @@ Make the MCP server one click away from VS Code: register it and steer the agent
 
 ## Acceptance Criteria
 
-- [ ] `.vscode/mcp.json` registers the server and it appears in Copilot Chat.
-- [ ] Chat customization steers the agent to use the tools.
-- [ ] Documented steps to use `wrap` from a VS Code task.
+- [x] `.vscode/mcp.json` registers the server and it appears in Copilot Chat.
+- [x] Chat customization steers the agent to use the tools.
+- [x] Documented steps to use `wrap` from a VS Code task.

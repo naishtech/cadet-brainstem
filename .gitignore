@@ -27,3 +27,5 @@ npm-debug.log*
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+!.vscode/mcp.json
+!.vscode/tasks.json
