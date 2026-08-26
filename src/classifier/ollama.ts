@@ -6,7 +6,10 @@ import {
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
-export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 10_000;
+export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000;
+
+/** How long the model is kept loaded between calls (Ollama keep_alive). */
+export const DEFAULT_KEEP_ALIVE = '30m';
 
 /** Raised when Ollama is unreachable or returns a non-OK/invalid response. */
 export class ClassifierUnavailableError extends Error {
@@ -97,6 +100,7 @@ export class OllamaClassifier {
   readonly model: string;
   readonly host: string;
   readonly timeoutMs: number;
+  readonly keepAlive: string;
 
   constructor(options: ClassifierOptions = {}) {
     this.model = resolveModel(options.model);
@@ -104,7 +108,8 @@ export class OllamaClassifier {
       options.host !== undefined && options.host.length > 0
         ? options.host
         : (process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST);
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_CLASSIFIER_TIMEOUT_MS;
+    this.timeoutMs = options.timeoutMs ?? resolveTimeoutMs();
+    this.keepAlive = resolveKeepAlive();
   }
 
   async isAvailable(): Promise<boolean> {
@@ -123,8 +128,11 @@ export class OllamaClassifier {
           stream: false,
           format: 'json',
           // Disable qwen3 reasoning/thinking — we only need a classification,
-          // so thinking wastes tokens and latency (keeps us under 10s on CPU).
+          // so thinking wastes tokens and latency.
           think: false,
+          // Keep the model warm between calls so a cold reload (which can take
+          // ~10s on CPU) doesn't blow the timeout on the next classify.
+          keep_alive: this.keepAlive,
           options: { temperature: 0 },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -164,6 +172,20 @@ function resolveModel(override?: string): string {
     return override;
   }
   return loadConfig().classifier.model;
+}
+
+/** Resolve the timeout — explicit override, else config, else the default. */
+function resolveTimeoutMs(override?: number): number {
+  if (override !== undefined && override > 0) {
+    return override;
+  }
+  const fromConfig = loadConfig().classifier.timeout_ms;
+  return fromConfig > 0 ? fromConfig : DEFAULT_CLASSIFIER_TIMEOUT_MS;
+}
+
+/** Resolve the keep_alive from configuration. */
+function resolveKeepAlive(): string {
+  return loadConfig().classifier.keep_alive;
 }
 
 /** Convenience function — constructs an {@link OllamaClassifier} and classifies. */

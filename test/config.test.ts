@@ -33,7 +33,12 @@ afterEach(() => {
 describe('default config', () => {
   it('matches the design doc §13 defaults', () => {
     expect(defaultConfig).toEqual({
-      classifier: { provider: 'ollama', model: 'qwen3:1.7b' },
+      classifier: {
+        provider: 'ollama',
+        model: 'qwen3:1.7b',
+        timeout_ms: 30000,
+        keep_alive: '30m',
+      },
       session: { max_turns: 30 },
       optimisation: { enabled: true, default_budget: 12000 },
       telemetry: { enabled: false },
@@ -59,7 +64,12 @@ describe('loadConfig', () => {
     const dir = makeTempDir();
     writeFileSync(configPath(dir), 'classifier:\n  model: llama3\n', 'utf8');
     const cfg = loadConfig(configPath(dir));
-    expect(cfg.classifier).toEqual({ provider: 'ollama', model: 'llama3' });
+    expect(cfg.classifier).toEqual({
+      provider: 'ollama',
+      model: 'llama3',
+      timeout_ms: 30000,
+      keep_alive: '30m',
+    });
     expect(cfg.session.max_turns).toBe(30);
     expect(cfg.telemetry.enabled).toBe(false);
     expect(cfg.tools.leanctx).toBe(true);
@@ -85,7 +95,12 @@ describe('saveConfig + round-trip', () => {
     const file = configPath(dir);
     const cfg = {
       ...defaultConfig,
-      classifier: { provider: 'ollama' as const, model: 'custom-model' },
+      classifier: {
+        provider: 'ollama' as const,
+        model: 'custom-model',
+        timeout_ms: 45000,
+        keep_alive: '15m',
+      },
       session: { max_turns: 5 },
     };
     saveConfig(cfg, file);
