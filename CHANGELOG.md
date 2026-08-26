@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.8] — 2026-08-26
+
+### Added
+
+- `cadet-token-saver memory` (no subcommand) now shows memory metrics —
+  database path, row count and file size (`runMemoryStats`); `memory clear`
+  is unchanged.
+- Steering wording tightened: the agent classifies **every user request**
+  (not "every turn") with a short, faithful restatement of the request, plus
+  a deterministic steering-contract test (`test/steering.test.ts`).
+
+### Fixed
+
+- Duplicate `[y/N]` in `stats clear` / `memory clear` prompts (`askYesNo`
+  already appends it).
+
 ## [0.1.7] — 2026-08-26
 
 ### Added

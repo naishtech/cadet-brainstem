@@ -218,9 +218,10 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('Docs: https://github.com/naishtech/cadet-token-saver/blob/main/docs/integration-vscode.md');
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
-  log('  "Always classify the user request first with the `classify` tool — it runs the');
-  log('   local LLM and returns the recommended strategy plus a `response_policy` and a');
-  log('   `memory_policy`; parse both and follow them in every reply. Then use the Cadet');
+  log('  "For every user request, before doing anything else, call the `classify` tool once');
+  log('   with a short, faithful restatement of the request — not the verbatim message. It');
+  log('   runs the local LLM and returns the recommended strategy plus a `response_policy`');
+  log('   and a `memory_policy`; parse and follow both in every reply. Then use the Cadet');
   log('   Token Saver tools to save context: call optimize_context before reading a large');
   log('   file; use find_relevant_symbols before broad searches; call compress_command_output');
   log('   for noisy command output (pass "shell": "bash" if you are in git-bash on Windows).');
