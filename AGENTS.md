@@ -11,6 +11,9 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   user's request. It runs the local LLM and returns the recommended `strategy`
   (LeanCTX mode, compression, search approach). Use that strategy to decide
   how to use the tools below.
+- Parse the returned `response_policy` and follow it in every reply: write for
+  another LLM (compact, information-dense, no decoration, filler or repeated
+  info), since your response may become future LLM context.
 - If `classify` is unavailable, continue with the tools below using defaults —
   never block on it.
 

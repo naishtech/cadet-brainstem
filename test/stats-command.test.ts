@@ -129,6 +129,26 @@ describe('runStats', () => {
     expect(out).toContain('All figures are ESTIMATES');
   });
 
+  it('shows degraded counts and average latency per tool', async () => {
+    const metricsPath = join(dir, 'metrics.db');
+    seedStore(metricsPath, [
+      makeEvent({ tool: 'ollama', operation: 'classify', degraded: false, latency_ms: 100 }),
+      makeEvent({ tool: 'ollama', operation: 'classify', degraded: true, latency_ms: 5000 }),
+      makeEvent({ tool: 'leanctx', degraded: false, latency_ms: 250 }),
+    ]);
+
+    const { exit, lines } = await run(metricsPath);
+    const out = lines.join('\n');
+
+    expect(exit).toBe(0);
+    expect(out).toContain('Local tool calls:');
+    expect(out).toContain('ollama');
+    expect(out).toContain('1 call(s) · 1 degraded · avg 100ms');
+    expect(out).toContain('leanctx');
+    expect(out).toContain('1 call(s) · avg 250ms');
+    expect(out).toContain('0 call(s)'); // rtk/serena unseeded
+  });
+
   it('exits 1 when the metrics database cannot be opened', async () => {
     // Make the parent path a file so MetricsStore's mkdirSync(dirname) throws
     // (ENOTDIR) — a reliable constructor failure.

@@ -57,7 +57,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     const sessions = store.getSessionSummary();
     const avgCompression = store.getAverageCompressionRatio();
     const expensive = store.getMostExpensiveOperations(5);
-    const calls = store.getCallsByTool();
+    const callStats = store.getCallStatsByTool();
 
     const reductionPct =
       totals.estimatedInputTokens > 0
@@ -94,9 +94,16 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
 
     log('');
     log('Local tool calls:');
-    const callMap = new Map(calls.map((c) => [c.tool, c.calls]));
+    const callStatMap = new Map(callStats.map((c) => [c.tool, c]));
     for (const tool of ['ollama', 'rtk', 'serena', 'leanctx']) {
-      log(`  ${tool.padEnd(12)} ${callMap.get(tool) ?? 0} call(s)`);
+      const stat = callStatMap.get(tool);
+      const calls = stat?.calls ?? 0;
+      const degraded = stat?.degraded ?? 0;
+      const avgMs = stat?.avgLatencyMs;
+      const degradedNote = degraded > 0 ? ` · ${degraded} degraded` : '';
+      const latencyNote =
+        avgMs !== null && avgMs !== undefined ? ` · avg ${formatTokens(avgMs)}ms` : '';
+      log(`  ${tool.padEnd(12)} ${calls} call(s)${degradedNote}${latencyNote}`);
     }
 
     log('');

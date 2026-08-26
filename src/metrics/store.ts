@@ -17,6 +17,16 @@ export interface OptimisationEvent {
   estimated_tokens_saved: number;
   compression_ratio: number | null;
   optimisation_strategy: string | null;
+  /** True when the tool degraded (fell back / failed) instead of running fully. */
+  degraded?: boolean;
+  /** Wall-clock time of the underlying tool/LLM call, in milliseconds. */
+  latency_ms?: number;
+  /** Serena: number of symbols the search resolved (hit-rate, not byte-savings). */
+  symbols_found?: number;
+  /** Serena: number of unique files found. */
+  files_found?: number;
+  /** Stable id linking a logical flow (e.g. classify -> optimize_context). */
+  request_id?: string;
 }
 
 export interface Totals {
@@ -51,6 +61,16 @@ export interface GroupedCalls {
   calls: number;
 }
 
+export interface CallStats {
+  tool: string;
+  /** Real (non-degraded) calls. */
+  calls: number;
+  /** Degraded / fallback attempts. */
+  degraded: number;
+  /** Average tool/LLM latency in ms (null when no latency recorded). */
+  avgLatencyMs: number | null;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS optimisation_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +85,12 @@ CREATE TABLE IF NOT EXISTS optimisation_events (
   estimated_output_tokens INTEGER NOT NULL,
   estimated_tokens_saved INTEGER NOT NULL,
   compression_ratio REAL,
-  optimisation_strategy TEXT
+  optimisation_strategy TEXT,
+  degraded INTEGER,
+  latency_ms INTEGER,
+  symbols_found INTEGER,
+  files_found INTEGER,
+  request_id TEXT
 );
 `;
 
@@ -99,32 +124,88 @@ export class MetricsStore {
     }
     this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Add columns introduced after the first schema version to DBs created before
+   * them, so existing metrics files upgrade in place (no manual clear needed).
+   */
+  private migrate(): void {
+    const columns = new Set(
+      (
+        this.db.prepare('PRAGMA table_info(optimisation_events)').all() as {
+          name: string;
+        }[]
+      ).map((column) => column.name),
+    );
+    const additions: Array<[string, string]> = [
+      ['degraded', 'ALTER TABLE optimisation_events ADD COLUMN degraded INTEGER'],
+      ['latency_ms', 'ALTER TABLE optimisation_events ADD COLUMN latency_ms INTEGER'],
+      ['symbols_found', 'ALTER TABLE optimisation_events ADD COLUMN symbols_found INTEGER'],
+      ['files_found', 'ALTER TABLE optimisation_events ADD COLUMN files_found INTEGER'],
+      ['request_id', 'ALTER TABLE optimisation_events ADD COLUMN request_id TEXT'],
+    ];
+    for (const [column, ddl] of additions) {
+      if (!columns.has(column)) {
+        this.db.exec(ddl);
+      }
+    }
   }
 
   /** Record an optimisation event. */
   record(event: OptimisationEvent): void {
+    const baseColumns = [
+      'timestamp',
+      'session_id',
+      'task_type',
+      'complexity',
+      'risk',
+      'tool',
+      'operation',
+      'estimated_input_tokens',
+      'estimated_output_tokens',
+      'estimated_tokens_saved',
+      'compression_ratio',
+      'optimisation_strategy',
+    ] as const;
+    const baseValues: Array<number | string | null> = [
+      event.timestamp,
+      event.session_id,
+      event.task_type,
+      event.complexity,
+      event.risk,
+      event.tool,
+      event.operation,
+      event.estimated_input_tokens,
+      event.estimated_output_tokens,
+      event.estimated_tokens_saved,
+      event.compression_ratio,
+      event.optimisation_strategy,
+    ];
+    const extra: Array<[string, number | string]> = [];
+    if (event.degraded !== undefined) {
+      extra.push(['degraded', event.degraded ? 1 : 0]);
+    }
+    if (event.latency_ms !== undefined) {
+      extra.push(['latency_ms', event.latency_ms]);
+    }
+    if (event.symbols_found !== undefined) {
+      extra.push(['symbols_found', event.symbols_found]);
+    }
+    if (event.files_found !== undefined) {
+      extra.push(['files_found', event.files_found]);
+    }
+    if (event.request_id !== undefined) {
+      extra.push(['request_id', event.request_id]);
+    }
+    const columns = [...baseColumns, ...extra.map((entry) => entry[0])];
+    const values = [...baseValues, ...extra.map((entry) => entry[1])];
+    const placeholders = columns.map(() => '?').join(', ');
     this.db
-      .prepare(
-        `INSERT INTO optimisation_events
-          (timestamp, session_id, task_type, complexity, risk, tool, operation,
-           estimated_input_tokens, estimated_output_tokens, estimated_tokens_saved,
-           compression_ratio, optimisation_strategy)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        event.timestamp,
-        event.session_id,
-        event.task_type,
-        event.complexity,
-        event.risk,
-        event.tool,
-        event.operation,
-        event.estimated_input_tokens,
-        event.estimated_output_tokens,
-        event.estimated_tokens_saved,
-        event.compression_ratio,
-        event.optimisation_strategy,
-      );
+      .prepare(`INSERT INTO optimisation_events (${columns.join(', ')})
+         VALUES (${placeholders})`)
+      .run(...values);
   }
 
   count(): number {
@@ -209,12 +290,16 @@ export class MetricsStore {
     }));
   }
 
-  /** Number of recorded events per tool (e.g. ollama, rtk, serena, leanctx). */
+  /**
+   * Real (non-degraded) calls per tool — degraded/fallback attempts are
+   * excluded so the counter reflects genuine local tool/LLM invocations.
+   */
   getCallsByTool(): GroupedCalls[] {
     const rows = this.db
       .prepare(
         `SELECT tool, COUNT(*) AS calls
          FROM optimisation_events
+         WHERE degraded IS NULL OR degraded = 0
          GROUP BY tool
          ORDER BY tool`,
       )
@@ -222,6 +307,36 @@ export class MetricsStore {
     return rows.map((row) => ({
       tool: String(row.tool),
       calls: Number(row.calls),
+    }));
+  }
+
+  /**
+   * Per-tool call breakdown: real calls, degraded/fallback attempts, and
+   * average latency — answers "is the tool working or silently failing?".
+   */
+  getCallStatsByTool(): CallStats[] {
+    const rows = this.db
+      .prepare(
+        `SELECT tool,
+                SUM(CASE WHEN degraded IS NULL OR degraded = 0 THEN 1 ELSE 0 END) AS calls,
+                SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded,
+                AVG(CASE WHEN degraded IS NULL OR degraded = 0 THEN latency_ms END) AS avgLatencyMs
+         FROM optimisation_events
+         GROUP BY tool
+         ORDER BY tool`,
+      )
+      .all() as {
+      tool: string;
+      calls: number;
+      degraded: number;
+      avgLatencyMs: number | null;
+    }[];
+    return rows.map((row) => ({
+      tool: String(row.tool),
+      calls: Number(row.calls),
+      degraded: Number(row.degraded),
+      avgLatencyMs:
+        row.avgLatencyMs === null ? null : Math.round(Number(row.avgLatencyMs)),
     }));
   }
 
