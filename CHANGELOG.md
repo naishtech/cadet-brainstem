@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.11] — 2026-08-26
+
+### Changed
+
+- **Classifier `context_need` is now honored** — `refineStrategy()` caps the
+  task-type default by the classifier's own `context_need` (narrowing the
+  strategy and downgrading `leanctx_mode`) instead of ignoring it.
+- `classify` / `optimize_context` now return `confidence` + `needs_more_context`
+  and a `retrieval` plan (search queries + scope).
+- **Memory policy is conditional** and reworded to "optional evidence, never
+  authoritative state"; `AGENTS.md` updated to match.
+- `tool_plan` no longer embeds redundant per-tool `description` objects (the
+  agent already has them from `tools/list`).
+- `response_policy` default now includes `no_tool_narration`.
+
 ## [0.1.10] — 2026-08-26
 
 ### Added
