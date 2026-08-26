@@ -16,6 +16,8 @@ How to use Cadet Token Saver from VS Code to reduce agent token usage.
 the **cadet-token-saver** MCP server appears in Copilot Chat's tools. The agent
 can then call:
 
+- `classify` — classify the current user request with the local Ollama model
+   and return the deterministic optimisation strategy. Call this first.
 - `optimize_context` — classify the task, return the LeanCTX-compressed
   representation of a file/directory.
 - `find_relevant_symbols` — Serena semantic search for task-relevant symbols.
@@ -26,9 +28,17 @@ running until the client disconnects).
 
 ## 2. Steer the agent
 
-`AGENTS.md` (repo root) tells the agent to prefer `optimize_context` /
-`find_relevant_symbols` for large context reads and `wrap` for noisy commands.
-Copy the relevant section into your own project's `AGENTS.md`.
+`AGENTS.md` (repo root) tells the agent to call `classify` at the start of
+every turn, then prefer `optimize_context` / `find_relevant_symbols` for large
+context reads and `wrap` for noisy commands. Copy the relevant section into
+your own project's `AGENTS.md`.
+
+This is an instruction-level preference, not a protocol guarantee. Copilot
+Chat decides whether to call an MCP tool; the MCP server cannot intercept or
+reject a user message that arrives without a tool call. For guaranteed
+classification, put the classification step in a wrapper or gateway that
+owns the chat request before it reaches the model. The built-in fallback keeps
+normal operation available when Ollama or MCP is unavailable.
 
 ## 3. Use `wrap` from a VS Code task
 
