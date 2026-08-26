@@ -1,6 +1,6 @@
 # Task 24 — NPM Publishing
 
-**Status:** Not started
+**Status:** Implemented (published to npm as `cadet-token-saver@0.1.0`)
 **Phase:** Release (post-MVP features)
 **Source:** Reference example — `E:\unity\projects\cadet-agent` (`publish-npm.ps1`, `package.json`); design doc §1 (`npx cadet-token-saver init`), §18 ("genuinely usable npm package", "build/package scripts")
 
@@ -50,9 +50,9 @@ Match the example's publishing fields (ours already has most — verify/complete
 
 ## Acceptance Criteria
 
-- [ ] `publish-npm.ps1` exists and follows the cadet-agent example (token file, LF normalization, inline auth, publish, cleanup).
-- [ ] `package.json` has `repository` + `homepage` and a working `prepublishOnly` (typecheck + lint + test + build).
-- [ ] `npm publish --dry-run` shows only intended files (`dist/`, `LICENSE`, `README.md`, `package.json`) and no secrets.
-- [ ] A published/dev-packaged install works: `npx cadet-token-saver init` runs successfully.
-- [ ] Token is never persisted to npm config or committed to the repo.
-- [ ] `CHANGELOG.md` exists and reflects the release.
+- [x] `publish-npm.ps1` exists and follows the cadet-agent example (token file, LF normalization, inline auth, publish, cleanup).
+- [x] `package.json` has `repository` + `homepage` and a working `prepublishOnly` (typecheck + lint + test + build).
+- [x] `npm publish --dry-run` shows only intended files (`dist/`, `LICENSE`, `README.md`, `package.json`) and no secrets.
+- [x] A published/dev-packaged install works: `npx cadet-token-saver init` runs successfully.
+- [x] Token is never persisted to npm config or committed to the repo.
+- [x] `CHANGELOG.md` exists and reflects the release.

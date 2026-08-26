@@ -2,7 +2,7 @@
 
 **Risk rationale:** Deliverable — documents architecture, config, safety principles and the deliberate non-goals.
 
-**Status:** Not started
+**Status:** Implemented (README.md, docs/requirements.md, docs/integration-vscode.md, design doc)
 **Phase:** Final deliverables
 **Source:** `docs/plans/initial_design.md` — §18 Development approach (final docs)
 

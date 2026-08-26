@@ -2,7 +2,7 @@
 
 **Risk rationale:** Deliverable — proves the riskiest assumptions were actually de-risked (mocked external tools).
 
-**Status:** Not started
+**Status:** Implemented (test suite, build, typecheck and lint all pass)
 **Phase:** Final deliverables
 **Source:** `docs/plans/initial_design.md` — §18 Development approach ("After each phase, write tests", "Prefer integration tests using mocked external tools")
 
