@@ -10,6 +10,8 @@ import {
   findRelevantSymbolsTool,
   handleToolCall,
   optimizeContextTool,
+  serenaCallTool,
+  serenaListToolsTool,
   type McpDeps,
 } from '../src/mcp';
 import type { ClassificationOutcome } from '../src/classifier';
@@ -82,16 +84,35 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
     rawText: 'Foo  src/foo.ts:1',
     degraded: false,
   }));
+  const serenaForward = vi.fn(async (req: { tool: string }) => ({
+    tool: req.tool,
+    result: { content: [{ type: 'text', text: 'references:\n  Foo: src/a.h:3' }] },
+    rawText: 'references:\n  Foo: src/a.h:3',
+    degraded: false,
+  }));
+  const serenaList = vi.fn(async () => ({
+    tools: [{ name: 'find_symbol' }, { name: 'rename_symbol' }],
+    degraded: false,
+  }));
   const deps: McpDeps = {
     classify,
     getStrategy,
     leanctx: { optimize: leanctxOptimize },
     rtk: { optimize: rtkOptimize },
-    serena: { search: serenaSearch },
+    serena: { search: serenaSearch, callTool: serenaForward, listTools: serenaList },
     metricsPath,
     ...overrides,
   };
-  return { deps, classify, getStrategy, leanctxOptimize, rtkOptimize, serenaSearch };
+  return {
+    deps,
+    classify,
+    getStrategy,
+    leanctxOptimize,
+    rtkOptimize,
+    serenaSearch,
+    serenaForward,
+    serenaList,
+  };
 }
 
 function savingsByTool(path: string): Record<string, number> {
@@ -272,6 +293,67 @@ describe('find_relevant_symbols', () => {
     await expect(
       findRelevantSymbolsTool({ query: 'Foo', cwd: '' }, deps),
     ).rejects.toThrow('non-empty string "cwd"');
+  });
+});
+
+describe('serena_call', () => {
+  it('forwards any Serena tool and records a serena event', async () => {
+    const { deps, serenaForward } = makeDeps();
+
+    const result = await serenaCallTool(
+      {
+        tool: 'find_referencing_symbols',
+        arguments: { name_path_pattern: 'Foo' },
+        cwd: 'E:/proj',
+      },
+      deps,
+    );
+
+    expect(result.degraded).toBe(false);
+    expect(result.tool).toBe('find_referencing_symbols');
+    expect(serenaForward).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: 'find_referencing_symbols',
+        arguments: { name_path_pattern: 'Foo' },
+        cwd: 'E:/proj',
+      }),
+    );
+    expect(callsByTool(metricsPath).serena).toBe(1);
+    const row = firstRowForTool(metricsPath, 'serena');
+    expect(row.operation).toBe('find_referencing_symbols');
+    expect(row.request_id).toBeTruthy();
+  });
+
+  it('rejects an empty tool', async () => {
+    const { deps } = makeDeps();
+    await expect(serenaCallTool({ tool: '' }, deps)).rejects.toThrow('tool');
+  });
+
+  it('degrades gracefully when the passthrough is unavailable', async () => {
+    const { deps } = makeDeps({ serena: {} });
+    const result = await serenaCallTool({ tool: 'find_symbol' }, deps);
+    expect(result.degraded).toBe(true);
+  });
+});
+
+describe('serena_list_tools', () => {
+  it('lists the tools Serena currently exposes and records an event', async () => {
+    const { deps, serenaList } = makeDeps();
+
+    const result = await serenaListToolsTool({ cwd: 'E:/proj' }, deps);
+
+    expect(result.tools).toEqual(['find_symbol', 'rename_symbol']);
+    expect(result.degraded).toBe(false);
+    expect(serenaList).toHaveBeenCalled();
+    expect(callsByTool(metricsPath).serena).toBe(1);
+    expect(firstRowForTool(metricsPath, 'serena').operation).toBe('list_tools');
+  });
+
+  it('degrades gracefully when the passthrough is unavailable', async () => {
+    const { deps } = makeDeps({ serena: {} });
+    const result = await serenaListToolsTool({ cwd: 'E:/proj' }, deps);
+    expect(result.tools).toEqual([]);
+    expect(result.degraded).toBe(true);
   });
 });
 

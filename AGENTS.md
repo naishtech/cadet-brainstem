@@ -28,6 +28,10 @@ tool for every chat message.
 - Before dumping a directory or broad search results, call the
   `find_relevant_symbols` MCP tool with a symbol/path pattern and the project
   directory. Read only the returned files/symbols.
+- For the **full** Serena capability (rename, referencing symbols, diagnostics,
+  edits, etc.), call `serena_list_tools` once to see what Serena currently
+  exposes, then `serena_call` to invoke any of them (forwarded verbatim). New
+  Serena tools work automatically — no hardcoded list.
 - If you need noisy command output as context, call `compress_command_output`
   with the command instead of pasting raw terminal output.
 

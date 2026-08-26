@@ -34,12 +34,19 @@ export const RESPONSE_POLICY =
   'information-dense. Avoid decorative formatting, unnecessary emojis, repeated information, and ' +
   'explanations that do not affect the task. Assume your response may become future LLM context.';
 
+export interface SerenaTools {
+  search: SerenaAdapter['search'];
+  callTool: SerenaAdapter['callTool'];
+  listTools: SerenaAdapter['listTools'];
+  close: () => Promise<void>;
+}
+
 export interface McpDeps {
   classify?: (taskText: string) => Promise<ClassificationOutcome>;
   getStrategy?: (classification: Classification) => OptimisationStrategy;
   leanctx?: Pick<LeanCtxAdapter, 'optimize'>;
   rtk?: Pick<RtkAdapter, 'optimize'>;
-  serena?: Pick<SerenaAdapter, 'search'>;
+  serena?: Partial<SerenaTools>;
   metricsPath?: string;
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
@@ -50,7 +57,7 @@ interface ResolvedDeps {
   getStrategy: (classification: Classification) => OptimisationStrategy;
   leanctx: Pick<LeanCtxAdapter, 'optimize'>;
   rtk: Pick<RtkAdapter, 'optimize'>;
-  serena: Pick<SerenaAdapter, 'search'>;
+  serena: Partial<SerenaTools>;
   metricsPath: string;
   record: (event: OptimisationEvent) => void;
   log: (line: string) => void;
@@ -229,6 +236,9 @@ export async function findRelevantSymbolsTool(
     throw new Error('find_relevant_symbols requires a non-empty string "cwd"');
   }
   const d = resolveDeps(deps);
+  if (d.serena.search === undefined) {
+    return { degraded: true, error: 'serena search unavailable' };
+  }
   const requestId = randomUUID();
   const searchStart = performance.now();
   const result = await d.serena.search({
@@ -270,6 +280,108 @@ export interface CompressOutputArgs {
   command: string;
   cwd?: string;
   shell?: string;
+}
+
+export interface SerenaCallArgs {
+  tool: string;
+  arguments?: Record<string, unknown>;
+  cwd?: string;
+  project?: string;
+}
+
+/** `serena_call` — forward any call to any Serena tool (generic passthrough). */
+export async function serenaCallTool(
+  args: SerenaCallArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.tool !== 'string' || args.tool.length === 0) {
+    throw new Error('serena_call requires a non-empty string "tool"');
+  }
+  const d = resolveDeps(deps);
+  if (d.serena.callTool === undefined) {
+    return { degraded: true, error: 'serena passthrough unavailable' };
+  }
+  const requestId = randomUUID();
+  const callStart = performance.now();
+  const result = await d.serena.callTool({
+    tool: args.tool,
+    ...(args.arguments !== undefined ? { arguments: args.arguments } : {}),
+    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
+    ...(args.project !== undefined ? { project: String(args.project) } : {}),
+  });
+  const callLatencyMs = Math.round(performance.now() - callStart);
+  const textBytes = Buffer.byteLength(result.rawText);
+  d.record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'search',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'serena',
+    operation: args.tool,
+    estimated_input_tokens: Math.round(
+      Buffer.byteLength(JSON.stringify(args.arguments ?? {})) / 4,
+    ),
+    estimated_output_tokens: Math.round(textBytes / 4),
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: callLatencyMs,
+    request_id: requestId,
+  });
+  return {
+    tool: result.tool,
+    result: result.result,
+    degraded: result.degraded,
+  };
+}
+
+export interface SerenaListArgs {
+  cwd?: string;
+  project?: string;
+}
+
+/** `serena_list_tools` — list what Serena currently exposes (discovery). */
+export async function serenaListToolsTool(
+  args: SerenaListArgs = {},
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  const d = resolveDeps(deps);
+  if (d.serena.listTools === undefined) {
+    return { tools: [], degraded: true, error: 'serena passthrough unavailable' };
+  }
+  const requestId = randomUUID();
+  const callStart = performance.now();
+  const result = await d.serena.listTools({
+    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
+    ...(args.project !== undefined ? { project: String(args.project) } : {}),
+  });
+  const callLatencyMs = Math.round(performance.now() - callStart);
+  const textBytes = Buffer.byteLength(
+    JSON.stringify(result.tools.map((t) => t.name)),
+  );
+  d.record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'search',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'serena',
+    operation: 'list_tools',
+    estimated_input_tokens: 0,
+    estimated_output_tokens: Math.round(textBytes / 4),
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: callLatencyMs,
+    request_id: requestId,
+  });
+  return {
+    tools: result.tools.map((t) => t.name),
+    degraded: result.degraded,
+  };
 }
 
 /**
@@ -403,6 +515,55 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'serena_call',
+    description:
+      'Call any tool exposed by the Serena MCP server (symbol search, referencing ' +
+      'symbols, rename, diagnostics, etc.) by forwarding the request. Use ' +
+      'serena_list_tools to see what Serena currently exposes; for a typed symbol ' +
+      'search prefer find_relevant_symbols.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool: {
+          type: 'string',
+          description: 'Serena tool name, e.g. find_symbol, find_referencing_symbols, rename_symbol.',
+        },
+        arguments: {
+          type: 'object',
+          description: 'Arguments forwarded verbatim to the Serena tool.',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Project directory (defaults to the server cwd).',
+        },
+        project: {
+          type: 'string',
+          description: 'Optional Serena project name/path (defaults to cwd).',
+        },
+      },
+      required: ['tool'],
+    },
+  },
+  {
+    name: 'serena_list_tools',
+    description:
+      'List the tools currently exposed by the Serena MCP server (names + schemas) ' +
+      'so the agent can call any of them via serena_call without hardcoding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description: 'Project directory (defaults to the server cwd).',
+        },
+        project: {
+          type: 'string',
+          description: 'Optional Serena project name/path (defaults to cwd).',
+        },
+      },
+    },
+  },
+  {
     name: 'compress_command_output',
     description:
       'Run a read-only command and return its RTK-compressed output. Only helps on noisy/large ' +
@@ -460,6 +621,12 @@ export async function handleToolCall(
           deps,
         );
         break;
+      case 'serena_call':
+        result = await serenaCallTool(args as unknown as SerenaCallArgs, deps);
+        break;
+      case 'serena_list_tools':
+        result = await serenaListToolsTool(args as unknown as SerenaListArgs, deps);
+        break;
       case 'compress_command_output':
         result = await compressCommandOutputTool(
           args as unknown as CompressOutputArgs,
@@ -499,8 +666,11 @@ export function createMcpServer(deps: McpDeps = {}): Server {
 
 /** Run the MCP server over stdio; resolves when the client disconnects. */
 export async function runMcpServer(deps: McpDeps = {}): Promise<number> {
-  const server = createMcpServer(deps);
+  const resolved = resolveDeps(deps);
+  const server = createMcpServer(resolved);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // Client disconnected — release the persistent Serena session (if any).
+  await resolved.serena.close?.().catch(() => undefined);
   return 0;
 }

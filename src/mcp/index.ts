@@ -8,6 +8,8 @@ export {
   handleToolCall,
   optimizeContextTool,
   runMcpServer,
+  serenaCallTool,
+  serenaListToolsTool,
 } from './server';
 export type {
   ClassifyArgs,
@@ -15,5 +17,8 @@ export type {
   FindSymbolsArgs,
   McpDeps,
   OptimizeContextArgs,
+  SerenaCallArgs,
+  SerenaListArgs,
+  SerenaTools,
   ToolResult,
 } from './server';

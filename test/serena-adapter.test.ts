@@ -6,10 +6,12 @@ const { execFileMock, mcpMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
   mcpMock: {
     callToolResult: { content: [{ type: 'text', text: '' }] },
+    listToolsResult: { tools: [] as Array<{ name: string }> },
     calls: [] as Array<{ name: string; arguments?: Record<string, unknown> }>,
     transportOpts: [] as unknown[],
     failConnect: false,
     failCall: false,
+    closed: 0,
   },
 }));
 
@@ -26,7 +28,12 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
       mcpMock.calls.push(args);
       return mcpMock.callToolResult;
     }
-    async close(): Promise<void> {}
+    async listTools() {
+      return mcpMock.listToolsResult;
+    }
+    async close(): Promise<void> {
+      mcpMock.closed += 1;
+    }
   },
 }));
 
@@ -35,6 +42,7 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
     constructor(public opts: { command: string; args: string[]; cwd: string }) {
       mcpMock.transportOpts.push(opts);
     }
+    close(): void {}
   },
 }));
 
@@ -58,8 +66,10 @@ beforeEach(() => {
   mcpMock.calls = [];
   mcpMock.transportOpts = [];
   mcpMock.callToolResult = { content: [{ type: 'text', text: '' }] };
+  mcpMock.listToolsResult = { tools: [] };
   mcpMock.failConnect = false;
   mcpMock.failCall = false;
+  mcpMock.closed = 0;
 });
 
 afterEach(() => {
@@ -157,5 +167,63 @@ describe('SerenaAdapter', () => {
     expect(result.degraded).toBe(true);
     expect(result.files).toEqual([]);
     expect(result.rawText).toBe('');
+  });
+
+  it('reuses a single persistent session across calls', async () => {
+    mcpMock.callToolResult = {
+      content: [{ type: 'text', text: 'Symbol: Config\n  Path: src/config.ts:1\n' }],
+    };
+    await adapter.search({ query: 'Config', cwd: 'E:/proj' });
+    await adapter.search({ query: 'Other', cwd: 'E:/proj' });
+    // One process spawned, project activated once.
+    expect(mcpMock.transportOpts).toHaveLength(1);
+    expect(mcpMock.calls.filter((c) => c.name === 'activate_project')).toHaveLength(1);
+    expect(mcpMock.calls.filter((c) => c.name === 'find_symbol')).toHaveLength(2);
+  });
+
+  it('switches the active project on a live session', async () => {
+    mcpMock.callToolResult = {
+      content: [{ type: 'text', text: 'Symbol: X\n  Path: x.ts:1\n' }],
+    };
+    await adapter.search({ query: 'X', cwd: 'E:/proj' });
+    await adapter.search({ query: 'Y', cwd: 'E:/other' });
+    expect(mcpMock.transportOpts).toHaveLength(1);
+    const activations = mcpMock.calls.filter((c) => c.name === 'activate_project');
+    expect(activations).toHaveLength(2);
+    expect(activations[1]?.arguments).toEqual({ project: 'E:/other' });
+  });
+
+  it('forwards any Serena tool via callTool', async () => {
+    mcpMock.callToolResult = {
+      content: [{ type: 'text', text: 'references:\n  Foo: src/a.h:3' }],
+    };
+    const result = await adapter.callTool({
+      tool: 'find_referencing_symbols',
+      arguments: { name_path_pattern: 'Foo' },
+      cwd: 'E:/proj',
+    });
+    expect(result.tool).toBe('find_referencing_symbols');
+    expect(result.degraded).toBe(false);
+    expect(result.rawText).toContain('references');
+    const forwarded = mcpMock.calls.find((c) => c.name === 'find_referencing_symbols');
+    expect(forwarded?.arguments).toEqual({ name_path_pattern: 'Foo' });
+  });
+
+  it('lists the tools Serena currently exposes', async () => {
+    mcpMock.listToolsResult = {
+      tools: [{ name: 'find_symbol' }, { name: 'rename_symbol' }],
+    };
+    const result = await adapter.listTools({ cwd: 'E:/proj' });
+    expect(result.degraded).toBe(false);
+    expect(result.tools.map((t) => t.name)).toEqual(['find_symbol', 'rename_symbol']);
+  });
+
+  it('close() releases the persistent session', async () => {
+    await adapter.search({ query: 'Config', cwd: 'E:/proj' });
+    await adapter.close();
+    expect(mcpMock.closed).toBe(1);
+    // A later call reconnects (new spawn).
+    await adapter.search({ query: 'Config', cwd: 'E:/proj' });
+    expect(mcpMock.transportOpts).toHaveLength(2);
   });
 });
