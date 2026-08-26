@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   MetricsStore,
@@ -116,6 +117,23 @@ describe('MetricsStore (in-memory)', () => {
     ]);
   });
 
+  it('excludes degraded events from call counts', () => {
+    store.record(makeEvent({ tool: 'ollama', degraded: true }));
+    store.record(makeEvent({ tool: 'ollama', degraded: false }));
+    expect(store.getCallsByTool()).toEqual([{ tool: 'ollama', calls: 1 }]);
+  });
+
+  it('reports real calls, degraded, and average latency per tool', () => {
+    store.record(makeEvent({ tool: 'rtk', degraded: false, latency_ms: 100 }));
+    store.record(makeEvent({ tool: 'rtk', degraded: false, latency_ms: 300 }));
+    store.record(makeEvent({ tool: 'rtk', degraded: true, latency_ms: 5000 }));
+    store.record(makeEvent({ tool: 'serena', degraded: false }));
+    expect(store.getCallStatsByTool()).toEqual([
+      { tool: 'rtk', calls: 2, degraded: 1, avgLatencyMs: 200 },
+      { tool: 'serena', calls: 1, degraded: 0, avgLatencyMs: null },
+    ]);
+  });
+
   it('groups savings by task type', () => {
     store.record(makeEvent({ task_type: 'debug', estimated_tokens_saved: 100 }));
     store.record(makeEvent({ task_type: 'refactor', estimated_tokens_saved: 250 }));
@@ -155,5 +173,54 @@ describe('MetricsStore (in-memory)', () => {
     expect(second.count()).toBe(1);
     expect(second.getTotals().estimatedTokensSaved).toBe(800);
     second.close();
+  });
+
+  it('migrates a pre-existing DB in place by adding the new columns', () => {
+    const dir = makeTempDir();
+    const file = join(dir, 'metrics.db');
+
+    // Simulate a DB created before the degraded/latency/counts/linkage columns.
+    const raw = new DatabaseSync(file);
+    raw.exec(`CREATE TABLE optimisation_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      task_type TEXT NOT NULL,
+      complexity TEXT NOT NULL,
+      risk TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      estimated_input_tokens INTEGER NOT NULL,
+      estimated_output_tokens INTEGER NOT NULL,
+      estimated_tokens_saved INTEGER NOT NULL,
+      compression_ratio REAL,
+      optimisation_strategy TEXT
+    );`);
+    raw.close();
+
+    const store = new MetricsStore(file);
+    store.record(
+      makeEvent({
+        degraded: true,
+        latency_ms: 42,
+        request_id: 'req-1',
+        symbols_found: 3,
+        files_found: 2,
+      }),
+    );
+    store.close();
+
+    const readDb = new DatabaseSync(file);
+    const rows = readDb
+      .prepare('SELECT * FROM optimisation_events')
+      .all() as Record<string, unknown>[];
+    readDb.close();
+    expect(rows[0]).toMatchObject({
+      degraded: 1,
+      latency_ms: 42,
+      request_id: 'req-1',
+      symbols_found: 3,
+      files_found: 2,
+    });
   });
 });

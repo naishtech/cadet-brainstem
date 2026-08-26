@@ -4,6 +4,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
 import type { Classification } from '../classifier';
@@ -20,6 +22,17 @@ import {
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
+
+/**
+ * Response policy the agent must parse and follow when replying after using
+ * this tool. Returned by `classify` (and `optimize_context`) so the agent can
+ * read it and stick to it. Targets token-efficient, LLM-consumable responses.
+ */
+export const RESPONSE_POLICY =
+  'Write for another LLM, not for presentation. Preserve decisions, constraints, actions, errors ' +
+  'and evidence. Remove decoration, repetition and conversational filler. Keep output compact and ' +
+  'information-dense. Avoid decorative formatting, unnecessary emojis, repeated information, and ' +
+  'explanations that do not affect the task. Assume your response may become future LLM context.';
 
 export interface McpDeps {
   classify?: (taskText: string) => Promise<ClassificationOutcome>;
@@ -83,18 +96,17 @@ export interface OptimizeContextArgs {
 }
 
 /**
- * Record a local-LLM (classifier) call — only when the LLM actually ran, so
- * the "local calls" counter reflects real Ollama usage (degraded = not
- * reached; the fallback is not a real LLM call).
+ * Record a classifier (local-LLM) call. Every outcome is recorded — degraded
+ * ones are marked `degraded: true` so the fallback rate is visible; the "real
+ * calls" counter filters them out (see `getCallsByTool`).
  */
 function recordClassifierCall(
   record: (event: OptimisationEvent) => void,
   outcome: ClassificationOutcome,
   taskText: string,
+  requestId: string,
+  latencyMs: number,
 ): void {
-  if (outcome.degraded) {
-    return;
-  }
   record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
@@ -108,6 +120,9 @@ function recordClassifierCall(
     estimated_tokens_saved: 0,
     compression_ratio: null,
     optimisation_strategy: null,
+    degraded: outcome.degraded,
+    latency_ms: latencyMs,
+    request_id: requestId,
   });
 }
 
@@ -123,15 +138,20 @@ export async function optimizeContextTool(
     throw new Error('optimize_context requires a non-empty string "target"');
   }
   const d = resolveDeps(deps);
+  const requestId = randomUUID();
+  const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
+  const classifyLatencyMs = Math.round(performance.now() - classifyStart);
   const strategy = d.getStrategy(outcome.classification);
-  recordClassifierCall(d.record, outcome, args.task);
+  recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  const leanStart = performance.now();
   const result = await d.leanctx.optimize({
     target: args.target,
     mode: strategy.leanctx_mode,
     taskType: outcome.classification.task,
     ...(args.lines !== undefined ? { lines: String(args.lines) } : {}),
   });
+  const leanLatencyMs = Math.round(performance.now() - leanStart);
   d.record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
@@ -146,6 +166,9 @@ export async function optimizeContextTool(
     compression_ratio:
       result.sourceSize > 0 ? result.returnedSize / result.sourceSize : null,
     optimisation_strategy: strategy.leanctx_mode,
+    degraded: result.degraded,
+    latency_ms: leanLatencyMs,
+    request_id: requestId,
   });
   return {
     context: result.context,
@@ -156,6 +179,7 @@ export async function optimizeContextTool(
     degraded: result.degraded,
     classification: outcome.classification,
     strategy,
+    response_policy: RESPONSE_POLICY,
   };
 }
 
@@ -172,12 +196,16 @@ export async function classifyTool(
     throw new Error('classify requires a non-empty string "task"');
   }
   const d = resolveDeps(deps);
+  const requestId = randomUUID();
+  const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
+  const classifyLatencyMs = Math.round(performance.now() - classifyStart);
   const strategy = d.getStrategy(outcome.classification);
-  recordClassifierCall(d.record, outcome, args.task);
+  recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
   return {
     classification: outcome.classification,
     strategy,
+    response_policy: RESPONSE_POLICY,
     degraded: outcome.degraded,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };
@@ -201,11 +229,14 @@ export async function findRelevantSymbolsTool(
     throw new Error('find_relevant_symbols requires a non-empty string "cwd"');
   }
   const d = resolveDeps(deps);
+  const requestId = randomUUID();
+  const searchStart = performance.now();
   const result = await d.serena.search({
     query: args.query,
     cwd: args.cwd,
     ...(args.project !== undefined ? { project: String(args.project) } : {}),
   });
+  const searchLatencyMs = Math.round(performance.now() - searchStart);
   const textBytes = Buffer.byteLength(result.rawText);
   d.record({
     timestamp: new Date().toISOString(),
@@ -220,6 +251,11 @@ export async function findRelevantSymbolsTool(
     estimated_tokens_saved: 0,
     compression_ratio: 1,
     optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: searchLatencyMs,
+    symbols_found: result.symbols.length,
+    files_found: result.files.length,
+    request_id: requestId,
   });
   return {
     query: result.query,
@@ -253,11 +289,14 @@ export async function compressCommandOutputTool(
     );
   }
   const d = resolveDeps(deps);
+  const requestId = randomUUID();
+  const rtkStart = performance.now();
   const result = await d.rtk.optimize({
     command: args.command,
     ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
     ...(args.shell !== undefined ? { shell: String(args.shell) } : {}),
   });
+  const rtkLatencyMs = Math.round(performance.now() - rtkStart);
   d.record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
@@ -274,6 +313,9 @@ export async function compressCommandOutputTool(
         ? result.optimisedOutputSize / result.rawOutputSize
         : null,
     optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: rtkLatencyMs,
+    request_id: requestId,
   });
   const note =
     result.estimatedTokensSaved === 0 && !result.degraded

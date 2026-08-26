@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.5] — 2026-08-26
+
+### Added
+
+- `classify` (and `optimize_context`) now return a **`response_policy`** the
+  agent must parse and follow in every reply (write for another LLM: compact,
+  information-dense, no decoration, filler or repeated info). Agent
+  instructions (AGENTS.md, `init` output, and test-repo agent files) tell the
+  agent to read and stick to it.
+- Richer per-call metrics so `stats` can tell whether a tool is *working* or
+  *silently failing*, not just how many tokens it saved:
+  - Every event now records `degraded` (did the tool fall back / fail?), the
+    tool/LLM call `latency_ms`, and a `request_id` linking a logical flow.
+  - Degraded classifier (Ollama) outcomes are now recorded (marked
+    `degraded`) instead of skipped — the "Local tool calls" counter still
+    counts only real (non-degraded) calls, and `stats` shows the degraded
+    count and average latency per tool (e.g. `ollama 12 call(s) · 2 degraded ·
+    avg 2,355ms`).
+  - Serena events record `symbols_found` / `files_found` so search hit-rate
+    is measurable (its value is narrowing context, not byte-savings).
+  - `classify` and the subsequent `optimize_context` share a `request_id`,
+    so LeanCTX savings can be attributed back to the classification that
+    picked the mode.
+- The metrics DB migrates in place (new columns are added to existing files),
+  so no manual clear is required.
+
 ## [0.1.4] — 2026-08-26
 
 ### Added

@@ -1,8 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  RESPONSE_POLICY,
   classifyTool,
   compressCommandOutputTool,
   findRelevantSymbolsTool,
@@ -106,6 +108,37 @@ function callsByTool(path: string): Record<string, number> {
   return Object.fromEntries(rows.map((r) => [r.tool, r.calls]));
 }
 
+function callStatsByTool(
+  path: string,
+): Record<string, { calls: number; degraded: number; avgLatencyMs: number | null }> {
+  const store = new MetricsStore(path);
+  const rows = store.getCallStatsByTool();
+  store.close();
+  return Object.fromEntries(
+    rows.map((r) => [
+      r.tool,
+      { calls: r.calls, degraded: r.degraded, avgLatencyMs: r.avgLatencyMs },
+    ]),
+  );
+}
+
+function rowsForTool(path: string, tool: string): Array<Record<string, unknown>> {
+  const db = new DatabaseSync(path);
+  const rows = db
+    .prepare('SELECT * FROM optimisation_events WHERE tool = ?')
+    .all(tool) as Record<string, unknown>[];
+  db.close();
+  return rows;
+}
+
+function firstRowForTool(path: string, tool: string): Record<string, unknown> {
+  const row = rowsForTool(path, tool)[0];
+  if (row === undefined) {
+    throw new Error(`no ${tool} row recorded`);
+  }
+  return row;
+}
+
 describe('optimize_context', () => {
   it('classifies, compiles via LeanCTX with the policy mode, and records metrics', async () => {
     const { deps, leanctxOptimize } = makeDeps();
@@ -118,12 +151,21 @@ describe('optimize_context', () => {
     expect(result.context).toBe('compressed');
     expect(result.mode).toBe('entropy');
     expect(result.degraded).toBe(false);
+    expect(result.response_policy).toBe(RESPONSE_POLICY);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
     expect(savingsByTool(metricsPath).leanctx).toBe(19);
     expect(callsByTool(metricsPath).ollama).toBe(1);
     expect(callsByTool(metricsPath).leanctx).toBe(1);
+
+    // classify -> optimize_context share a request_id, with latency + degraded.
+    const ollamaRow = firstRowForTool(metricsPath, 'ollama');
+    const leanctxRow = firstRowForTool(metricsPath, 'leanctx');
+    expect(ollamaRow.request_id).toBeTruthy();
+    expect(leanctxRow.request_id).toBe(ollamaRow.request_id);
+    expect(ollamaRow.degraded).toBe(0);
+    expect(typeof ollamaRow.latency_ms).toBe('number');
   });
 
   it('does not record an ollama call when classification degrades', async () => {
@@ -144,6 +186,10 @@ describe('optimize_context', () => {
 
     expect(callsByTool(metricsPath).ollama).toBeUndefined();
     expect(callsByTool(metricsPath).leanctx).toBe(1);
+
+    // The degraded outcome IS recorded (marked degraded) — just not counted as a real call.
+    expect(callStatsByTool(metricsPath).ollama?.degraded).toBe(1);
+    expect(callStatsByTool(metricsPath).ollama?.calls).toBe(0);
   });
 
   it('rejects empty task/target', async () => {
@@ -164,6 +210,7 @@ describe('classify', () => {
     expect(result.classification).toEqual(makeClassification().classification);
     expect(result.strategy).toEqual(makeStrategy());
     expect(result.degraded).toBe(false);
+    expect(result.response_policy).toBe(RESPONSE_POLICY);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
@@ -184,6 +231,8 @@ describe('classify', () => {
     expect(result.degraded).toBe(true);
     expect(result.reason).toBe('ollama unreachable');
     expect(callsByTool(metricsPath).ollama).toBeUndefined();
+    expect(callStatsByTool(metricsPath).ollama?.degraded).toBe(1);
+    expect(callStatsByTool(metricsPath).ollama?.calls).toBe(0);
   });
 
   it('rejects an empty task', async () => {
@@ -207,6 +256,12 @@ describe('find_relevant_symbols', () => {
       expect.objectContaining({ query: 'Foo', cwd: 'E:/proj' }),
     );
     expect(savingsByTool(metricsPath).serena).toBe(0);
+    expect(callStatsByTool(metricsPath).serena?.calls).toBe(1);
+    const serenaRow = firstRowForTool(metricsPath, 'serena');
+    expect(serenaRow.symbols_found).toBe(1);
+    expect(serenaRow.files_found).toBe(1);
+    expect(serenaRow.request_id).toBeTruthy();
+    expect(serenaRow.degraded).toBe(0);
   });
 
   it('rejects missing query/cwd', async () => {
@@ -235,6 +290,10 @@ describe('compress_command_output', () => {
     expect(JSON.stringify(result)).not.toContain('lots of output');
     expect(rtkOptimize).toHaveBeenCalledWith({ command: 'git status' });
     expect(savingsByTool(metricsPath).rtk).toBe(75);
+    const rtkRow = firstRowForTool(metricsPath, 'rtk');
+    expect(rtkRow.request_id).toBeTruthy();
+    expect(rtkRow.degraded).toBe(0);
+    expect(typeof rtkRow.latency_ms).toBe('number');
   });
 
   it('rejects an empty command', async () => {

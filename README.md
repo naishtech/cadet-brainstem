@@ -4,7 +4,7 @@ Reduce the amount of context and tool output your AI coding agent consumes — l
 
 `cadet-token-saver` is an **orchestration + measurement layer** that sits above [RTK](https://github.com/rtk-ai/rtk), [Serena](https://github.com/oraios/serena) and [LeanCTX](https://github.com/yvgude/lean-ctx). It decides **when** to compress context, runs the right tool, and records **how many tokens it saved**.
 
-> Version 0.1.0 · MIT · Node.js 18+ · works fully offline
+> Version 0.1.4 · MIT · Node.js 18+ · local-first operation
 
 ---
 
@@ -51,9 +51,17 @@ cadet-token-saver doctor    # read-only health check with actionable fixes
 
 | Tool | What it does |
 | --- | --- |
+| `classify` | Classify the current request with Ollama and return the deterministic optimisation strategy |
 | `optimize_context` | Classify the task, return the LeanCTX-compressed context for a file/dir |
 | `find_relevant_symbols` | Serena semantic search → only the relevant symbols/files |
 | `compress_command_output` | RTK-reduced output for a command |
+
+The intended flow is to call `classify` once at the start of each agent turn,
+then use its strategy to choose the context tools. MCP is client-driven: the
+server cannot intercept every Copilot Chat message or technically force a tool
+call. A workspace `AGENTS.md` can require this behavior from the agent, and
+the MCP tool description reinforces it, but clients may still skip tools. Keep
+the fallback path enabled for unavailable Ollama or non-compliant clients.
 
 **From the terminal:**
 
@@ -75,13 +83,15 @@ cadet-token-saver stats    # events, tokens saved, reduction %, savings by tool 
 
 ### 5. Tell your agent how to use it
 
-Paste this into your agent's prompts or `AGENTS.md` so it prefers the cheap paths:
+Paste this into your agent's prompts or `AGENTS.md` so it classifies every turn
+and prefers the cheap paths:
 
-> To save tokens, prefer Cadet Token Saver tools: call `optimize_context` before
-> reading a large file; use `find_relevant_symbols` before broad searches; call
-> `compress_command_output` for noisy command output (pass `"shell": "bash"` if
-> you are in git-bash on Windows). If a tool is unavailable, fall back to the
-> normal read.
+> At the start of every turn, call the Cadet Token Saver `classify` MCP tool
+> with the user's request and use its returned strategy. Then call
+> `optimize_context` before reading a large file, `find_relevant_symbols`
+> before broad searches, and `compress_command_output` for noisy command
+> output (pass `"shell": "bash"` if you are in git-bash on Windows). If an
+> MCP tool is unavailable, fall back to the normal operation.
 
 ---
 
@@ -93,7 +103,7 @@ Cadet Token Saver is a local CLI built around one decision: **what context does 
 task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised context + metrics.db
 ```
 
-- **Classifier** — a local Ollama model (`qwen3:1.7b`) classifies the task (type, complexity, risk, context need) as strict JSON. If Ollama is unavailable it degrades to a conservative default instead of failing.
+- **Classifier** — a local Ollama model (`qwen3:1.7b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
 - **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
 - **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-token-saver/metrics.db`), fully offline, with estimates clearly labelled.
@@ -127,4 +137,4 @@ The project is built incrementally from the task files in `tasks/`; see the desi
 
 ---
 
-**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `mcp`. (`config`, `dashboard`, `telemetry` are scaffolded stubs.)
+**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, and `compress_command_output`.

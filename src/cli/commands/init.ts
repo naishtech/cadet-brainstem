@@ -219,8 +219,9 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
   log('  "Always classify the user request first with the `classify` tool — it runs the');
-  log('   local LLM and returns the recommended strategy. Then use the Cadet Token Saver');
-  log('   tools to save context: call optimize_context before reading a large file; use');
+  log('   local LLM and returns the recommended strategy plus a `response_policy`; parse the');
+  log('   policy and follow it in every reply. Then use the Cadet Token Saver tools to save');
+  log('   context: call optimize_context before reading a large file; use');
   log('   find_relevant_symbols before broad searches; call compress_command_output for');
   log('   noisy command output (pass "shell": "bash" if you are in git-bash on Windows).');
   log('   If a tool is unavailable, fall back to the normal read."');
