@@ -4,6 +4,7 @@ import {
   defaultPolicies,
   getDefaultStrategy,
   getStrategy,
+  refineStrategy,
 } from '../src/policy/index';
 import type { Classification } from '../src/classifier/index';
 
@@ -12,7 +13,8 @@ function makeClassification(task: string): Classification {
     task: task as Classification['task'],
     complexity: 'medium',
     risk: 'medium',
-    context_need: 'targeted',
+    // 'exhaustive' never narrows, so the task maps straight to its raw policy.
+    context_need: 'exhaustive',
     precision: 'normal',
     tool_plan: { use: [], skip: [] },
     response_policy: [],
@@ -62,6 +64,39 @@ describe('PolicyEngine', () => {
     expect(strategy.compression).toBe('aggressive');
     expect(strategy.context_need).toBe('minimal');
     expect(strategy.code_search).toBe('none');
+  });
+
+  it('narrows a broad task policy when the classifier asks for targeted context', () => {
+    const strategy = getStrategy({
+      ...makeClassification('review'),
+      context_need: 'targeted',
+    });
+    expect(strategy.context_need).toBe('targeted');
+    expect(strategy.leanctx_mode).toBe('map');
+    // Task-specific knobs (compression / terminal_output / code_search) unchanged.
+    expect(strategy.compression).toBe(defaultPolicies.review.compression);
+    expect(strategy.terminal_output).toBe(defaultPolicies.review.terminal_output);
+  });
+
+  it('does not widen a minimal task policy when the classifier asks for broad', () => {
+    const strategy = getStrategy({
+      ...makeClassification('question'),
+      context_need: 'broad',
+    });
+    expect(strategy.context_need).toBe('minimal');
+    expect(strategy.leanctx_mode).toBe(defaultPolicies.question.leanctx_mode);
+  });
+
+  it('refineStrategy caps the strategy by the classifier context_need', () => {
+    expect(refineStrategy({ ...defaultPolicies.review }, 'targeted').leanctx_mode).toBe(
+      'map',
+    );
+    expect(refineStrategy({ ...defaultPolicies.review }, 'minimal').leanctx_mode).toBe(
+      'reference',
+    );
+    expect(refineStrategy({ ...defaultPolicies.review }, 'exhaustive')).toEqual(
+      defaultPolicies.review,
+    );
   });
 
   it('covers all 13 task types', () => {

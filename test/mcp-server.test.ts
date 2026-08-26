@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_POLICY,
+  MEMORY_POLICY_SKIP,
   assessContextTool,
   chatMemoryStoreTool,
   classifyTool,
@@ -18,7 +19,6 @@ import {
 } from '../src/mcp';
 import {
   RESPONSE_POLICY_DIRECTIVES,
-  TOOL_DESCRIPTIONS,
   type ClassificationOutcome,
   type ContextAssessmentOutcome,
 } from '../src/classifier';
@@ -187,17 +187,10 @@ describe('optimize_context', () => {
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
     expect(result.tool_plan).toEqual({
-      use: [
-        { name: 'optimize_context', description: TOOL_DESCRIPTIONS.optimize_context },
-      ],
-      skip: [
-        {
-          name: 'compress_command_output',
-          description: TOOL_DESCRIPTIONS.compress_command_output,
-        },
-      ],
+      use: ['optimize_context'],
+      skip: ['compress_command_output'],
     });
-    expect(result.memory_policy).toBe(MEMORY_POLICY);
+    expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
@@ -267,17 +260,10 @@ describe('classify', () => {
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
     expect(result.tool_plan).toEqual({
-      use: [
-        { name: 'optimize_context', description: TOOL_DESCRIPTIONS.optimize_context },
-      ],
-      skip: [
-        {
-          name: 'compress_command_output',
-          description: TOOL_DESCRIPTIONS.compress_command_output,
-        },
-      ],
+      use: ['optimize_context'],
+      skip: ['compress_command_output'],
     });
-    expect(result.memory_policy).toBe(MEMORY_POLICY);
+    expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
@@ -586,12 +572,7 @@ describe('assess_context', () => {
 
     expect(result.verdict).toBe('continue');
     expect(result.tool_plan).toEqual({
-      use: [
-        {
-          name: 'find_relevant_symbols',
-          description: TOOL_DESCRIPTIONS.find_relevant_symbols,
-        },
-      ],
+      use: ['find_relevant_symbols'],
       skip: [],
     });
     expect(result.reason).toBe('need the symbol definitions');

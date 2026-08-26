@@ -68,7 +68,12 @@ describe('parseClassification', () => {
       precision: 'normal',
     });
     expect(parsed.tool_plan).toEqual({ use: [], skip: [] });
-    expect(parsed.response_policy).toEqual(['compact', 'no_filler', 'no_repetition']);
+    expect(parsed.response_policy).toEqual([
+      'compact',
+      'no_filler',
+      'no_repetition',
+      'no_tool_narration',
+    ]);
   });
 
   it('drops invalid tool_plan/response_policy entries instead of failing', () => {
@@ -86,6 +91,40 @@ describe('parseClassification', () => {
     });
     expect(parsed.tool_plan).toEqual({ use: ['optimize_context'], skip: [] });
     expect(parsed.response_policy).toEqual(['delta_only']);
+  });
+
+  it('captures confidence, needs_more_context, and retrieval when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      confidence: 0.42,
+      needs_more_context: true,
+      retrieval: { queries: ['.serena', '.cadet'], scope: 'project root' },
+    });
+    expect(parsed.confidence).toBe(0.42);
+    expect(parsed.needs_more_context).toBe(true);
+    expect(parsed.retrieval).toEqual({
+      queries: ['.serena', '.cadet'],
+      scope: 'project root',
+    });
+  });
+
+  it('drops invalid confidence / needs_more_context / retrieval values', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      confidence: 'high',
+      needs_more_context: 'yes',
+      retrieval: { queries: [42, null, 'x'], scope: 7 },
+    });
+    expect(parsed.confidence).toBeUndefined();
+    expect(parsed.needs_more_context).toBeUndefined();
+    expect(parsed.retrieval).toEqual({ queries: ['x'] });
+  });
+
+  it('omits confidence/needs_more_context/retrieval when absent', () => {
+    const parsed = parseClassification(validClassification);
+    expect(parsed.confidence).toBeUndefined();
+    expect(parsed.needs_more_context).toBeUndefined();
+    expect(parsed.retrieval).toBeUndefined();
   });
 });
 

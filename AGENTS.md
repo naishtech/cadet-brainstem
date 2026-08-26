@@ -17,8 +17,10 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
 - The returned `response_policy` is a set of per-task directives (e.g.
   `delta_only`, `no_filler`, `no_tool_narration`). Follow every directive
   given in your reply.
-- Parse the returned `memory_policy` and follow it too: check memory before
-  starting work, and store expensive-to-rediscover facts when done.
+- Parse the returned `memory_policy` and follow it too: treat memory as
+  optional evidence, never authoritative state — retrieve hints before work,
+  verify them against the current project, and store expensive-to-rediscover
+  facts when done.
 - If `classify` is unavailable, continue with the tools below using defaults —
   never block on it.
 
@@ -27,9 +29,10 @@ tool for every user request.
 
 ## Memory
 
-- `classify` returns a `memory_policy` alongside `response_policy`. Check
-  `chat_memory_store` before starting work and prefer retrieving over
-  re-deriving facts that are expensive to rediscover.
+- `classify` returns a `memory_policy` alongside `response_policy`. Treat
+  memory as **optional evidence, never authoritative state**: retrieve hints
+  before work and verify them against the current project state before acting.
+  Skip `chat_memory_store` entirely when the returned `tool_plan` skips it.
 - Store facts that are expensive to rediscover: decisions, constraints,
   verified commands, and gotchas. Never store secrets or credentials.
 - Memories are scoped to the current project by default. Pass `project` to
