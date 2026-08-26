@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.9] — 2026-08-26
+
+### Added
+
+- `classify` (and `optimize_context`) now return a **`tool_plan`** — an
+  explicit list of tools to `use` / `skip` as `{ name, description }` objects —
+  and a **split `response_policy`** — a per-task set of directive fields (e.g.
+  `delta_only`, `no_filler`, `progressive_disclosure`) with descriptions,
+  picked by the local classifier for each request instead of one fixed string.
+- The classifier prompt now instructs the model to recommend tools
+  aggressively (only when they clearly help) and to pick a minimal
+  response-policy set for simple single-action requests, while research-heavy
+  requests get `preserve_evidence` / `progressive_disclosure`.
+- `classification` in the MCP payload is now the five core fields only
+  (no duplicated raw `tool_plan` / `response_policy` keys).
+
 ## [0.1.8] — 2026-08-26
 
 ### Added

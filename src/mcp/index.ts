@@ -1,7 +1,6 @@
 export {
   MCP_SESSION_ID,
   MEMORY_POLICY,
-  RESPONSE_POLICY,
   chatMemoryStoreTool,
   classifyTool,
   compressCommandOutputTool,

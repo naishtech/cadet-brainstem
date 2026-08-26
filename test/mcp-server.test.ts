@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_POLICY,
-  RESPONSE_POLICY,
   chatMemoryStoreTool,
   classifyTool,
   compressCommandOutputTool,
@@ -16,7 +15,11 @@ import {
   serenaListToolsTool,
   type McpDeps,
 } from '../src/mcp';
-import type { ClassificationOutcome } from '../src/classifier';
+import {
+  RESPONSE_POLICY_DIRECTIVES,
+  TOOL_DESCRIPTIONS,
+  type ClassificationOutcome,
+} from '../src/classifier';
 import type { OptimisationStrategy } from '../src/policy';
 import { MetricsStore } from '../src/metrics';
 import { MemoryStore } from '../src/memory';
@@ -29,6 +32,8 @@ function makeClassification(): ClassificationOutcome {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
+      tool_plan: { use: ['optimize_context'], skip: ['compress_command_output'] },
+      response_policy: ['compact', 'delta_only'],
     },
     degraded: false,
   };
@@ -175,7 +180,21 @@ describe('optimize_context', () => {
     expect(result.context).toBe('compressed');
     expect(result.mode).toBe('entropy');
     expect(result.degraded).toBe(false);
-    expect(result.response_policy).toBe(RESPONSE_POLICY);
+    expect(result.response_policy).toEqual({
+      compact: RESPONSE_POLICY_DIRECTIVES.compact,
+      delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+    });
+    expect(result.tool_plan).toEqual({
+      use: [
+        { name: 'optimize_context', description: TOOL_DESCRIPTIONS.optimize_context },
+      ],
+      skip: [
+        {
+          name: 'compress_command_output',
+          description: TOOL_DESCRIPTIONS.compress_command_output,
+        },
+      ],
+    });
     expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
@@ -232,10 +251,30 @@ describe('classify', () => {
   it('classifies, returns the strategy, and records an ollama call', async () => {
     const { deps } = makeDeps();
     const result = await classifyTool({ task: 'debug the loader' }, deps);
-    expect(result.classification).toEqual(makeClassification().classification);
+    expect(result.classification).toEqual({
+      task: 'debug',
+      complexity: 'medium',
+      risk: 'medium',
+      context_need: 'broad',
+      precision: 'normal',
+    });
     expect(result.strategy).toEqual(makeStrategy());
     expect(result.degraded).toBe(false);
-    expect(result.response_policy).toBe(RESPONSE_POLICY);
+    expect(result.response_policy).toEqual({
+      compact: RESPONSE_POLICY_DIRECTIVES.compact,
+      delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+    });
+    expect(result.tool_plan).toEqual({
+      use: [
+        { name: 'optimize_context', description: TOOL_DESCRIPTIONS.optimize_context },
+      ],
+      skip: [
+        {
+          name: 'compress_command_output',
+          description: TOOL_DESCRIPTIONS.compress_command_output,
+        },
+      ],
+    });
     expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });

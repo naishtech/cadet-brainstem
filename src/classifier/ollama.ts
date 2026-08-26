@@ -2,7 +2,10 @@ import { loadConfig } from '../config/index';
 import {
   Classification,
   ClassificationValidationError,
+  RESPONSE_POLICY_DIRECTIVES,
+  TOOL_NAMES,
   parseClassification,
+  type ResponsePolicyKey,
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
@@ -32,11 +35,19 @@ const CLASSIFICATION_SHAPE = `{
   "complexity": "low | medium | high",
   "risk": "low | medium | high",
   "context_need": "minimal | targeted | broad | exhaustive",
-  "precision": "approximate | normal | exact"
+  "precision": "approximate | normal | exact",
+  "tool_plan": { "use": ["<tool>", "<tool>"], "skip": ["<tool>", "<tool>"] },
+  "response_policy": ["<directive>", "<directive>"]
 }`;
 
 /** Build the classifier prompt. It instructs the model to classify ONLY. */
 export function buildPrompt(taskText: string): string {
+  const tools = TOOL_NAMES.join(', ');
+  const directives = (
+    Object.keys(RESPONSE_POLICY_DIRECTIVES) as ResponsePolicyKey[]
+  )
+    .map((key) => `- ${key}: ${RESPONSE_POLICY_DIRECTIVES[key]}`)
+    .join('\n');
   return [
     'You are a task classifier for an AI coding agent context optimizer.',
     'Classify the user request ONLY.',
@@ -47,6 +58,15 @@ export function buildPrompt(taskText: string): string {
     '- when uncertain, prefer the conservative option (higher context_need, normal precision)',
     '',
     `Respond with exactly this JSON shape:\n${CLASSIFICATION_SHAPE}`,
+    '',
+    `tool_plan: recommend the context tools to use and to skip, from: ${tools}.`,
+    'Only recommend a tool when it clearly helps this request; be aggressive with skip.',
+    '',
+    'response_policy: pick the directives the agent should follow when replying.',
+    'Be aggressive: a simple single-action request (e.g. "merge the PR") needs only',
+    'a minimal set (delta_only, no_filler, no_tool_narration). A research-heavy',
+    'request should include preserve_evidence and progressive_disclosure.',
+    directives,
     '',
     'User request:',
     '"""',
