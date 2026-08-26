@@ -3,7 +3,7 @@
 **Risk rationale:** The agent-facing surface — makes memory usable from any MCP
 client and steers the agent via a new response-policy field.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/29-31-chat-memory-store` (pending review/commit)
 **Phase:** Phase 12
 **Source:** `docs/plans/initial_design.md` — §17 Chat memory store
 
@@ -36,9 +36,9 @@ the agent knows to check and write memory.
 
 ## Acceptance Criteria
 
-- [ ] `chat_memory_store` exposes the six actions with validated arguments.
-- [ ] store → search → get → update → delete round-trips through the tool.
-- [ ] `classify` and `optimize_context` return `memory_policy`.
-- [ ] Each operation records a `memory` metrics event (verify with `stats`).
-- [ ] Degrades gracefully when the memory store is unavailable.
-- [ ] Tests in `test/mcp-server.test.ts` (tool) + a `memory` event assertion.
+- [x] `chat_memory_store` exposes the six actions with validated arguments.
+- [x] store → search → get → update → delete round-trips through the tool.
+- [x] `classify` and `optimize_context` return `memory_policy`.
+- [x] Each operation records a `memory` metrics event (verify with `stats`).
+- [x] Degrades gracefully when the memory store is unavailable.
+- [x] Tests in `test/mcp-server.test.ts` (tool) + a `memory` event assertion.

@@ -14,11 +14,24 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
 - Parse the returned `response_policy` and follow it in every reply: write for
   another LLM (compact, information-dense, no decoration, filler or repeated
   info), since your response may become future LLM context.
+- Parse the returned `memory_policy` and follow it too: check memory before
+  starting work, and store expensive-to-rediscover facts when done.
 - If `classify` is unavailable, continue with the tools below using defaults —
   never block on it.
 
 This instruction guides the agent; MCP itself cannot force a client to invoke a
 tool for every chat message.
+
+## Memory
+
+- `classify` returns a `memory_policy` alongside `response_policy`. Check
+  `chat_memory_store` before starting work and prefer retrieving over
+  re-deriving facts that are expensive to rediscover.
+- Store facts that are expensive to rediscover: decisions, constraints,
+  verified commands, and gotchas. Never store secrets or credentials.
+- At the end of every response, review the conversation you just had and store
+  any memories that match the policy via `chat_memory_store`
+  (`action: "store"`), scoping with `project` and `tags` where useful.
 
 ## Context reads (MCP tools)
 

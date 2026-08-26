@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.7] — 2026-08-26
+
+### Added
+
+- **Chat memory store** — a local SQLite store (`~/.cadet-token-saver/memory.db`)
+  with a new `chat_memory_store` MCP tool (`store` / `update` / `get` /
+  `search` / `list` / `delete`) so the agent can persist facts that are
+  expensive to rediscover and retrieve them across sessions. Every operation
+  records a `memory` metrics event.
+- **`memory_policy`** — `classify` (and `optimize_context`) now also return a
+  `memory_policy` alongside `response_policy`, steering the agent to check
+  memory before starting work, store only expensive-to-rediscover facts, and
+  never store secrets.
+- Agent steering (AGENTS.md, `init` output, README, VS Code integration docs)
+  documents the memory feature, and `stats` "Local tool calls" now includes
+  `memory`.
+
 ## [0.1.6] — 2026-08-26
 
 ### Added

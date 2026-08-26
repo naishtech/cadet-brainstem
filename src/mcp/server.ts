@@ -19,6 +19,7 @@ import {
   MetricsStore,
   type OptimisationEvent,
 } from '../metrics';
+import { MemoryStore } from '../memory';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -34,6 +35,16 @@ export const RESPONSE_POLICY =
   'information-dense. Avoid decorative formatting, unnecessary emojis, repeated information, and ' +
   'explanations that do not affect the task. Assume your response may become future LLM context.';
 
+/**
+ * Memory policy the agent must parse and follow. Sibling of RESPONSE_POLICY;
+ * returned by `classify` and `optimize_context` so the agent knows to check
+ * memory before working and store facts that are expensive to rediscover.
+ */
+export const MEMORY_POLICY =
+  'Check chat_memory_store before starting work and prefer retrieving over re-deriving. ' +
+  'Store facts that are expensive to rediscover: decisions, constraints, verified commands, ' +
+  'and gotchas. Never store secrets or credentials.';
+
 export interface SerenaTools {
   search: SerenaAdapter['search'];
   callTool: SerenaAdapter['callTool'];
@@ -48,6 +59,8 @@ export interface McpDeps {
   rtk?: Pick<RtkAdapter, 'optimize'>;
   serena?: Partial<SerenaTools>;
   metricsPath?: string;
+  /** Injectable memory store; defaults to a live MemoryStore when omitted. */
+  memory?: MemoryStore;
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
 }
@@ -187,6 +200,7 @@ export async function optimizeContextTool(
     classification: outcome.classification,
     strategy,
     response_policy: RESPONSE_POLICY,
+    memory_policy: MEMORY_POLICY,
   };
 }
 
@@ -213,9 +227,186 @@ export async function classifyTool(
     classification: outcome.classification,
     strategy,
     response_policy: RESPONSE_POLICY,
+    memory_policy: MEMORY_POLICY,
     degraded: outcome.degraded,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };
+}
+
+export interface ChatMemoryArgs {
+  action: string;
+  content?: string;
+  id?: string;
+  query?: string;
+  tags?: string[];
+  project?: string;
+  limit?: number;
+}
+
+const MEMORY_ACTIONS = new Set([
+  'store',
+  'update',
+  'get',
+  'search',
+  'list',
+  'delete',
+]);
+
+/** Validate chat_memory_store arguments; throws so invalid input is an MCP error. */
+function validateMemoryAction(action: string, args: ChatMemoryArgs): void {
+  switch (action) {
+    case 'store':
+      if (typeof args.content !== 'string' || args.content.length === 0) {
+        throw new Error('store requires a non-empty string "content"');
+      }
+      break;
+    case 'update':
+    case 'get':
+    case 'delete':
+      if (typeof args.id !== 'string' || args.id.length === 0) {
+        throw new Error(`${action} requires a non-empty string "id"`);
+      }
+      break;
+  }
+  if (
+    args.tags !== undefined &&
+    (!Array.isArray(args.tags) || args.tags.some((tag) => typeof tag !== 'string'))
+  ) {
+    throw new Error('"tags" must be an array of strings');
+  }
+  if (args.project !== undefined && typeof args.project !== 'string') {
+    throw new Error('"project" must be a string');
+  }
+  if (args.query !== undefined && typeof args.query !== 'string') {
+    throw new Error('"query" must be a string');
+  }
+  if (
+    args.limit !== undefined &&
+    (typeof args.limit !== 'number' || !Number.isFinite(args.limit))
+  ) {
+    throw new Error('"limit" must be a finite number');
+  }
+}
+
+/** Dispatch a validated action to the store (arguments are already validated). */
+function executeMemoryAction(
+  store: MemoryStore,
+  action: string,
+  args: ChatMemoryArgs,
+): unknown {
+  switch (action) {
+    case 'store':
+      return {
+        id: store.store({
+          content: args.content!,
+          ...(args.tags !== undefined ? { tags: args.tags } : {}),
+          ...(args.project !== undefined ? { project: args.project } : {}),
+        }),
+      };
+    case 'update':
+      return {
+        updated: store.update(args.id!, {
+          ...(args.content !== undefined ? { content: args.content } : {}),
+          ...(args.tags !== undefined ? { tags: args.tags } : {}),
+        }),
+      };
+    case 'get':
+      return store.get(args.id!);
+    case 'search':
+      return store.search({
+        ...(args.query !== undefined ? { query: args.query } : {}),
+        ...(args.tags !== undefined ? { tags: args.tags } : {}),
+        ...(args.project !== undefined ? { project: args.project } : {}),
+      });
+    case 'list':
+      return store.list({
+        ...(args.project !== undefined ? { project: args.project } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      });
+    case 'delete':
+      return { deleted: store.delete(args.id!) };
+    default:
+      throw new Error(`Unknown action: ${action}`);
+  }
+}
+
+/** Record a chat_memory_store metrics event (best-effort via deps.record). */
+function recordMemoryCall(
+  record: (event: OptimisationEvent) => void,
+  operation: string,
+  requestId: string,
+  latencyMs: number,
+  degraded: boolean,
+): void {
+  record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'memory',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'memory',
+    operation,
+    estimated_input_tokens: 0,
+    estimated_output_tokens: 0,
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded,
+    latency_ms: latencyMs,
+    request_id: requestId,
+  });
+}
+
+/**
+ * `chat_memory_store` — create/update/retrieve/delete agent memories (local
+ * SQLite, design doc §17). Fails gracefully (degraded result, never throws)
+ * when the store is unavailable; invalid arguments throw as MCP errors.
+ */
+export async function chatMemoryStoreTool(
+  args: ChatMemoryArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  const action = args.action;
+  if (typeof action !== 'string' || !MEMORY_ACTIONS.has(action)) {
+    throw new Error(
+      `chat_memory_store requires a valid "action" (one of: ${[...MEMORY_ACTIONS].join(', ')})`,
+    );
+  }
+  validateMemoryAction(action, args);
+  const d = resolveDeps(deps);
+  const ownsStore = deps.memory === undefined;
+  const store = deps.memory ?? new MemoryStore();
+  const requestId = randomUUID();
+  const start = performance.now();
+  try {
+    const result = executeMemoryAction(store, action, args);
+    recordMemoryCall(
+      d.record,
+      action,
+      requestId,
+      Math.round(performance.now() - start),
+      false,
+    );
+    return { action, result, memory_policy: MEMORY_POLICY };
+  } catch (err) {
+    recordMemoryCall(
+      d.record,
+      action,
+      requestId,
+      Math.round(performance.now() - start),
+      true,
+    );
+    return {
+      action,
+      degraded: true,
+      error: (err as Error).message,
+      memory_policy: MEMORY_POLICY,
+    };
+  } finally {
+    if (ownsStore) {
+      store.close();
+    }
+  }
 }
 
 export interface FindSymbolsArgs {
@@ -589,6 +780,50 @@ const TOOL_DEFS = [
       required: ['command'],
     },
   },
+  {
+    name: 'chat_memory_store',
+    description:
+      'Persist and retrieve agent memories in a local SQLite store. Use action ' +
+      'store/update/get/search/list/delete. Check memory before starting work and ' +
+      'store facts that are expensive to rediscover (decisions, constraints, ' +
+      'verified commands, gotchas). Never store secrets or credentials.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['store', 'update', 'get', 'search', 'list', 'delete'],
+          description: 'The memory operation to perform.',
+        },
+        content: {
+          type: 'string',
+          description: 'Memory content (required for store; optional for update).',
+        },
+        id: {
+          type: 'string',
+          description: 'Memory id (required for update/get/delete).',
+        },
+        query: {
+          type: 'string',
+          description: 'Substring to match against content (search).',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags to scope search or attach to a memory.',
+        },
+        project: {
+          type: 'string',
+          description: 'Optional project scope.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Optional max results for list.',
+        },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 export type ToolResult = {
@@ -630,6 +865,12 @@ export async function handleToolCall(
       case 'compress_command_output':
         result = await compressCommandOutputTool(
           args as unknown as CompressOutputArgs,
+          deps,
+        );
+        break;
+      case 'chat_memory_store':
+        result = await chatMemoryStoreTool(
+          args as unknown as ChatMemoryArgs,
           deps,
         );
         break;

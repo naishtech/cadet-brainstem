@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  MEMORY_POLICY,
   RESPONSE_POLICY,
+  chatMemoryStoreTool,
   classifyTool,
   compressCommandOutputTool,
   findRelevantSymbolsTool,
@@ -17,6 +19,7 @@ import {
 import type { ClassificationOutcome } from '../src/classifier';
 import type { OptimisationStrategy } from '../src/policy';
 import { MetricsStore } from '../src/metrics';
+import { MemoryStore } from '../src/memory';
 
 function makeClassification(): ClassificationOutcome {
   return {
@@ -173,6 +176,7 @@ describe('optimize_context', () => {
     expect(result.mode).toBe('entropy');
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toBe(RESPONSE_POLICY);
+    expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
@@ -232,6 +236,7 @@ describe('classify', () => {
     expect(result.strategy).toEqual(makeStrategy());
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toBe(RESPONSE_POLICY);
+    expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
@@ -412,7 +417,90 @@ describe('compress_command_output', () => {
   });
 });
 
+describe('chat_memory_store', () => {
+  it('round-trips store -> search -> get -> update -> delete and records a memory event', async () => {
+    const store = new MemoryStore(':memory:');
+    const { deps } = makeDeps({ memory: store });
+
+    const stored = await chatMemoryStoreTool(
+      {
+        action: 'store',
+        content: 'node:sqlite crashes under non-TTY git-bash',
+        tags: ['gotcha'],
+        project: 'cadet-token-saver',
+      },
+      deps,
+    );
+    expect(stored.memory_policy).toBe(MEMORY_POLICY);
+    const id = (stored.result as { id: string }).id;
+    expect(id).toBeTruthy();
+
+    const searched = await chatMemoryStoreTool(
+      { action: 'search', query: 'sqlite', tags: ['gotcha'] },
+      deps,
+    );
+    expect(searched.result as Array<Record<string, unknown>>).toHaveLength(1);
+
+    const got = await chatMemoryStoreTool({ action: 'get', id }, deps);
+    expect((got.result as { hits: number }).hits).toBe(1);
+
+    const updated = await chatMemoryStoreTool(
+      { action: 'update', id, content: 'updated' },
+      deps,
+    );
+    expect((updated.result as { updated: boolean }).updated).toBe(true);
+
+    const deleted = await chatMemoryStoreTool({ action: 'delete', id }, deps);
+    expect((deleted.result as { deleted: boolean }).deleted).toBe(true);
+
+    expect(callsByTool(metricsPath).memory).toBe(5);
+    expect(firstRowForTool(metricsPath, 'memory').operation).toBe('store');
+    expect(firstRowForTool(metricsPath, 'memory').request_id).toBeTruthy();
+    store.close();
+  });
+
+  it('degrades gracefully when the memory store is unavailable', async () => {
+    const store = new MemoryStore(':memory:');
+    store.close();
+    const { deps } = makeDeps({ memory: store });
+    const result = await chatMemoryStoreTool(
+      { action: 'store', content: 'x' },
+      deps,
+    );
+    expect(result.degraded).toBe(true);
+    expect(result.error).toBeTruthy();
+    expect(callStatsByTool(metricsPath).memory?.degraded).toBe(1);
+  });
+
+  it('rejects an invalid action', async () => {
+    const { deps } = makeDeps();
+    await expect(
+      chatMemoryStoreTool({ action: 'nope' }, deps),
+    ).rejects.toThrow('valid "action"');
+  });
+
+  it('rejects missing content for store', async () => {
+    const { deps } = makeDeps();
+    await expect(
+      chatMemoryStoreTool({ action: 'store' }, deps),
+    ).rejects.toThrow('content');
+  });
+});
+
 describe('handleToolCall', () => {
+  it('dispatches chat_memory_store and returns JSON text', async () => {
+    const store = new MemoryStore(':memory:');
+    const { deps } = makeDeps({ memory: store });
+    const res = await handleToolCall(
+      'chat_memory_store',
+      { action: 'store', content: 'hi' },
+      deps,
+    );
+    expect(res.isError).toBeUndefined();
+    expect(res.content[0]?.text).toContain('"memory_policy"');
+    store.close();
+  });
+
   it('returns JSON text for a valid call', async () => {
     const { deps } = makeDeps();
     const res = await handleToolCall(

@@ -1,11 +1,14 @@
 import { getDefaultMetricsPath, MetricsStore } from '../../metrics';
 import type { CliCommand } from '../types';
+import { askYesNo } from './init';
 
 export interface StatsDeps {
   /** Override the metrics db path (tests). */
   metricsPath?: string;
   /** Override the log sink (tests). */
   log?: (line: string) => void;
+  /** Confirmation prompt (tests). Defaults to askYesNo. */
+  ask?: (question: string) => Promise<boolean>;
 }
 
 function formatTokens(n: number): string {
@@ -95,7 +98,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     log('');
     log('Local tool calls:');
     const callStatMap = new Map(callStats.map((c) => [c.tool, c]));
-    for (const tool of ['ollama', 'rtk', 'serena', 'leanctx']) {
+    for (const tool of ['ollama', 'rtk', 'serena', 'leanctx', 'memory']) {
       const stat = callStatMap.get(tool);
       const calls = stat?.calls ?? 0;
       const degraded = stat?.degraded ?? 0;
@@ -136,11 +139,53 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
   }
 }
 
+/**
+ * `stats clear` — empty the metrics database after an explicit confirmation.
+ * Non-interactive (or declined) runs clear nothing. Truncates rows only; the
+ * database file and table remain intact.
+ */
+export async function runStatsClear(deps: StatsDeps = {}): Promise<number> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const ask = deps.ask ?? askYesNo;
+  const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
+
+  let store: MetricsStore;
+  try {
+    store = new MetricsStore(metricsPath);
+  } catch (err) {
+    log(
+      `[cadet-token-saver] stats clear: could not open metrics database at ${metricsPath}`,
+    );
+    log(`  ${(err as Error).message}`);
+    return 1;
+  }
+
+  try {
+    const count = store.count();
+    log('');
+    log(`Metrics database: ${metricsPath}`);
+    log(`Will clear ${count} recorded event(s).`);
+    const confirmed = await ask('Clear ALL metrics? This cannot be undone. [y/N]');
+    if (!confirmed) {
+      log('Aborted — no data was cleared.');
+      return 0;
+    }
+    const removed = store.clear();
+    log(`Cleared ${removed} event(s).`);
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
 export const statsCommand: CliCommand = {
   name: 'stats',
-  description: 'Show saved/processed token metrics',
-  usage: 'cadet-token-saver stats',
-  run(): Promise<number> {
+  description: 'Show saved/processed token metrics (clear to wipe them)',
+  usage: 'cadet-token-saver stats [clear]',
+  run(args: readonly string[]): Promise<number> {
+    if (args[0] === 'clear') {
+      return runStatsClear();
+    }
     return runStats();
   },
 };

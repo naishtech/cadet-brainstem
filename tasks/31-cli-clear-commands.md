@@ -4,7 +4,7 @@
 clear wipes the user's metrics/memory, so confirmation (interactive, defaulting
 to "no" when non-interactive) is mandatory.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/29-31-chat-memory-store` (pending review/commit)
 **Phase:** Phase 12
 **Source:** `docs/plans/initial_design.md` — §1 CLI, §8 Metrics, §17 Chat memory store
 
@@ -46,12 +46,12 @@ default to **no** (no-op) when the terminal is not interactive.
 
 ## Acceptance Criteria
 
-- [ ] `cadet-token-saver stats clear` prompts and (on "y") empties metrics.
-- [ ] `cadet-token-saver memory clear` prompts and (on "y") empties memory.
-- [ ] Non-interactive runs default to "no" and print a message (no data loss).
-- [ ] Typing "n" / anything but confirm leaves data intact.
-- [ ] Reports how many rows were cleared.
-- [ ] `MetricsStore.clear()` / `MemoryStore.clear()` return the removed count.
-- [ ] Tests: confirmation flow (mock the prompt), non-interactive default,
+- [x] `cadet-token-saver stats clear` prompts and (on "y") empties metrics.
+- [x] `cadet-token-saver memory clear` prompts and (on "y") empties memory.
+- [x] Non-interactive runs default to "no" and print a message (no data loss).
+- [x] Typing "n" / anything but confirm leaves data intact.
+- [x] Reports how many rows were cleared.
+- [x] `MetricsStore.clear()` / `MemoryStore.clear()` return the removed count.
+- [x] Tests: confirmation flow (mock the prompt), non-interactive default,
       and actual clearing round-trips in `test/stats-command.test.ts` +
       `test/memory.test.ts`.

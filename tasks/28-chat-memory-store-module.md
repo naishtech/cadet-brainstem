@@ -4,7 +4,7 @@
 can be stored, searched and updated locally and cheaply before wiring the MCP
 endpoint.
 
-**Status:** Not started
+**Status:** Implemented (pending review/commit)
 **Phase:** Phase 12
 **Source:** `docs/plans/initial_design.md` — §17 Chat memory store
 
@@ -40,9 +40,9 @@ to rediscover.
 
 ## Acceptance Criteria
 
-- [ ] `memory.db` is created on first use in the metrics directory.
-- [ ] store → get → update → search → delete round-trip correctly (unit tested).
-- [ ] search matches content substrings and scopes by tags/project.
-- [ ] `get` bumps the hit counter / last-accessed timestamp.
-- [ ] `CADET_TOKEN_SAVER_MEMORY` override works.
-- [ ] Tests in `test/memory.test.ts`.
+- [x] `memory.db` is created on first use in the metrics directory.
+- [x] store → get → update → search → delete round-trip correctly (unit tested).
+- [x] search matches content substrings and scopes by tags/project.
+- [x] `get` bumps the hit counter / last-accessed timestamp.
+- [x] `CADET_TOKEN_SAVER_MEMORY` override works.
+- [x] Tests in `test/memory.test.ts`.

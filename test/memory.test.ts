@@ -1,0 +1,245 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore, getDefaultMemoryPath } from '../src/memory/index';
+import { runMemoryClear } from '../src/cli/commands/memory';
+
+const tempDirs: string[] = [];
+
+function makeTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'to-memory-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+beforeEach(() => {
+  delete process.env.CADET_TOKEN_SAVER_MEMORY;
+});
+
+afterEach(() => {
+  delete process.env.CADET_TOKEN_SAVER_MEMORY;
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+describe('getDefaultMemoryPath', () => {
+  it('returns a stable default path', () => {
+    expect(getDefaultMemoryPath()).toMatch(/\.cadet-token-saver[/\\]memory\.db$/);
+  });
+
+  it('honours the CADET_TOKEN_SAVER_MEMORY override', () => {
+    process.env.CADET_TOKEN_SAVER_MEMORY = 'C:/custom/memory.db';
+    expect(getDefaultMemoryPath()).toBe('C:/custom/memory.db');
+  });
+});
+
+describe('MemoryStore (in-memory)', () => {
+  let store: MemoryStore;
+
+  beforeEach(() => {
+    store = new MemoryStore(':memory:');
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it('starts empty', () => {
+    expect(store.count()).toBe(0);
+    expect(store.list()).toEqual([]);
+    expect(store.search()).toEqual([]);
+    expect(store.get('missing')).toBeNull();
+  });
+
+  it('round-trips store -> get -> update -> delete', () => {
+    const id = store.store({
+      content: 'npm needs a shell on Windows',
+      tags: ['windows', 'npm'],
+      project: 'cadet-token-saver',
+    });
+    expect(id).toBeTruthy();
+
+    const stored = store.get(id);
+    expect(stored).not.toBeNull();
+    expect(stored!.content).toBe('npm needs a shell on Windows');
+    expect(stored!.tags).toEqual(['windows', 'npm']);
+    expect(stored!.project).toBe('cadet-token-saver');
+    expect(stored!.hits).toBe(1);
+    expect(stored!.lastAccessedAt).not.toBeNull();
+
+    expect(store.update(id, { content: 'updated content' })).toBe(true);
+    expect(store.update(id, { tags: ['updated'] })).toBe(true);
+
+    const updated = store.get(id);
+    expect(updated!.content).toBe('updated content');
+    expect(updated!.tags).toEqual(['updated']);
+    expect(updated!.hits).toBe(2);
+
+    expect(store.delete(id)).toBe(true);
+    expect(store.delete(id)).toBe(false);
+    expect(store.count()).toBe(0);
+  });
+
+  it('get bumps hits and last-accessed on each access', () => {
+    const id = store.store({ content: 'first' });
+    const first = store.get(id);
+    const second = store.get(id);
+    expect(first!.hits).toBe(1);
+    expect(second!.hits).toBe(2);
+    expect(second!.lastAccessedAt).not.toBeNull();
+  });
+
+  it('update returns false for a missing id', () => {
+    expect(store.update('missing', { content: 'x' })).toBe(false);
+    expect(store.update('missing', {})).toBe(false);
+  });
+
+  it('search matches content substrings case-insensitively', () => {
+    store.store({ content: 'Docker Desktop must be started' });
+    store.store({ content: 'Unrelated note' });
+    expect(store.search({ query: 'docker' })).toHaveLength(1);
+    expect(store.search({ query: 'desktop' })[0]!.content).toBe(
+      'Docker Desktop must be started',
+    );
+  });
+
+  it('search scopes by project', () => {
+    store.store({ content: 'a', project: 'proj-a' });
+    store.store({ content: 'b', project: 'proj-b' });
+    store.store({ content: 'c' });
+    expect(store.search({ project: 'proj-a' })).toHaveLength(1);
+    expect(store.search({ project: 'proj-a' })[0]!.content).toBe('a');
+  });
+
+  it('search scopes by tags (all requested tags must match)', () => {
+    store.store({ content: 'a', tags: ['git', 'windows'] });
+    store.store({ content: 'b', tags: ['git'] });
+    store.store({ content: 'c', tags: ['windows'] });
+    expect(store.search({ tags: ['git'] })).toHaveLength(2);
+    expect(store.search({ tags: ['git', 'windows'] })).toHaveLength(1);
+    expect(store.search({ tags: ['git', 'windows'] })[0]!.content).toBe('a');
+  });
+
+  it('list returns most recently updated first', () => {
+    const a = store.store({ content: 'a' });
+    const b = store.store({ content: 'b' });
+    store.update(a, { content: 'a-updated' });
+    const list = store.list();
+    expect(list.map((m) => m.id)).toEqual([a, b]);
+  });
+
+  it('list scopes by project and honours limit', () => {
+    store.store({ content: 'a', project: 'p' });
+    store.store({ content: 'b', project: 'p' });
+    store.store({ content: 'c', project: 'q' });
+    expect(store.list({ project: 'p' })).toHaveLength(2);
+    expect(store.list({ limit: 2 })).toHaveLength(2);
+  });
+
+  it('clear removes all memories and returns the count removed', () => {
+    store.store({ content: 'a' });
+    store.store({ content: 'b' });
+    expect(store.clear()).toBe(2);
+    expect(store.count()).toBe(0);
+    expect(store.clear()).toBe(0);
+  });
+});
+
+describe('MemoryStore (file-backed)', () => {
+  it('creates the database file on first use', () => {
+    const dir = makeTempDir();
+    const dbPath = join(dir, 'memory.db');
+    const store = new MemoryStore(dbPath);
+    store.store({ content: 'persisted' });
+    store.close();
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(1);
+    expect(reopened.search({ query: 'persisted' })).toHaveLength(1);
+    reopened.close();
+  });
+
+  it('honours the CADET_TOKEN_SAVER_MEMORY override end to end', () => {
+    const dir = makeTempDir();
+    const dbPath = join(dir, 'memory.db');
+    process.env.CADET_TOKEN_SAVER_MEMORY = dbPath;
+    const store = new MemoryStore();
+    store.store({ content: 'via-env' });
+    store.close();
+    const reopened = new MemoryStore(getDefaultMemoryPath());
+    expect(reopened.count()).toBe(1);
+    reopened.close();
+  });
+});
+
+describe('runMemoryClear', () => {
+  function seed(dbPath: string, n: number): void {
+    const store = new MemoryStore(dbPath);
+    for (let i = 0; i < n; i += 1) {
+      store.store({ content: `memory ${i}` });
+    }
+    store.close();
+  }
+
+  it('clears memories after confirmation and reports the count', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    seed(dbPath, 2);
+    const lines: string[] = [];
+
+    const exit = await runMemoryClear({
+      memoryPath: dbPath,
+      ask: async () => true,
+      log: (line) => lines.push(line),
+    });
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Cleared 2 memory entries.');
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(0);
+    reopened.close();
+  });
+
+  it('leaves memories intact when confirmation is declined', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    seed(dbPath, 2);
+    const lines: string[] = [];
+
+    const exit = await runMemoryClear({
+      memoryPath: dbPath,
+      ask: async () => false,
+      log: (line) => lines.push(line),
+    });
+
+    expect(exit).toBe(0);
+    expect(lines.join('\n')).toContain('Aborted');
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(2);
+    reopened.close();
+  });
+
+  it('defaults to no (no data loss) when non-interactive', async () => {
+    const dbPath = join(makeTempDir(), 'memory.db');
+    seed(dbPath, 2);
+    const lines: string[] = [];
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      get: () => false,
+    });
+    try {
+      const exit = await runMemoryClear({
+        memoryPath: dbPath,
+        log: (line) => lines.push(line),
+      });
+      expect(exit).toBe(0);
+    } finally {
+      delete (process.stdin as { isTTY?: boolean }).isTTY;
+      consoleSpy.mockRestore();
+    }
+    expect(lines.join('\n')).toContain('Aborted');
+    const reopened = new MemoryStore(dbPath);
+    expect(reopened.count()).toBe(2);
+    reopened.close();
+  });
+});
