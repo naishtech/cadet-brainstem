@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "cadet-token-saver": {
+      "type": "stdio",
+      "command": "cadet-token-saver",
+      "args": ["mcp"]
+    }
+  }
+}

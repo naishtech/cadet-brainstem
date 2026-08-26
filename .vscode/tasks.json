@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cadet: init",
+      "type": "shell",
+      "command": "cadet-token-saver init",
+      "problemMatcher": []
+    },
+    {
+      "label": "cadet: doctor",
+      "type": "shell",
+      "command": "cadet-token-saver doctor",
+      "problemMatcher": []
+    },
+    {
+      "label": "cadet: stats",
+      "type": "shell",
+      "command": "cadet-token-saver stats",
+      "problemMatcher": []
+    },
+    {
+      "label": "cadet: wrap (git status)",
+      "type": "shell",
+      "command": "cadet-token-saver wrap -- git status",
+      "problemMatcher": []
+    }
+  ]
+}
