@@ -96,6 +96,24 @@ export async function optimizeContextTool(
   const d = resolveDeps(deps);
   const outcome = await d.classify(args.task);
   const strategy = d.getStrategy(outcome.classification);
+  // Record the local LLM (classifier) call — only when it actually ran, so the
+  // "local calls" counter reflects real Ollama usage (degraded = not reached).
+  if (!outcome.degraded) {
+    d.record({
+      timestamp: new Date().toISOString(),
+      session_id: MCP_SESSION_ID,
+      task_type: outcome.classification.task,
+      complexity: outcome.classification.complexity,
+      risk: outcome.classification.risk,
+      tool: 'ollama',
+      operation: 'classify',
+      estimated_input_tokens: Math.round(Buffer.byteLength(args.task) / 4) + 50,
+      estimated_output_tokens: 25,
+      estimated_tokens_saved: 0,
+      compression_ratio: null,
+      optimisation_strategy: null,
+    });
+  }
   const result = await d.leanctx.optimize({
     target: args.target,
     mode: strategy.leanctx_mode,

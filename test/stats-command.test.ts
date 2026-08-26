@@ -109,6 +109,12 @@ describe('runStats', () => {
     expect(out).toContain('debug');
     expect(out).toContain('12,000 tokens');
 
+    // Local tool calls: no ollama seeded, one each for leanctx/rtk/serena.
+    expect(out).toContain('Local tool calls:');
+    expect(out).toContain('ollama');
+    expect(out).toContain('0 call(s)');
+    expect(out).toContain('1 call(s)');
+
     // Sessions: sess-1 (12000), sess-2 (1500).
     expect(out).toContain('Sessions:');
     expect(out).toContain('sess-1');

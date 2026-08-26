@@ -98,6 +98,13 @@ function savingsByTool(path: string): Record<string, number> {
   return Object.fromEntries(rows.map((r) => [r.key, r.estimatedTokensSaved]));
 }
 
+function callsByTool(path: string): Record<string, number> {
+  const store = new MetricsStore(path);
+  const rows = store.getCallsByTool();
+  store.close();
+  return Object.fromEntries(rows.map((r) => [r.tool, r.calls]));
+}
+
 describe('optimize_context', () => {
   it('classifies, compiles via LeanCTX with the policy mode, and records metrics', async () => {
     const { deps, leanctxOptimize } = makeDeps();
@@ -114,6 +121,28 @@ describe('optimize_context', () => {
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
     expect(savingsByTool(metricsPath).leanctx).toBe(19);
+    expect(callsByTool(metricsPath).ollama).toBe(1);
+    expect(callsByTool(metricsPath).leanctx).toBe(1);
+  });
+
+  it('does not record an ollama call when classification degrades', async () => {
+    const { deps } = makeDeps();
+    const degradedDeps = {
+      ...deps,
+      classify: vi.fn(async () => ({
+        classification: makeClassification().classification,
+        degraded: true,
+        reason: 'ollama unreachable',
+      })),
+    };
+
+    await optimizeContextTool(
+      { task: 'debug the loader', target: 'src/foo.ts' },
+      degradedDeps,
+    );
+
+    expect(callsByTool(metricsPath).ollama).toBeUndefined();
+    expect(callsByTool(metricsPath).leanctx).toBe(1);
   });
 
   it('rejects empty task/target', async () => {

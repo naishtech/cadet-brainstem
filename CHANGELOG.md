@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.3] — 2026-08-26
+
+### Added
+
+- `stats` now shows a **Local tool calls** section listing the number of
+  recorded calls per tool (`ollama`, `rtk`, `serena`, `leanctx`; missing tools
+  default to 0).
+- The local context-LLM (classifier) call made by the `optimize_context` MCP
+  tool is now recorded as an `ollama` event, so it shows up in the per-tool
+  call counts — but only when the classifier actually ran (a degraded,
+  fallback classification is not counted as a local LLM call).
+
 ## [0.1.2] — 2026-08-26
 
 ### Added

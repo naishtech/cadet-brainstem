@@ -81,6 +81,7 @@ describe('MetricsStore (in-memory)', () => {
     expect(store.getSavingsByTaskType()).toEqual([]);
     expect(store.getAverageCompressionRatio()).toBeNull();
     expect(store.getMostExpensiveOperations()).toEqual([]);
+    expect(store.getCallsByTool()).toEqual([]);
   });
 
   it('records events and totals them', () => {
@@ -102,6 +103,16 @@ describe('MetricsStore (in-memory)', () => {
     expect(store.getSavingsByTool()).toEqual([
       { key: 'leanctx', estimatedTokensSaved: 300 },
       { key: 'rtk', estimatedTokensSaved: 150 },
+    ]);
+  });
+
+  it('counts calls by tool', () => {
+    store.record(makeEvent({ tool: 'rtk' }));
+    store.record(makeEvent({ tool: 'rtk' }));
+    store.record(makeEvent({ tool: 'ollama' }));
+    expect(store.getCallsByTool()).toEqual([
+      { tool: 'ollama', calls: 1 },
+      { tool: 'rtk', calls: 2 },
     ]);
   });
 

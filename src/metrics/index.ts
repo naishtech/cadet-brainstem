@@ -1,5 +1,6 @@
 export { MetricsStore, getDefaultMetricsPath } from './store';
 export type {
+  GroupedCalls,
   GroupedSavings,
   MostExpensiveOperation,
   OptimisationEvent,

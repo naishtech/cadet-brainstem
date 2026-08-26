@@ -46,6 +46,11 @@ export interface SessionSummary {
   estimatedTokensSaved: number;
 }
 
+export interface GroupedCalls {
+  tool: string;
+  calls: number;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS optimisation_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,6 +206,22 @@ export class MetricsStore {
       session_id: String(row.session_id),
       eventCount: Number(row.eventCount),
       estimatedTokensSaved: Number(row.estimatedTokensSaved),
+    }));
+  }
+
+  /** Number of recorded events per tool (e.g. ollama, rtk, serena, leanctx). */
+  getCallsByTool(): GroupedCalls[] {
+    const rows = this.db
+      .prepare(
+        `SELECT tool, COUNT(*) AS calls
+         FROM optimisation_events
+         GROUP BY tool
+         ORDER BY tool`,
+      )
+      .all() as { tool: string; calls: number }[];
+    return rows.map((row) => ({
+      tool: String(row.tool),
+      calls: Number(row.calls),
     }));
   }
 
