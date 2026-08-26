@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.10] — 2026-08-26
+
+### Added
+
+- **Intelligence layer** — `request_id` threading through every tool +
+  `assess_context` MCP tool: rebuild the context inventory from `MetricsStore`
+  by `request_id` and ask the local LLM for a `continue`/`stop` verdict +
+  next `tool_plan` (stateless controller step).
+- **Project-scoped memory** — memories default to a cwd-derived project id
+  (`resolveProjectId`: `package.json` name → git remote → `<basename>-<hash>`),
+  with `__global__` for cross-project facts; `memory` CLI gains
+  `--project` / `--all`.
+- `postinstall` prints the installed version.
+
+### Fixed
+
+- Classifier no longer discards a whole classification when the local model
+  emits an invalid `tool_plan` tool name or `response_policy` key (sanitised).
+
 ## [0.1.9] — 2026-08-26
 
 ### Added
