@@ -49,6 +49,21 @@ export const toolPlanSchema = z.object({
 });
 export type ToolPlan = z.infer<typeof toolPlanSchema>;
 
+/** Controller verdict: gather more context, or the signal is sufficient. */
+export const verdictSchema = z.enum(['continue', 'stop']);
+export type Verdict = z.infer<typeof verdictSchema>;
+
+/**
+ * Output of the context-assessment step (`assess_context`): decide whether the
+ * gathered context is sufficient and, if not, what to gather next.
+ */
+export const contextAssessmentSchema = z.object({
+  verdict: verdictSchema,
+  tool_plan: toolPlanSchema,
+  reason: z.string(),
+});
+export type ContextAssessment = z.infer<typeof contextAssessmentSchema>;
+
 /** Response directives the agent can be told to follow (split response policy). */
 export const RESPONSE_POLICY_KEYS = [
   'no_filler',
@@ -158,6 +173,23 @@ export function parseClassification(raw: unknown): Classification {
     tool_plan: result.data.tool_plan ?? DEFAULT_TOOL_PLAN,
     response_policy: result.data.response_policy ?? DEFAULT_RESPONSE_POLICY_KEYS,
   };
+}
+
+/** Parse and validate a context assessment (JSON string or object). */
+export function parseContextAssessment(raw: unknown): ContextAssessment {
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      parsed = raw;
+    }
+  }
+  const result = contextAssessmentSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ClassificationValidationError(formatIssues(result.error));
+  }
+  return result.data;
 }
 
 function formatIssues(error: z.ZodError): string {

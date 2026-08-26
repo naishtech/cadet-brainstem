@@ -11,6 +11,8 @@ import { classifyWithFallback, type ClassificationOutcome } from '../classifier'
 import {
   RESPONSE_POLICY_DIRECTIVES,
   TOOL_DESCRIPTIONS,
+  assessWithFallback,
+  type ContextAssessmentOutcome,
   type ResponsePolicyKey,
   type ToolName,
   type ToolPlan,
@@ -25,6 +27,7 @@ import {
   getDefaultMetricsPath,
   MetricsStore,
   type OptimisationEvent,
+  type RequestEvent,
 } from '../metrics';
 import { MemoryStore } from '../memory';
 
@@ -102,6 +105,11 @@ export interface SerenaTools {
 export interface McpDeps {
   classify?: (taskText: string) => Promise<ClassificationOutcome>;
   getStrategy?: (classification: Classification) => OptimisationStrategy;
+  /** Context assessment (assess_context); defaults to assessWithFallback. */
+  assess?: (
+    taskText: string,
+    inventoryText: string,
+  ) => Promise<ContextAssessmentOutcome>;
   leanctx?: Pick<LeanCtxAdapter, 'optimize'>;
   rtk?: Pick<RtkAdapter, 'optimize'>;
   serena?: Partial<SerenaTools>;
@@ -115,6 +123,10 @@ export interface McpDeps {
 interface ResolvedDeps {
   classify: (taskText: string) => Promise<ClassificationOutcome>;
   getStrategy: (classification: Classification) => OptimisationStrategy;
+  assess: (
+    taskText: string,
+    inventoryText: string,
+  ) => Promise<ContextAssessmentOutcome>;
   leanctx: Pick<LeanCtxAdapter, 'optimize'>;
   rtk: Pick<RtkAdapter, 'optimize'>;
   serena: Partial<SerenaTools>;
@@ -145,6 +157,7 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
     getStrategy:
       deps.getStrategy ??
       ((classification) => new PolicyEngine().getStrategy(classification)),
+    assess: deps.assess ?? assessWithFallback,
     leanctx: deps.leanctx ?? new LeanCtxAdapter(),
     rtk: deps.rtk ?? new RtkAdapter(),
     serena: deps.serena ?? new SerenaAdapter(),
@@ -156,10 +169,16 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
 
 // ── Tool handlers (pure, unit-testable) ───────────────────────────────────
 
+/** Reuse a caller-supplied request id, or mint one. */
+function resolveRequestId(provided: string | undefined): string {
+  return provided !== undefined && provided.length > 0 ? provided : randomUUID();
+}
+
 export interface OptimizeContextArgs {
   task: string;
   target: string;
   lines?: string;
+  request_id?: string;
 }
 
 /**
@@ -205,7 +224,7 @@ export async function optimizeContextTool(
     throw new Error('optimize_context requires a non-empty string "target"');
   }
   const d = resolveDeps(deps);
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
@@ -244,6 +263,7 @@ export async function optimizeContextTool(
     returnedSize: result.returnedSize,
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
+    request_id: requestId,
     classification: coreClassification(outcome.classification),
     strategy,
     tool_plan: compileToolPlan(outcome.classification.tool_plan),
@@ -254,6 +274,7 @@ export async function optimizeContextTool(
 
 export interface ClassifyArgs {
   task: string;
+  request_id?: string;
 }
 
 /** `classify` — classify a task with the local LLM, pick the strategy. */
@@ -265,7 +286,7 @@ export async function classifyTool(
     throw new Error('classify requires a non-empty string "task"');
   }
   const d = resolveDeps(deps);
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
@@ -278,6 +299,7 @@ export async function classifyTool(
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
     memory_policy: MEMORY_POLICY,
     degraded: outcome.degraded,
+    request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };
 }
@@ -290,6 +312,7 @@ export interface ChatMemoryArgs {
   tags?: string[];
   project?: string;
   limit?: number;
+  request_id?: string;
 }
 
 const MEMORY_ACTIONS = new Set([
@@ -425,7 +448,7 @@ export async function chatMemoryStoreTool(
   const d = resolveDeps(deps);
   const ownsStore = deps.memory === undefined;
   const store = deps.memory ?? new MemoryStore();
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const start = performance.now();
   try {
     const result = executeMemoryAction(store, action, args);
@@ -436,7 +459,7 @@ export async function chatMemoryStoreTool(
       Math.round(performance.now() - start),
       false,
     );
-    return { action, result, memory_policy: MEMORY_POLICY };
+    return { action, result, request_id: requestId, memory_policy: MEMORY_POLICY };
   } catch (err) {
     recordMemoryCall(
       d.record,
@@ -449,6 +472,7 @@ export async function chatMemoryStoreTool(
       action,
       degraded: true,
       error: (err as Error).message,
+      request_id: requestId,
       memory_policy: MEMORY_POLICY,
     };
   } finally {
@@ -462,6 +486,7 @@ export interface FindSymbolsArgs {
   query: string;
   cwd: string;
   project?: string;
+  request_id?: string;
 }
 
 /** `find_relevant_symbols` — Serena semantic search for targeted context. */
@@ -479,7 +504,7 @@ export async function findRelevantSymbolsTool(
   if (d.serena.search === undefined) {
     return { degraded: true, error: 'serena search unavailable' };
   }
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const searchStart = performance.now();
   const result = await d.serena.search({
     query: args.query,
@@ -513,6 +538,7 @@ export async function findRelevantSymbolsTool(
     files: result.files,
     rawText: result.rawText,
     degraded: result.degraded,
+    request_id: requestId,
   };
 }
 
@@ -520,6 +546,7 @@ export interface CompressOutputArgs {
   command: string;
   cwd?: string;
   shell?: string;
+  request_id?: string;
 }
 
 export interface SerenaCallArgs {
@@ -527,6 +554,7 @@ export interface SerenaCallArgs {
   arguments?: Record<string, unknown>;
   cwd?: string;
   project?: string;
+  request_id?: string;
 }
 
 /** `serena_call` — forward any call to any Serena tool (generic passthrough). */
@@ -541,7 +569,7 @@ export async function serenaCallTool(
   if (d.serena.callTool === undefined) {
     return { degraded: true, error: 'serena passthrough unavailable' };
   }
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const callStart = performance.now();
   const result = await d.serena.callTool({
     tool: args.tool,
@@ -574,12 +602,14 @@ export async function serenaCallTool(
     tool: result.tool,
     result: result.result,
     degraded: result.degraded,
+    request_id: requestId,
   };
 }
 
 export interface SerenaListArgs {
   cwd?: string;
   project?: string;
+  request_id?: string;
 }
 
 /** `serena_list_tools` — list what Serena currently exposes (discovery). */
@@ -591,7 +621,7 @@ export async function serenaListToolsTool(
   if (d.serena.listTools === undefined) {
     return { tools: [], degraded: true, error: 'serena passthrough unavailable' };
   }
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const callStart = performance.now();
   const result = await d.serena.listTools({
     ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
@@ -621,6 +651,7 @@ export async function serenaListToolsTool(
   return {
     tools: result.tools.map((t) => t.name),
     degraded: result.degraded,
+    request_id: requestId,
   };
 }
 
@@ -641,7 +672,7 @@ export async function compressCommandOutputTool(
     );
   }
   const d = resolveDeps(deps);
-  const requestId = randomUUID();
+  const requestId = resolveRequestId(args.request_id);
   const rtkStart = performance.now();
   const result = await d.rtk.optimize({
     command: args.command,
@@ -682,7 +713,102 @@ export async function compressCommandOutputTool(
     estimatedTokensAfter: result.estimatedTokensAfter,
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
+    request_id: requestId,
     ...(note !== undefined ? { note } : {}),
+  };
+}
+
+export interface AssessContextArgs {
+  request_id: string;
+  task?: string;
+}
+
+/** Compact inventory text fed to the controller (≤ a few hundred tokens). */
+function formatInventory(
+  task: string,
+  requestId: string,
+  events: RequestEvent[],
+): string {
+  if (events.length === 0) {
+    return `Task: ${task}\nrequest ${requestId}: nothing gathered yet.`;
+  }
+  const lines = events.map((event) => {
+    const detail =
+      event.symbolsFound !== null
+        ? `${event.symbolsFound} symbols, ${event.filesFound ?? 0} files`
+        : `${event.estimatedInputTokens}->${event.estimatedOutputTokens} tokens`;
+    return `- ${event.operation} (${event.tool})${event.degraded ? ' [degraded]' : ''}: ${detail}`;
+  });
+  return `Task: ${task}\nrequest ${requestId} gathered:\n${lines.join('\n')}`;
+}
+
+function summarizeEvent(event: RequestEvent): Record<string, unknown> {
+  return {
+    tool: event.tool,
+    operation: event.operation,
+    estimatedInputTokens: event.estimatedInputTokens,
+    estimatedOutputTokens: event.estimatedOutputTokens,
+    symbolsFound: event.symbolsFound,
+    filesFound: event.filesFound,
+    degraded: event.degraded,
+  };
+}
+
+/**
+ * `assess_context` — stateless controller step. Rebuilds the context inventory
+ * for a request_id from MetricsStore, then asks the local LLM whether the
+ * gathered signal is sufficient (verdict) and what to gather next (tool_plan).
+ */
+export async function assessContextTool(
+  args: AssessContextArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.request_id !== 'string' || args.request_id.length === 0) {
+    throw new Error('assess_context requires a non-empty string "request_id"');
+  }
+  const d = resolveDeps(deps);
+  const requestId = args.request_id;
+  const task = args.task ?? 'the current task';
+
+  let inventory: RequestEvent[] = [];
+  try {
+    const store = new MetricsStore(d.metricsPath);
+    inventory = store.getEventsByRequestId(requestId);
+    store.close();
+  } catch {
+    // metrics unavailable — proceed with an empty inventory
+  }
+
+  const inventoryText = formatInventory(task, requestId, inventory);
+  const start = performance.now();
+  const outcome = await d.assess(task, inventoryText);
+  const latencyMs = Math.round(performance.now() - start);
+
+  d.record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'investigation',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'ollama',
+    operation: 'assess_context',
+    estimated_input_tokens: Math.round(Buffer.byteLength(inventoryText) / 4) + 50,
+    estimated_output_tokens: 25,
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded: outcome.degraded,
+    latency_ms: latencyMs,
+    request_id: requestId,
+  });
+
+  return {
+    request_id: requestId,
+    verdict: outcome.assessment.verdict,
+    tool_plan: compileToolPlan(outcome.assessment.tool_plan),
+    reason: outcome.assessment.reason,
+    degraded: outcome.degraded,
+    inventory: inventory.map(summarizeEvent),
   };
 }
 
@@ -702,6 +828,10 @@ const TOOL_DEFS = [
         task: {
           type: 'string',
           description: 'The user request / task to classify.',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
         },
       },
       required: ['task'],
@@ -727,6 +857,10 @@ const TOOL_DEFS = [
           type: 'string',
           description: 'Optional line range for the lines mode, e.g. "10-50".',
         },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
+        },
       },
       required: ['task', 'target'],
     },
@@ -750,6 +884,10 @@ const TOOL_DEFS = [
         project: {
           type: 'string',
           description: 'Optional Serena project name/path (defaults to cwd).',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
         },
       },
       required: ['query', 'cwd'],
@@ -781,6 +919,10 @@ const TOOL_DEFS = [
           type: 'string',
           description: 'Optional Serena project name/path (defaults to cwd).',
         },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
+        },
       },
       required: ['tool'],
     },
@@ -800,6 +942,10 @@ const TOOL_DEFS = [
         project: {
           type: 'string',
           description: 'Optional Serena project name/path (defaults to cwd).',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
         },
       },
     },
@@ -825,6 +971,10 @@ const TOOL_DEFS = [
           type: 'string',
           description:
             'Shell to run the command in (defaults to the platform shell, cmd.exe on Windows; pass "bash" for git-bash).',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
         },
       },
       required: ['command'],
@@ -870,8 +1020,31 @@ const TOOL_DEFS = [
           type: 'number',
           description: 'Optional max results for list.',
         },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
+        },
       },
       required: ['action'],
+    },
+  },
+  {
+    name: 'assess_context',
+    description:
+      'Assess whether the context gathered so far for a request_id is sufficient, using the local LLM. Returns verdict (continue|stop), a next tool_plan, and a reason. Call between context-gathering tools to close the loop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        request_id: {
+          type: 'string',
+          description: 'The shared request id returned by classify / previous tool calls.',
+        },
+        task: {
+          type: 'string',
+          description: 'Optional task description (defaults to a generic one).',
+        },
+      },
+      required: ['request_id'],
     },
   },
 ];
@@ -921,6 +1094,12 @@ export async function handleToolCall(
       case 'chat_memory_store':
         result = await chatMemoryStoreTool(
           args as unknown as ChatMemoryArgs,
+          deps,
+        );
+        break;
+      case 'assess_context':
+        result = await assessContextTool(
+          args as unknown as AssessContextArgs,
           deps,
         );
         break;

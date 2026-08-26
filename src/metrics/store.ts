@@ -71,6 +71,17 @@ export interface CallStats {
   avgLatencyMs: number | null;
 }
 
+export interface RequestEvent {
+  tool: string;
+  operation: string;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  symbolsFound: number | null;
+  filesFound: number | null;
+  degraded: boolean;
+  timestamp: string;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS optimisation_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,6 +353,35 @@ export class MetricsStore {
 
   close(): void {
     this.db.close();
+  }
+
+  /** All recorded events for one request id, oldest first (assess_context inventory). */
+  getEventsByRequestId(requestId: string): RequestEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT tool, operation, estimated_input_tokens, estimated_output_tokens,
+                symbols_found, files_found, degraded, timestamp
+         FROM optimisation_events
+         WHERE request_id = ?
+         ORDER BY timestamp ASC`,
+      )
+      .all(requestId) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      tool: String(row.tool),
+      operation: String(row.operation),
+      estimatedInputTokens: Number(row.estimated_input_tokens),
+      estimatedOutputTokens: Number(row.estimated_output_tokens),
+      symbolsFound:
+        row.symbols_found === null || row.symbols_found === undefined
+          ? null
+          : Number(row.symbols_found),
+      filesFound:
+        row.files_found === null || row.files_found === undefined
+          ? null
+          : Number(row.files_found),
+      degraded: Number(row.degraded) === 1,
+      timestamp: String(row.timestamp),
+    }));
   }
 
   /** Delete all rows from the optimisation_events table; returns rows removed. */

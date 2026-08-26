@@ -50,6 +50,9 @@ tool for every user request.
   Serena tools work automatically — no hardcoded list.
 - If you need noisy command output as context, call `compress_command_output`
   with the command instead of pasting raw terminal output.
+- Thread one `request_id` through the tools in a logical flow (reuse the id
+  `classify` returns). After gathering context, call `assess_context` with
+  that id to ask whether the signal is sufficient and what to gather next.
 
 ## Command output (wrapper)
 

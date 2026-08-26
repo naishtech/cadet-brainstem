@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_POLICY,
+  assessContextTool,
   chatMemoryStoreTool,
   classifyTool,
   compressCommandOutputTool,
@@ -19,6 +20,7 @@ import {
   RESPONSE_POLICY_DIRECTIVES,
   TOOL_DESCRIPTIONS,
   type ClassificationOutcome,
+  type ContextAssessmentOutcome,
 } from '../src/classifier';
 import type { OptimisationStrategy } from '../src/policy';
 import { MetricsStore } from '../src/metrics';
@@ -300,6 +302,24 @@ describe('classify', () => {
     expect(callStatsByTool(metricsPath).ollama?.calls).toBe(0);
   });
 
+  it('returns and stamps a caller-supplied request_id', async () => {
+    const { deps } = makeDeps();
+    const result = await classifyTool(
+      { task: 'debug the loader', request_id: 'rid-42' },
+      deps,
+    );
+    expect(result.request_id).toBe('rid-42');
+    expect(firstRowForTool(metricsPath, 'ollama').request_id).toBe('rid-42');
+  });
+
+  it('generates a request_id when none is supplied', async () => {
+    const { deps } = makeDeps();
+    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    const requestId = result.request_id as string;
+    expect(typeof requestId).toBe('string');
+    expect(requestId.length).toBeGreaterThan(0);
+  });
+
   it('rejects an empty task', async () => {
     const { deps } = makeDeps();
     await expect(classifyTool({ task: '' }, deps)).rejects.toThrow('task');
@@ -523,6 +543,87 @@ describe('chat_memory_store', () => {
     await expect(
       chatMemoryStoreTool({ action: 'store' }, deps),
     ).rejects.toThrow('content');
+  });
+});
+
+describe('assess_context', () => {
+  it('rebuilds the inventory and returns the controller verdict', async () => {
+    const { deps } = makeDeps({
+      assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
+        assessment: {
+          verdict: 'continue',
+          tool_plan: { use: ['find_relevant_symbols'], skip: [] },
+          reason: 'need the symbol definitions',
+        },
+        degraded: false,
+      })),
+    });
+    const store = new MetricsStore(metricsPath);
+    store.record({
+      timestamp: new Date().toISOString(),
+      session_id: 'mcp',
+      task_type: 'debug',
+      complexity: 'medium',
+      risk: 'medium',
+      tool: 'serena',
+      operation: 'find_relevant_symbols',
+      estimated_input_tokens: 100,
+      estimated_output_tokens: 50,
+      estimated_tokens_saved: 0,
+      compression_ratio: 1,
+      optimisation_strategy: null,
+      symbols_found: 3,
+      files_found: 1,
+      degraded: false,
+      request_id: 'rid-7',
+    });
+    store.close();
+
+    const result = await assessContextTool(
+      { request_id: 'rid-7', task: 'fix the loader' },
+      deps,
+    );
+
+    expect(result.verdict).toBe('continue');
+    expect(result.tool_plan).toEqual({
+      use: [
+        {
+          name: 'find_relevant_symbols',
+          description: TOOL_DESCRIPTIONS.find_relevant_symbols,
+        },
+      ],
+      skip: [],
+    });
+    expect(result.reason).toBe('need the symbol definitions');
+    expect(result.degraded).toBe(false);
+    expect(result.inventory).toHaveLength(1);
+    const row = firstRowForTool(metricsPath, 'ollama');
+    expect(row.operation).toBe('assess_context');
+    expect(row.request_id).toBe('rid-7');
+  });
+
+  it('degrades to stop when the controller is unavailable', async () => {
+    const { deps } = makeDeps({
+      assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
+        assessment: {
+          verdict: 'stop',
+          tool_plan: { use: [], skip: [] },
+          reason: 'controller unavailable — no loop',
+        },
+        degraded: true,
+        reason: 'ollama down',
+      })),
+    });
+    const result = await assessContextTool({ request_id: 'rid-9' }, deps);
+    expect(result.verdict).toBe('stop');
+    expect(result.degraded).toBe(true);
+  });
+
+  it('rejects an empty request_id', async () => {
+    const { deps } = makeDeps();
+    await expect(
+      assessContextTool({ request_id: '' }, deps),
+    ).rejects.toThrow('non-empty string "request_id"');
   });
 });
 
