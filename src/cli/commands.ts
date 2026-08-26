@@ -8,6 +8,7 @@ import { initCommand } from './commands/init';
 import { mcpCommand } from './commands/mcp';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
+import { wrapCommand } from './commands/wrap';
 
 export const VERSION: string = pkg.version;
 
@@ -19,6 +20,7 @@ export const COMMANDS: readonly CliCommand[] = [
   configCommand,
   telemetryCommand,
   mcpCommand,
+  wrapCommand,
 ];
 
 const COMMAND_MAP: ReadonlyMap<string, CliCommand> = new Map(

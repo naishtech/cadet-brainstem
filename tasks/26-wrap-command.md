@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — wraps the existing RTK adapter; targets the other big token sink (noisy command output) for VS Code tasks / terminal profiles.
 
-**Status:** Not started
+**Status:** Implemented on branch `task/26-wrap-command` (pending review/commit)
 **Phase:** Phase 12
 **Source:** `docs/plans/initial_design.md` — §16 Integration & interception (VS Code)
 
@@ -20,7 +20,7 @@ Add `cadet-token-saver wrap -- <command>` that runs a command and prints the RTK
 
 ## Acceptance Criteria
 
-- [ ] `cadet-token-saver wrap -- git status` prints reduced output.
-- [ ] Raw output is preserved/recoverable.
-- [ ] Falls back to the original output when RTK is missing.
-- [ ] Records a metrics row for the wrap operation.
+- [x] `cadet-token-saver wrap -- git status` prints reduced output.
+- [x] Raw output is preserved/recoverable.
+- [x] Falls back to the original output when RTK is missing.
+- [x] Records a metrics row for the wrap operation.
