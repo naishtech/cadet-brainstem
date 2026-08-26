@@ -108,6 +108,20 @@ describe('parseClassification', () => {
     });
   });
 
+  it('normalizes retrieval scope strings', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      retrieval: {
+        queries: ['chat_memory'],
+        scope: 'project_root+config +  memory implementation',
+      },
+    });
+    expect(parsed.retrieval).toEqual({
+      queries: ['chat_memory'],
+      scope: 'project root + config + memory implementation',
+    });
+  });
+
   it('drops invalid confidence / needs_more_context / retrieval values', () => {
     const parsed = parseClassification({
       ...validClassification,
@@ -129,19 +143,33 @@ describe('parseClassification', () => {
 });
 
 describe('buildPrompt', () => {
-  it('enforces the five classifier constraints', () => {
+  it('enforces the key classifier constraints', () => {
     const prompt = buildPrompt('fix the blueprint loader');
-    expect(prompt).toContain('classify only');
-    expect(prompt).toContain('do not solve');
-    expect(prompt).toContain('return JSON only');
-    expect(prompt).toContain('do not invent');
-    expect(prompt).toContain('conservative');
+    expect(prompt).toContain('You are a fast, lightweight classifier');
+    expect(prompt).toContain('You do NOT solve, answer,');
+    expect(prompt).toContain('or explain the request. You ONLY classify it.');
+    expect(prompt).toContain('Output ONLY valid JSON');
+    expect(prompt).toContain('No markdown fences');
+    expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
   });
 
   it('includes the user request text', () => {
     expect(buildPrompt('fix the blueprint loader')).toContain(
       'fix the blueprint loader',
     );
+  });
+
+  it('encourages planning/investigation rather than review for design work', () => {
+    const prompt = buildPrompt('Design a new memory summarization workflow for the agent.');
+    expect(prompt).toContain('Rule: requests to "design", "plan", "figure out how to approach", or');
+    expect(prompt).toContain('NEVER review.');
+  });
+
+  it('renders custom external templates through Mustache', () => {
+    const template = 'User request: {{{userRequest}}}\nTools: {{{tools}}}';
+    const prompt = buildPrompt('Fix config loading', template);
+    expect(prompt).toContain('User request: Fix config loading');
+    expect(prompt).toContain('Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store');
   });
 });
 

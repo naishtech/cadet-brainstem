@@ -277,6 +277,11 @@ export async function optimizeContextTool(
     latency_ms: leanLatencyMs,
     request_id: requestId,
   });
+  const note =
+    result.estimatedTokensSaved === 0 && !result.degraded
+      ? 'no compression benefit from LeanCTX on this target'
+      : undefined;
+
   return {
     context: result.context,
     mode: result.mode,
@@ -293,6 +298,7 @@ export async function optimizeContextTool(
     memory_policy: memoryPolicyFor(
       outcome.classification.tool_plan.use.includes('chat_memory_store'),
     ),
+    ...(note !== undefined ? { note } : {}),
   };
 }
 

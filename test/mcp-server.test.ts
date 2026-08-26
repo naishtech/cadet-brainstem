@@ -207,6 +207,27 @@ describe('optimize_context', () => {
     expect(typeof ollamaRow.latency_ms).toBe('number');
   });
 
+  it('returns a note when optimize_context finds no compression benefit', async () => {
+    const { deps, leanctxOptimize } = makeDeps();
+    leanctxOptimize.mockResolvedValueOnce({
+      context: 'short file content',
+      sourceSize: 20,
+      returnedSize: 20,
+      mode: 'reference',
+      estimatedTokensSaved: 0,
+      taskType: 'debug',
+      degraded: false,
+    });
+
+    const result = await optimizeContextTool(
+      { task: 'debug the loader', target: 'src/foo.ts' },
+      deps,
+    );
+
+    expect(result.estimatedTokensSaved).toBe(0);
+    expect(result.note).toBe('no compression benefit from LeanCTX on this target');
+  });
+
   it('does not record an ollama call when classification degrades', async () => {
     const { deps } = makeDeps();
     const degradedDeps = {
