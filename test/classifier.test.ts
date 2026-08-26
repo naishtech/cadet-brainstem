@@ -143,13 +143,14 @@ describe('parseClassification', () => {
 });
 
 describe('buildPrompt', () => {
-  it('enforces the five classifier constraints', () => {
+  it('enforces the key classifier constraints', () => {
     const prompt = buildPrompt('fix the blueprint loader');
-    expect(prompt).toContain('classify only');
-    expect(prompt).toContain('do not solve');
-    expect(prompt).toContain('return JSON only');
-    expect(prompt).toContain('do not invent');
-    expect(prompt).toContain('conservative');
+    expect(prompt).toContain('You are a fast, lightweight classifier');
+    expect(prompt).toContain('You do NOT solve, answer,');
+    expect(prompt).toContain('or explain the request. You ONLY classify it.');
+    expect(prompt).toContain('Output ONLY valid JSON');
+    expect(prompt).toContain('No markdown fences');
+    expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
   });
 
   it('includes the user request text', () => {
@@ -160,8 +161,8 @@ describe('buildPrompt', () => {
 
   it('encourages planning/investigation rather than review for design work', () => {
     const prompt = buildPrompt('Design a new memory summarization workflow for the agent.');
-    expect(prompt).toContain('Do not use "review" for design, planning, architecture, or exploratory requests.');
-    expect(prompt).toContain('prefer');
+    expect(prompt).toContain('Rule: requests to "design", "plan", "figure out how to approach", or');
+    expect(prompt).toContain('NEVER review.');
   });
 
   it('renders custom external templates through Mustache', () => {
