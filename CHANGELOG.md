@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.1] — 2026-08-26
+
+### Fixed
+
+- `init` no longer prompts to pull the classifier model when it is already
+  present (it checks the Ollama API first, like `doctor`).
+
+### Added
+
+- `init` prints a bold coloured banner and, after setup, the
+  `.vscode/mcp.json` snippet to connect your IDE to the MCP server.
+
 ## [0.1.0] — 2026-08-26
 
 Initial MVP release.

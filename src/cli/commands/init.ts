@@ -3,15 +3,16 @@ import { join } from 'node:path';
 import os from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../../classifier';
 import { getConfigPath, loadConfig, saveConfig } from '../../config';
 import {
   detectEnvironment,
   type EnvironmentReport,
   type ToolAvailability,
 } from '../../core/environment';
+import { INIT_BANNER } from '../banner';
 import {
   LEANCTX_WINDOWS_URL,
-  OLLAMA_MODEL,
   RTK_WINDOWS_URL,
   downloadAndExtractZip,
   pullOllamaModel,
@@ -68,18 +69,24 @@ function formatAvailability(tool: ToolAvailability): string {
 interface OfferContext {
   ask: (question: string) => Promise<boolean>;
   log: (line: string) => void;
+  model: string;
+  host: string;
 }
 
 /** Consent-gated offers to configure/install missing pieces (design doc §1.8). */
 async function offerInstallations(
   report: EnvironmentReport,
-  { ask, log }: OfferContext,
+  { ask, log, model, host }: OfferContext,
 ): Promise<void> {
-  // Classifier model pull — only when Ollama is reachable (safe & idempotent).
+  // Classifier model — only offer to pull when Ollama is reachable AND the
+  // model is not already present (idempotent, no redundant prompts).
   if (report.ollama.available) {
-    if (await ask(`Pull the classifier model (${OLLAMA_MODEL}) via Ollama?`)) {
+    const modelOk = await isModelAvailable(model, host);
+    if (modelOk) {
+      log(`Classifier model ${model} already present — nothing to pull.`);
+    } else if (await ask(`Pull the classifier model (${model}) via Ollama?`)) {
       try {
-        const { stdout, stderr } = await pullOllamaModel();
+        const { stdout, stderr } = await pullOllamaModel(model);
         log(stdout || stderr);
       } catch (err) {
         log(`  failed: ${(err as Error).message}`);
@@ -147,7 +154,9 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
 
   const report = await detect();
 
-  // 1. Report what is available.
+  // 1. Banner + report what is available.
+  log('');
+  log(INIT_BANNER);
   log('');
   log('[cadet-token-saver] init — environment report');
   log('--------------------------------------------');
@@ -176,7 +185,9 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log(`[cadet-token-saver] metrics database ready: ${metricsPath}`);
 
   // 4. Consent-gated configuration/installation of missing pieces.
-  await offerInstallations(report, { ask, log });
+  const model = loadConfig(configPath).classifier.model;
+  const host = process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
+  await offerInstallations(report, { ask, log, model, host });
 
   // 5. Summary.
   log('');
@@ -186,6 +197,25 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
     log(`  Tools missing:   ${report.missingTools.join(', ')}`);
     log('  Run "cadet-token-saver doctor" for details.');
   }
+
+  // 6. IDE / MCP wiring hint.
+  log('');
+  log('Connect your IDE to the MCP server:');
+  log('Add this to .vscode/mcp.json in your project, then reload the window:');
+  log('');
+  log('{');
+  log('  "servers": {');
+  log('    "cadet-token-saver": {');
+  log('      "type": "stdio",');
+  log('      "command": "cadet-token-saver",');
+  log('      "args": ["mcp"]');
+  log('    }');
+  log('  }');
+  log('}');
+  log('');
+  log('The "cadet-token-saver" MCP server will then appear in Copilot Chat,');
+  log('exposing optimize_context, find_relevant_symbols and compress_command_output.');
+  log('See docs/integration-vscode.md for details.');
   return 0;
 }
 

@@ -9,10 +9,12 @@ import { runInit } from '../src/cli/commands/init';
 
 const {
   downloadAndExtractZipMock,
+  isModelAvailableMock,
   pullOllamaModelMock,
   startOllamaDockerMock,
 } = vi.hoisted(() => ({
   downloadAndExtractZipMock: vi.fn(),
+  isModelAvailableMock: vi.fn(),
   pullOllamaModelMock: vi.fn(),
   startOllamaDockerMock: vi.fn(),
 }));
@@ -24,6 +26,11 @@ vi.mock('../src/core/installers', () => ({
   downloadAndExtractZip: downloadAndExtractZipMock,
   pullOllamaModel: pullOllamaModelMock,
   startOllamaDocker: startOllamaDockerMock,
+}));
+
+vi.mock('../src/classifier', () => ({
+  DEFAULT_OLLAMA_HOST: 'http://localhost:11434',
+  isModelAvailable: isModelAvailableMock,
 }));
 
 function makeReport(
@@ -48,6 +55,8 @@ let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cts-init-'));
   downloadAndExtractZipMock.mockReset();
+  isModelAvailableMock.mockReset();
+  isModelAvailableMock.mockResolvedValue(false); // model missing by default
   pullOllamaModelMock.mockReset();
   startOllamaDockerMock.mockReset();
 });
@@ -160,6 +169,25 @@ describe('runInit', () => {
 
     expect(pullOllamaModelMock).toHaveBeenCalled();
     expect(lines.join('\n')).toContain('pulling');
+  });
+
+  it('does not offer to pull when the model is already present', async () => {
+    isModelAvailableMock.mockResolvedValue(true);
+    const lines: string[] = [];
+    const ask = vi.fn(async () => true);
+
+    await runInit({
+      detect: async () => makeReport(),
+      ask,
+      configPath: join(dir, 'config.yaml'),
+      metricsPath: join(dir, 'metrics.db'),
+      log: (line) => lines.push(line),
+    });
+
+    expect(isModelAvailableMock).toHaveBeenCalled();
+    expect(pullOllamaModelMock).not.toHaveBeenCalled();
+    expect(ask).not.toHaveBeenCalled();
+    expect(lines.join('\n')).toContain('already present');
   });
 
   it('prints a clear summary including missing tools', async () => {
