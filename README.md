@@ -87,8 +87,9 @@ cadet-token-saver stats    # events, tokens saved, reduction %, savings by tool 
 Paste this into your agent's prompts or `AGENTS.md` so it classifies every turn
 and prefers the cheap paths:
 
-> At the start of every turn, call the Cadet Token Saver `classify` MCP tool
-> with the user's request and use its returned strategy; parse its
+> For every new user request, before doing anything else, call the Cadet Token
+> Saver `classify` MCP tool once with a short, faithful restatement of the
+> request (not the verbatim message); use its returned strategy and parse its
 > `response_policy` and `memory_policy`. Then call `optimize_context` before
 > reading a large file, `find_relevant_symbols` before broad searches, and
 > `compress_command_output` for noisy command output (pass `"shell": "bash"`

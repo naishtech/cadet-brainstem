@@ -5,12 +5,14 @@ model. It is available as a **local MCP server** (`cadet-token-saver mcp`,
 registered in `.vscode/mcp.json`) and as a **command wrapper**
 (`cadet-token-saver wrap`). Use the cheap paths below whenever possible.
 
-## Classify every turn
+## Classify every user request
 
-- At the start of every turn, always call the `classify` MCP tool with the
-  user's request. It runs the local LLM and returns the recommended `strategy`
-  (LeanCTX mode, compression, search approach). Use that strategy to decide
-  how to use the tools below.
+- For each new user request, before taking any other action (no other tool
+  calls, no file reads), call the `classify` MCP tool exactly once. Pass a
+  short, faithful restatement of the request — what the user wants done, in
+  one or two sentences — not the verbatim message.
+- Use the returned `strategy` (LeanCTX mode, compression, search approach) to
+  decide how to use the tools below for the rest of that request.
 - Parse the returned `response_policy` and follow it in every reply: write for
   another LLM (compact, information-dense, no decoration, filler or repeated
   info), since your response may become future LLM context.
@@ -20,7 +22,7 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   never block on it.
 
 This instruction guides the agent; MCP itself cannot force a client to invoke a
-tool for every chat message.
+tool for every user request.
 
 ## Memory
 
