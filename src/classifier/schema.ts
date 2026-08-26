@@ -202,6 +202,17 @@ function sanitizeBoolean(raw: unknown): boolean | undefined {
   return typeof raw === 'boolean' ? raw : undefined;
 }
 
+function normalizeScope(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return undefined;
+  }
+  return raw
+    .trim()
+    .replace(/[_]+/g, ' ')
+    .replace(/\s*\+\s*/g, ' + ')
+    .replace(/\s+/g, ' ');
+}
+
 /** Keep a retrieval plan only when it carries at least one query or a scope. */
 function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
   if (typeof raw !== 'object' || raw === null) {
@@ -212,10 +223,7 @@ function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
     plan.queries,
     (value): value is string => typeof value === 'string',
   );
-  const scope =
-    typeof plan.scope === 'string' && plan.scope.length > 0
-      ? plan.scope
-      : undefined;
+  const scope = normalizeScope(plan.scope);
   if (queries.length === 0 && scope === undefined) {
     return undefined;
   }

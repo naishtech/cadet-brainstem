@@ -13,4 +13,5 @@ export default defineConfig({
   sourcemap: true,
   dts: true,
   outDir: 'dist',
+  assets: ['src/classifier/classifier-prompt.mustache'],
 });

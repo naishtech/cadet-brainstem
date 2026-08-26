@@ -108,6 +108,20 @@ describe('parseClassification', () => {
     });
   });
 
+  it('normalizes retrieval scope strings', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      retrieval: {
+        queries: ['chat_memory'],
+        scope: 'project_root+config +  memory implementation',
+      },
+    });
+    expect(parsed.retrieval).toEqual({
+      queries: ['chat_memory'],
+      scope: 'project root + config + memory implementation',
+    });
+  });
+
   it('drops invalid confidence / needs_more_context / retrieval values', () => {
     const parsed = parseClassification({
       ...validClassification,
@@ -142,6 +156,19 @@ describe('buildPrompt', () => {
     expect(buildPrompt('fix the blueprint loader')).toContain(
       'fix the blueprint loader',
     );
+  });
+
+  it('encourages planning/investigation rather than review for design work', () => {
+    const prompt = buildPrompt('Design a new memory summarization workflow for the agent.');
+    expect(prompt).toContain('Do not use "review" for design, planning, architecture, or exploratory requests.');
+    expect(prompt).toContain('prefer');
+  });
+
+  it('renders custom external templates through Mustache', () => {
+    const template = 'User request: {{{userRequest}}}\nTools: {{{tools}}}';
+    const prompt = buildPrompt('Fix config loading', template);
+    expect(prompt).toContain('User request: Fix config loading');
+    expect(prompt).toContain('Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store');
   });
 });
 
