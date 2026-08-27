@@ -27,6 +27,8 @@ export interface OptimisationEvent {
   files_found?: number;
   /** Stable id linking a logical flow (e.g. classify -> optimize_context). */
   request_id?: string;
+  /** Tool names the classifier recommended (adoption telemetry, classify events). */
+  recommended_tools?: string[];
 }
 
 export interface Totals {
@@ -101,7 +103,8 @@ CREATE TABLE IF NOT EXISTS optimisation_events (
   latency_ms INTEGER,
   symbols_found INTEGER,
   files_found INTEGER,
-  request_id TEXT
+  request_id TEXT,
+  recommended_tools TEXT
 );
 `;
 
@@ -156,6 +159,7 @@ export class MetricsStore {
       ['symbols_found', 'ALTER TABLE optimisation_events ADD COLUMN symbols_found INTEGER'],
       ['files_found', 'ALTER TABLE optimisation_events ADD COLUMN files_found INTEGER'],
       ['request_id', 'ALTER TABLE optimisation_events ADD COLUMN request_id TEXT'],
+      ['recommended_tools', 'ALTER TABLE optimisation_events ADD COLUMN recommended_tools TEXT'],
     ];
     for (const [column, ddl] of additions) {
       if (!columns.has(column)) {
@@ -209,6 +213,9 @@ export class MetricsStore {
     }
     if (event.request_id !== undefined) {
       extra.push(['request_id', event.request_id]);
+    }
+    if (event.recommended_tools !== undefined) {
+      extra.push(['recommended_tools', JSON.stringify(event.recommended_tools)]);
     }
     const columns = [...baseColumns, ...extra.map((entry) => entry[0])];
     const values = [...baseValues, ...extra.map((entry) => entry[1])];
@@ -382,6 +389,34 @@ export class MetricsStore {
       degraded: Number(row.degraded) === 1,
       timestamp: String(row.timestamp),
     }));
+  }
+
+  /**
+   * Adoption telemetry: how many times each tool was RECOMMENDED across classify
+   * events (parsed from the `recommended_tools` JSON column). Compare with
+   * `getCallStatsByTool().calls` to see recommended-vs-invoked per tool.
+   */
+  getRecommendedByTool(): GroupedCalls[] {
+    const rows = this.db
+      .prepare(
+        'SELECT recommended_tools FROM optimisation_events WHERE recommended_tools IS NOT NULL',
+      )
+      .all() as { recommended_tools: string }[];
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      let tools: string[];
+      try {
+        tools = JSON.parse(row.recommended_tools) as string[];
+      } catch {
+        tools = [];
+      }
+      for (const tool of tools) {
+        counts.set(tool, (counts.get(tool) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([tool, calls]) => ({ tool, calls }))
+      .sort((a, b) => a.tool.localeCompare(b.tool));
   }
 
   /** Delete all rows from the optimisation_events table; returns rows removed. */

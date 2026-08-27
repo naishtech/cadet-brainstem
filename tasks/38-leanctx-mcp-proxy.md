@@ -1,6 +1,8 @@
 # 38 — LeanCTX MCP proxy, shell-vs-RTK routing & metrics evaluation
 
-**Status:** Plan (pending approval)
+**Status:** Implemented (Parts A, B & C — see checklist). LeanCTX MCP proxy
+(`leanctx_call` / `leanctx_list_tools`), shell-vs-RTK benchmark + "offer both"
+routing, and metrics evaluation all landed in PR #35 / release 0.1.16.
 
 Goal
 ----

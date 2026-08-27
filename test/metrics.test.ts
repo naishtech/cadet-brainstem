@@ -131,6 +131,16 @@ describe('MetricsStore (in-memory)', () => {
     ]);
   });
 
+  it('counts recommended tools (adoption telemetry)', () => {
+    store.record(makeEvent({ tool: 'ollama', recommended_tools: ['leanctx', 'rtk'] }));
+    store.record(makeEvent({ tool: 'ollama', recommended_tools: ['leanctx'] }));
+    store.record(makeEvent({ tool: 'rtk' })); // no recommendation recorded
+    expect(store.getRecommendedByTool()).toEqual([
+      { tool: 'leanctx', calls: 2 },
+      { tool: 'rtk', calls: 1 },
+    ]);
+  });
+
   it('excludes degraded events from call counts', () => {
     store.record(makeEvent({ tool: 'ollama', degraded: true }));
     store.record(makeEvent({ tool: 'ollama', degraded: false }));

@@ -4,6 +4,38 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Token-saving fields first in the classification response** — reordered the
+  classifier schema, the prompt shape/examples, and the MCP `classify`/
+  `optimize_context` response so the cloud LLM reads the token-saving steering
+  fields first: `response_policy`, `reminders`, `tool_plan`, then
+  `context_need`/`task`/etc. (JSON object order is preserved for these
+  consumers).
+
+### Added
+
+- **Reminders + multi-task (Task 37)** — `classify`/`optimize_context` now
+  return:
+  - `reminders` — a list of concrete, tool-anchored directives the cloud LLM
+    should honor (e.g. "Use RTK for git output", "Use LeanCTX to expand shell
+    output"). `guidance` is retained as a deprecated alias (derived from the
+    first reminder).
+  - `subtasks` — additional distinct task types detected for multi-task
+    requests (e.g. "check in + push + start coding").
+  - Adoption telemetry: a `recommended_tools` metrics column (migrated in
+    place) records which tools the classifier recommended, surfaced in `stats`
+    as "Recommended vs invoked". `optimize_context`'s tool description now
+    invites both file compression and shell-output expansion/triage.
+
+### Changed
+
+- **`tool_plan` drops the redundant `use` array** — `tool_plan` is now
+  `{ recommended_tools: [...], skip?: [...] }`. The canonical tool list is
+  `recommended_tools` (each entry has `name`, `intent`, `priority`). A legacy
+  flat `use` array is still accepted and folded into `recommended_tools` for
+  backward compatibility. Memory-policy detection now reads `recommended_tools`.
+
 ### Added
 
 - **`response_policy` is now an object + recommended language standard** —

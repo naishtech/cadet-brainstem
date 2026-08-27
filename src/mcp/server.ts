@@ -9,15 +9,16 @@ import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
 import {
-  RECOMMENDED_TOOL_INTENTS,
   RESPONSE_POLICY_DIRECTIVES,
   assessWithFallback,
   type ContextAssessmentOutcome,
   type EvidencePlan,
   type LanguageStandard,
   type RecommendedTool,
+  type Reminder,
   type ResponsePolicy,
   type RetrievalPlan,
+  type TaskType,
   type ToolName,
   type ToolPlan,
 } from '../classifier';
@@ -109,27 +110,24 @@ export function compileRetrieval(
 }
 
 export interface CompiledToolPlan {
-  use: ToolName[];
-  skip?: ToolName[];
   recommended_tools: RecommendedTool[];
+  skip?: ToolName[];
 }
 
-/** Default intents for tools the model recommended without one. */
+/** Compile the tool plan to its canonical form (recommended_tools + skip). */
 export function compileToolPlan(plan: ToolPlan | undefined): CompiledToolPlan {
-  const use = plan?.use ?? [];
-  const recommended =
-    plan?.recommended_tools !== undefined && plan.recommended_tools.length > 0
-      ? plan.recommended_tools
-      : use.map<RecommendedTool>((name, i) => ({
-          name,
-          intent: RECOMMENDED_TOOL_INTENTS[name],
-          priority: i + 1,
-        }));
-  const result: CompiledToolPlan = { use, recommended_tools: recommended };
+  const result: CompiledToolPlan = {
+    recommended_tools: plan?.recommended_tools ?? [],
+  };
   if (plan?.skip !== undefined && plan.skip.length > 0) {
     result.skip = plan.skip;
   }
   return result;
+}
+
+/** True when the tool plan recommends a given tool (canonical list check). */
+function toolPlanUses(plan: ToolPlan | undefined, name: ToolName): boolean {
+  return (plan?.recommended_tools ?? []).some((t) => t.name === name);
 }
 
 export interface CompiledEvidencePlan {
@@ -177,7 +175,7 @@ export function compileEvidencePlan(
   return result;
 }
 
-/** A one-line advisory; synthesized from the task when the model omits it. */
+/** A one-line advisory; from guidance, else the first reminder, else synthesized. */
 export function compileGuidance(
   classification: Classification,
   task: string,
@@ -185,8 +183,22 @@ export function compileGuidance(
   if (classification.guidance !== undefined && classification.guidance.trim().length > 0) {
     return classification.guidance;
   }
+  const firstReminder = classification.reminders?.[0]?.message;
+  if (firstReminder !== undefined && firstReminder.trim().length > 0) {
+    return firstReminder;
+  }
   const subject = task.trim().length > 0 ? task.trim() : 'unspecified task';
   return `Advisory: classify and route this request (${subject}); verify facts against the project before concluding.`;
+}
+
+/** Tool-anchored reminders the cloud LLM should honor (replaces guidance). */
+export function compileReminders(classification: Classification): Reminder[] {
+  return classification.reminders ?? [];
+}
+
+/** Additional distinct task types detected (multi-task); undefined if none. */
+export function compileSubtasks(classification: Classification): TaskType[] | undefined {
+  return classification.subtasks;
 }
 
 /** Memory hints: advisory use flag, never instructs to skip memory. */
@@ -325,6 +337,9 @@ function recordClassifierCall(
   requestId: string,
   latencyMs: number,
 ): void {
+  const recommended = (outcome.classification.tool_plan?.recommended_tools ?? []).map(
+    (tool) => tool.name,
+  );
   record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
@@ -341,6 +356,7 @@ function recordClassifierCall(
     degraded: outcome.degraded,
     latency_ms: latencyMs,
     request_id: requestId,
+    ...(recommended.length > 0 ? { recommended_tools: recommended } : {}),
   });
 }
 
@@ -397,6 +413,21 @@ export async function optimizeContextTool(
       : undefined;
 
   return {
+    // Token-saving steering fields first so the cloud LLM reads them first.
+    response_policy: compileResponsePolicy(outcome.classification.response_policy),
+    reminders: compileReminders(outcome.classification),
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
+    classification: coreClassification(outcome.classification),
+    strategy,
+    guidance: compileGuidance(outcome.classification, args.task),
+    ...(compileSubtasks(outcome.classification) !== undefined
+      ? { subtasks: compileSubtasks(outcome.classification) }
+      : {}),
+    evidence_plan: compileEvidencePlan(
+      outcome.classification.evidence_plan,
+      outcome.classification.retrieval,
+    ),
+    retrieval: compileRetrieval(outcome.classification.retrieval),
     context: result.context,
     mode: result.mode,
     sourceSize: result.sourceSize,
@@ -404,20 +435,10 @@ export async function optimizeContextTool(
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
     request_id: requestId,
-    classification: coreClassification(outcome.classification),
-    strategy,
-    guidance: compileGuidance(outcome.classification, args.task),
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
-    response_policy: compileResponsePolicy(outcome.classification.response_policy),
-    evidence_plan: compileEvidencePlan(
-      outcome.classification.evidence_plan,
-      outcome.classification.retrieval,
-    ),
-    retrieval: compileRetrieval(outcome.classification.retrieval),
     memory_hints: compileMemoryHints(outcome.classification),
     memory_policy: memoryPolicyFor(
       outcome.classification.memory?.use ??
-        (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
+        toolPlanUses(outcome.classification.tool_plan, 'chat_memory_store'),
     ),
     ...(note !== undefined ? { note } : {}),
   };
@@ -484,11 +505,16 @@ export async function classifyTool(
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
   return {
+    // Token-saving steering fields first so the cloud LLM reads them first.
+    response_policy: compileResponsePolicy(outcome.classification.response_policy),
+    reminders: compileReminders(outcome.classification),
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
     classification: coreClassification(outcome.classification),
     strategy,
     guidance: compileGuidance(outcome.classification, args.task),
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
-    response_policy: compileResponsePolicy(outcome.classification.response_policy),
+    ...(compileSubtasks(outcome.classification) !== undefined
+      ? { subtasks: compileSubtasks(outcome.classification) }
+      : {}),
     evidence_plan: compileEvidencePlan(
       outcome.classification.evidence_plan,
       outcome.classification.retrieval,
@@ -497,7 +523,7 @@ export async function classifyTool(
     memory_hints: compileMemoryHints(outcome.classification),
     memory_policy: memoryPolicyFor(
       outcome.classification.memory?.use ??
-        (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
+        toolPlanUses(outcome.classification.tool_plan, 'chat_memory_store'),
     ),
     degraded: outcome.degraded,
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
@@ -1191,7 +1217,8 @@ const TOOL_DEFS = [
     name: 'optimize_context',
     description:
       'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
-      'Use this instead of reading a large file raw.',
+      'Use this instead of reading a large file raw, or to expand/triage shell/command output before ' +
+      'sending it to the model.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -120,6 +120,23 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     }
 
     log('');
+    log('Recommended vs invoked (adoption):');
+    const recommended = store.getRecommendedByTool();
+    const recMap = new Map(recommended.map((r) => [r.tool, r.calls]));
+    const toolSet = new Set<string>([...recMap.keys(), ...callStatMap.keys()]);
+    if (toolSet.size === 0) {
+      log('  (none yet — call classify to record recommendations)');
+    } else {
+      for (const tool of [...toolSet].sort()) {
+        const rec = recMap.get(tool) ?? 0;
+        const invoked = callStatMap.get(tool)?.calls ?? 0;
+        log(
+          `  ${tool.padEnd(12)} recommended ${rec} · invoked ${invoked}`,
+        );
+      }
+    }
+
+    log('');
     log('Sessions:');
     for (const session of sessions) {
       log(

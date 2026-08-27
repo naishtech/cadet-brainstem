@@ -16,6 +16,23 @@ export const taskTypeSchema = z.enum([
   'configuration',
 ]);
 
+/** The 13 task types as a runtime array (for multi-task sanitization). */
+export const TASK_TYPES = [
+  'question',
+  'coding_new',
+  'coding_fix',
+  'debug',
+  'refactor',
+  'test',
+  'review',
+  'architecture',
+  'documentation',
+  'investigation',
+  'planning',
+  'search',
+  'configuration',
+] as const;
+
 export const complexitySchema = z.enum(['low', 'medium', 'high']);
 export const riskSchema = z.enum(['low', 'medium', 'high']);
 export const contextNeedSchema = z.enum(['minimal', 'targeted', 'broad', 'exhaustive']);
@@ -62,7 +79,8 @@ export const toolNameSchema = z.enum(TOOL_NAMES);
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const toolPlanSchema = z.object({
-  use: z.array(toolNameSchema),
+  recommended_tools: z.unknown().optional(),
+  skip: z.array(toolNameSchema).optional(),
 });
 
 /** Default intent text used when the model omits it for a recommended tool. */
@@ -87,12 +105,16 @@ export interface RecommendedTool {
   constraints?: string[];
 }
 
-/** Tools the agent should use / skip, plus prioritized recommendations. */
+/**
+ * Tools the agent should use. `recommended_tools` is the canonical list
+ * (each entry carries the tool name + intent + priority); `skip` is an
+ * optional explicit don't-use list (rarely populated).
+ */
 export interface ToolPlan {
-  use: ToolName[];
-  skip?: ToolName[];
   /** Prioritized recommendations with intent (steers orchestration). */
   recommended_tools?: RecommendedTool[];
+  /** Tools the agent should skip (optional, rarely populated). */
+  skip?: ToolName[];
 }
 
 /** Search queries + initial scope the agent should start with (legacy alias). */
@@ -115,6 +137,16 @@ export interface EvidenceQuery {
 export interface EvidencePlan {
   prioritized_queries: EvidenceQuery[];
   scope?: string;
+}
+
+/**
+ * A single tool-anchored reminder (replaces the one-line `guidance`). `tool`
+ * is a hint label (advisory — may be a tool name or a category like `git`,
+ * `shell`, `rtk`); `message` is one short concrete directive.
+ */
+export interface Reminder {
+  tool: string;
+  message: string;
 }
 
 /** Controller verdict: gather more context, or the signal is sufficient. */
@@ -174,7 +206,7 @@ export const RESPONSE_POLICY_DIRECTIVES: Record<ResponsePolicyKey, string> = {
 };
 
 /** Conservative tool plan applied when the model omits a recommendation. */
-export const DEFAULT_TOOL_PLAN: ToolPlan = { use: [] };
+export const DEFAULT_TOOL_PLAN: ToolPlan = {};
 /** Default response directives applied when the model omits them. */
 export const DEFAULT_RESPONSE_POLICY_KEYS: ResponsePolicyKey[] = [
   'compact',
@@ -201,19 +233,22 @@ export interface ResponsePolicy {
  * invalid tool name or directive key never throws away a good classification.
  */
 export const classificationSchema = z.object({
+  // Token-saving fields first so the cloud LLM reads them first.
+  response_policy: z.unknown().optional(),
+  reminders: z.unknown().optional(),
+  tool_plan: z.unknown().optional(),
+  context_need: contextNeedSchema,
   task: taskTypeSchema,
+  subtasks: z.unknown().optional(),
+  precision: precisionSchema,
+  evidence_plan: z.unknown().optional(),
+  retrieval: z.unknown().optional(),
   complexity: complexitySchema,
   risk: riskSchema,
-  context_need: contextNeedSchema,
-  precision: precisionSchema,
-  tool_plan: z.unknown().optional(),
-  response_policy: z.unknown().optional(),
+  guidance: z.unknown().optional(),
   memory: z.unknown().optional(),
   confidence: z.unknown().optional(),
   needs_more_context: z.unknown().optional(),
-  retrieval: z.unknown().optional(),
-  guidance: z.unknown().optional(),
-  evidence_plan: z.unknown().optional(),
 });
 
 export interface Classification {
@@ -233,10 +268,14 @@ export interface Classification {
   needs_more_context?: boolean;
   /** Search queries + initial scope to start retrieval with (legacy alias). */
   retrieval?: RetrievalPlan;
-  /** One-line advisory summary of how to approach the request. */
+  /** One-line advisory summary of how to approach the request (deprecated alias). */
   guidance?: string;
   /** Prioritized, source-tagged retrieval plan (replaces `retrieval`). */
   evidence_plan?: EvidencePlan;
+  /** Tool-anchored reminders the cloud LLM should honor (replaces `guidance`). */
+  reminders?: Reminder[];
+  /** Additional distinct task types detected (multi-task requests). */
+  subtasks?: TaskType[];
 }
 
 export type TaskType = z.infer<typeof taskTypeSchema>;
@@ -278,22 +317,31 @@ function sanitizeStringList<T extends string>(
 
 function sanitizeToolPlan(raw: unknown): ToolPlan {
   if (typeof raw !== 'object' || raw === null) {
-    return { use: [] };
+    return {};
   }
   const plan = raw as {
     use?: unknown;
     skip?: unknown;
     recommended_tools?: unknown;
   };
-  const use = sanitizeStringList(plan.use, isToolName);
   const skip = sanitizeStringList(plan.skip, isToolName);
   const recommended = sanitizeRecommendedTools(plan.recommended_tools);
-  const result: ToolPlan = { use };
-  if (skip.length > 0) {
-    result.skip = skip;
-  }
+  const result: ToolPlan = {};
   if (recommended !== undefined) {
     result.recommended_tools = recommended;
+  } else {
+    // Backward compatibility: a legacy flat `use` array becomes recommended_tools.
+    const legacyUse = sanitizeStringList(plan.use, isToolName);
+    if (legacyUse.length > 0) {
+      result.recommended_tools = legacyUse.map((name, i) => ({
+        name,
+        intent: RECOMMENDED_TOOL_INTENTS[name],
+        priority: i + 1,
+      }));
+    }
+  }
+  if (skip.length > 0) {
+    result.skip = skip;
   }
   return result;
 }
@@ -512,6 +560,56 @@ function evidencePlanFromRetrieval(retrieval: RetrievalPlan): EvidencePlan {
   return result;
 }
 
+/** Keep valid tool-anchored reminders (non-empty tool+message, capped). */
+function sanitizeReminders(raw: unknown): Reminder[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+  const result: Reminder[] = [];
+  for (const item of raw.slice(0, 8)) {
+    if (typeof item !== 'object' || item === null) {
+      continue;
+    }
+    const r = item as { tool?: unknown; message?: unknown };
+    if (
+      typeof r.tool !== 'string' ||
+      r.tool.trim().length === 0 ||
+      typeof r.message !== 'string' ||
+      r.message.trim().length === 0
+    ) {
+      continue;
+    }
+    result.push({
+      tool: r.tool.trim().slice(0, 40),
+      message: r.message.trim().slice(0, 200),
+    });
+  }
+  return result.length > 0 ? result : undefined;
+}
+
+/** Keep distinct, valid task types (multi-task detection). */
+function sanitizeSubtasks(raw: unknown): TaskType[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const result: TaskType[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const key = item as string;
+    if (!(TASK_TYPES as readonly string[]).includes(key)) {
+      continue;
+    }
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(key as TaskType);
+    }
+  }
+  return result.length > 0 ? result : undefined;
+}
+
 function sanitizeMemory(raw: unknown): { use: boolean | 'if_necessary'; reason?: string } | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const m = raw as { use?: unknown; reason?: unknown };
@@ -560,6 +658,8 @@ export function parseClassification(raw: unknown): Classification {
   const needsMoreContext = sanitizeBoolean(result.data.needs_more_context);
   const retrieval = sanitizeRetrieval(result.data.retrieval);
   const guidance = sanitizeGuidance(result.data.guidance);
+  const reminders = sanitizeReminders(result.data.reminders);
+  const subtasks = sanitizeSubtasks(result.data.subtasks);
   const evidencePlan =
     sanitizeEvidencePlan(result.data.evidence_plan) ??
     (retrieval !== undefined ? evidencePlanFromRetrieval(retrieval) : undefined);
@@ -575,7 +675,15 @@ export function parseClassification(raw: unknown): Classification {
     ...(confidence !== undefined ? { confidence } : {}),
     ...(needsMoreContext !== undefined ? { needs_more_context: needsMoreContext } : {}),
     ...(retrieval !== undefined ? { retrieval } : {}),
-    ...(guidance !== undefined ? { guidance } : {}),
+    // `guidance` is a deprecated alias — derive it from the first reminder
+    // when the model emits reminders but no guidance.
+    ...(guidance !== undefined
+      ? { guidance }
+      : reminders !== undefined && reminders.length > 0
+        ? { guidance: reminders[0]!.message }
+        : {}),
+    ...(reminders !== undefined ? { reminders } : {}),
+    ...(subtasks !== undefined ? { subtasks } : {}),
     ...(evidencePlan !== undefined ? { evidence_plan: evidencePlan } : {}),
     ...(memory !== undefined ? { memory } : {}),
   };

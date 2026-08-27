@@ -18,7 +18,11 @@ const validClassification = {
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
-    tool_plan: { use: ['find_relevant_symbols'] },
+    tool_plan: {
+    recommended_tools: [
+      { name: 'find_relevant_symbols', intent: 'locate relevant symbols', priority: 1 },
+    ],
+  },
   response_policy: { directives: ['compact', 'no_filler'] },
 };
 
@@ -67,7 +71,7 @@ describe('parseClassification', () => {
       context_need: 'broad',
       precision: 'normal',
     });
-    expect(parsed.tool_plan).toEqual({ use: [] });
+    expect(parsed.tool_plan).toEqual({});
     expect(parsed.response_policy).toEqual({
       directives: ['compact', 'no_filler', 'no_repetition', 'no_tool_narration'],
     });
@@ -85,7 +89,16 @@ describe('parseClassification', () => {
       },
       response_policy: ['delta_only', 'not_a_directive', 7],
     });
-    expect(parsed.tool_plan).toEqual({ use: ['optimize_context'] });
+    // Legacy flat `use` array is folded into recommended_tools (backward compat).
+    expect(parsed.tool_plan).toEqual({
+      recommended_tools: [
+        {
+          name: 'optimize_context',
+          intent: 'extract and compress the relevant file context',
+          priority: 1,
+        },
+      ],
+    });
     expect(parsed.response_policy).toEqual({ directives: ['delta_only'] });
   });
 
@@ -241,7 +254,6 @@ describe('parseClassification', () => {
       },
     });
     expect(parsed.tool_plan).toEqual({
-      use: ['optimize_context'],
       recommended_tools: [
         { name: 'optimize_context', intent: 'extract context', priority: 2 },
         {
@@ -275,6 +287,44 @@ describe('parseClassification', () => {
     });
     expect(parsed.response_policy.language_standard).toBeUndefined();
     expect(parseClassification(validClassification).response_policy.language_standard).toBeUndefined();
+  });
+
+  it('captures reminders and subtasks when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      reminders: [
+        { tool: 'rtk', message: 'Use RTK for git output' },
+        { tool: 'leanctx', message: 'Use LeanCTX for shell output' },
+      ],
+      subtasks: ['coding_new', 'configuration', 'coding_new'],
+    });
+    expect(parsed.reminders).toEqual([
+      { tool: 'rtk', message: 'Use RTK for git output' },
+      { tool: 'leanctx', message: 'Use LeanCTX for shell output' },
+    ]);
+    expect(parsed.subtasks).toEqual(['coding_new', 'configuration']);
+  });
+
+  it('derives guidance from the first reminder when guidance is absent', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      reminders: [{ tool: 'rtk', message: 'Use RTK for git output' }],
+    });
+    expect(parsed.guidance).toBe('Use RTK for git output');
+  });
+
+  it('drops invalid reminders/subtasks entries', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      reminders: [
+        { tool: '', message: 'x' },
+        { tool: 'rtk', message: 'ok' },
+        (7 as unknown) as { tool: string; message: string },
+      ],
+      subtasks: ['coding_new', 'not_a_task', (42 as unknown) as never],
+    });
+    expect(parsed.reminders).toEqual([{ tool: 'rtk', message: 'ok' }]);
+    expect(parsed.subtasks).toEqual(['coding_new']);
   });
 });
 
@@ -341,6 +391,13 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('Diátaxis');
     expect(prompt).toContain('ISO 24495');
     expect(prompt).toContain('IEEE Style');
+  });
+
+  it('teaches reminders and subtasks for multi-task requests', () => {
+    const prompt = buildPrompt('Check in, push, then start the next task.');
+    expect(prompt).toContain('reminders');
+    expect(prompt).toContain('subtasks');
+    expect(prompt).toContain('tool-anchored');
   });
 });
 

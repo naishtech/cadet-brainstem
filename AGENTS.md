@@ -12,8 +12,11 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   short, faithful restatement of the request — what the user wants done, in
   one or two sentences — not the verbatim message.
 - Use the returned `strategy` (LeanCTX mode, compression, search approach)
-  and `tool_plan` (tools to use / skip) to decide how to use the tools below
-  for the rest of that request.
+  and `tool_plan.recommended_tools` (prioritized tool recommendations with
+  intent) to decide how to use the tools below for the rest of that request.
+- Honor the returned `reminders` (short tool-anchored directives, e.g. "Use
+  RTK for git output", "Use LeanCTX to expand shell output") and any `subtasks`
+  (additional detected task types).
 - The returned `response_policy` is an object the cloud LLM must follow when
   composing its reply: `directives` (per-task behavioral directives, e.g.
   `delta_only`, `no_filler`, `no_tool_narration`) and an optional

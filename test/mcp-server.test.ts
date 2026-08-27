@@ -36,7 +36,6 @@ function makeClassification(): ClassificationOutcome {
       context_need: 'broad',
       precision: 'normal',
       tool_plan: {
-        use: ['optimize_context'],
         recommended_tools: [
           { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
         ],
@@ -46,6 +45,8 @@ function makeClassification(): ClassificationOutcome {
         language_standard: 'microsoft',
       },
       guidance: 'Advisory: trace the loader debug path and verify before concluding.',
+      reminders: [{ tool: 'rtk', message: 'Use RTK for git output' }],
+      subtasks: ['coding_new'],
       evidence_plan: {
         prioritized_queries: [
           { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
@@ -225,7 +226,6 @@ describe('optimize_context', () => {
       language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
-      use: ['optimize_context'],
       recommended_tools: [
         { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
       ],
@@ -243,6 +243,8 @@ describe('optimize_context', () => {
       use: 'if_necessary',
       reason: 'check prior loader notes',
     });
+    expect(result.reminders).toEqual([{ tool: 'rtk', message: 'Use RTK for git output' }]);
+    expect(result.subtasks).toEqual(['coding_new']);
     expect(result.memory_policy).toBe(
       'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
     );
@@ -339,7 +341,6 @@ describe('classify', () => {
       language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
-      use: ['optimize_context'],
       recommended_tools: [
         { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
       ],
@@ -357,6 +358,8 @@ describe('classify', () => {
       use: 'if_necessary',
       reason: 'check prior loader notes',
     });
+    expect(result.reminders).toEqual([{ tool: 'rtk', message: 'Use RTK for git output' }]);
+    expect(result.subtasks).toEqual(['coding_new']);
     expect(result.memory_policy).toBe(
       'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
     );
@@ -697,7 +700,11 @@ describe('assess_context', () => {
       assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
         assessment: {
             verdict: 'continue',
-            tool_plan: { use: ['find_relevant_symbols'] },
+            tool_plan: {
+              recommended_tools: [
+                { name: 'find_relevant_symbols', intent: 'semantic search', priority: 1 },
+              ],
+            },
             reason: 'need the symbol definitions',
           },
         degraded: false,
@@ -730,7 +737,11 @@ describe('assess_context', () => {
     );
 
     expect(result.verdict).toBe('continue');
-    expect(result.tool_plan).toEqual({ use: ['find_relevant_symbols'] });
+    expect(result.tool_plan).toEqual({
+      recommended_tools: [
+        { name: 'find_relevant_symbols', intent: 'semantic search', priority: 1 },
+      ],
+    });
     expect(result.reason).toBe('need the symbol definitions');
     expect(result.degraded).toBe(false);
     expect(result.inventory).toHaveLength(1);
@@ -744,7 +755,7 @@ describe('assess_context', () => {
       assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
         assessment: {
           verdict: 'stop',
-          tool_plan: { use: [] },
+          tool_plan: {},
           reason: 'controller unavailable — no loop',
         },
         degraded: true,

@@ -38,15 +38,18 @@ export interface ClassifierOptions {
 }
 
 const CLASSIFICATION_SHAPE = `{
+  // Token-saving fields first so the cloud LLM reads them first.
+  "response_policy": { "directives": ["<directive>", "<directive>"], "language_standard": "asd_ste100 | microsoft | google | diataxis | iso_24495 | ieee" },
+  "reminders": [{ "tool": "<tool-or-category>", "message": "<one short directive>" }],
+  "tool_plan": { "recommended_tools": [{ "name": "<tool>", "intent": "<why>", "priority": 1 }] },
+  "context_need": "minimal | targeted | broad | exhaustive",
   "task": "question | coding_new | coding_fix | debug | refactor | test | review | architecture | documentation | investigation | planning | search | configuration",
+  "subtasks": ["<task type>", "<task type>"],
+  "precision": "approximate | normal | exact",
+  "evidence_plan": { "prioritized_queries": [{ "id": "q1", "query": "<search term>", "sources": ["serena", "file_search"], "cost_estimate": "cheap" }], "scope": "<initial scope>" },
   "complexity": "low | medium | high",
   "risk": "low | medium | high",
-  "context_need": "minimal | targeted | broad | exhaustive",
-  "precision": "approximate | normal | exact",
   "guidance": "<one advisory sentence>",
-  "tool_plan": { "use": ["<tool>"], "recommended_tools": [{ "name": "<tool>", "intent": "<why>", "priority": 1 }] },
-  "response_policy": { "directives": ["<directive>", "<directive>"], "language_standard": "asd_ste100 | microsoft | google | diataxis | iso_24495 | ieee" },
-  "evidence_plan": { "prioritized_queries": [{ "id": "q1", "query": "<search term>", "sources": ["serena", "file_search"], "cost_estimate": "cheap" }], "scope": "<initial scope>" },
   "memory": { "use": true },
   "confidence": 0.0,
   "needs_more_context": false
@@ -73,9 +76,8 @@ or area is "targeted"; reserve "broad"/"exhaustive" for tasks that genuinely
 need the whole repository.
 
 tool_plan: recommend the context tools to use from: {{{tools}}}.
-Only recommend a tool when it clearly helps this request. Pair each tool in
-"use" with a "recommended_tools" entry { "name", "intent", "priority" }
-(1-based, cheapest-first).
+Only recommend a tool when it clearly helps this request. List each tool in
+"recommended_tools" as { "name", "intent", "priority" } (1-based, cheapest-first).
 Shell/command output routing: when a task runs shell/CLI commands with noisy or
 large output, offer BOTH compress_command_output (RTK - fast, moderate) and
 leanctx_call with ctx_shell (LeanCTX - aggressive compression, slower, may
@@ -94,6 +96,16 @@ Omit language_standard only if no standard clearly applies.
 
 guidance: ONE short advisory sentence describing how to approach the request
 (e.g. compare/search/summarize focus). Concise, actionable, non-authoritative.
+
+reminders: a short list of concrete, tool-anchored directives the cloud LLM
+should honor, e.g. { "tool": "rtk", "message": "Use RTK (compress_command_output) for git status/log/diff output." },
+{ "tool": "leanctx", "message": "Use LeanCTX to expand shell/command output before triage." },
+{ "tool": "find_relevant_symbols", "message": "Locate the relevant symbols first." }.
+Keep them generic and task-agnostic. (guidance may stay as a one-line summary.)
+
+subtasks: when the request spans MULTIPLE distinct task types (e.g. "check in +
+push + start next coding task"), list the additional task types beyond the
+primary "task" (deduplicated, valid task types only). Omit when single-task.
 
 evidence_plan: the prioritized, source-tagged retrieval plan. Shape:
 { "prioritized_queries": [{ "id", "query", "sources", "cost_estimate", "fallback" }], "scope" }.
