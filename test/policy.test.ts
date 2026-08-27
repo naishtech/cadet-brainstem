@@ -16,7 +16,7 @@ function makeClassification(task: string): Classification {
     // 'exhaustive' never narrows, so the task maps straight to its raw policy.
     context_need: 'exhaustive',
     precision: 'normal',
-    tool_plan: { use: [], skip: [] },
+    tool_plan: { use: [] },
     response_policy: [],
   };
 }
@@ -27,7 +27,7 @@ const debugClassification: Classification = {
   risk: 'high',
   context_need: 'broad',
   precision: 'approximate',
-  tool_plan: { use: [], skip: [] },
+  tool_plan: { use: [] },
   response_policy: [],
 };
 
@@ -37,7 +37,7 @@ const questionClassification: Classification = {
   risk: 'low',
   context_need: 'minimal',
   precision: 'approximate',
-  tool_plan: { use: [], skip: [] },
+  tool_plan: { use: [] },
   response_policy: [],
 };
 

@@ -18,7 +18,7 @@ const validClassification = {
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
-  tool_plan: { use: ['find_relevant_symbols'], skip: ['compress_command_output'] },
+    tool_plan: { use: ['find_relevant_symbols'] },
   response_policy: ['compact', 'no_filler'],
 };
 
@@ -67,7 +67,7 @@ describe('parseClassification', () => {
       context_need: 'broad',
       precision: 'normal',
     });
-    expect(parsed.tool_plan).toEqual({ use: [], skip: [] });
+    expect(parsed.tool_plan).toEqual({ use: [] });
     expect(parsed.response_policy).toEqual([
       'compact',
       'no_filler',
@@ -85,11 +85,10 @@ describe('parseClassification', () => {
       precision: 'normal',
       tool_plan: {
         use: ['optimize_context', 'classify', 42, null],
-        skip: ['bogus'],
       },
       response_policy: ['delta_only', 'not_a_directive', 7],
     });
-    expect(parsed.tool_plan).toEqual({ use: ['optimize_context'], skip: [] });
+    expect(parsed.tool_plan).toEqual({ use: ['optimize_context'] });
     expect(parsed.response_policy).toEqual(['delta_only']);
   });
 
@@ -114,6 +113,14 @@ describe('parseClassification', () => {
       memory: { use: true, reason: 'previous decision: prefer-leanctx' },
     });
     expect(parsed.memory).toEqual({ use: true, reason: 'previous decision: prefer-leanctx' });
+  });
+
+  it('parses memory use = "if_necessary" when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      memory: { use: 'if_necessary', reason: 'may help during search' },
+    });
+    expect(parsed.memory).toEqual({ use: 'if_necessary', reason: 'may help during search' });
   });
 
   it('normalizes retrieval scope strings', () => {

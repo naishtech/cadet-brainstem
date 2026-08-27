@@ -40,7 +40,7 @@ const CLASSIFICATION_SHAPE = `{
   "risk": "low | medium | high",
   "context_need": "minimal | targeted | broad | exhaustive",
   "precision": "approximate | normal | exact",
-  "tool_plan": { "use": ["<tool>", "<tool>"], "skip": ["<tool>", "<tool>"] },
+  "tool_plan": { "use": ["<tool>", "<tool>"] },
   "response_policy": ["<directive>", "<directive>"],
   "retrieval": { "queries": ["<search term>", "<search term>"], "scope": "<initial scope>" },
   "confidence": 0.0,
@@ -67,8 +67,8 @@ context_need: size it to THIS request. A narrow question about one convention
 or area is "targeted"; reserve "broad"/"exhaustive" for tasks that genuinely
 need the whole repository.
 
-tool_plan: recommend the context tools to use and to skip, from: {{{tools}}}.
-Only recommend a tool when it clearly helps this request; be aggressive with skip.
+tool_plan: recommend the context tools to use from: {{{tools}}}.
+Only recommend a tool when it clearly helps this request.
 
 response_policy: pick the directives the agent should follow when replying.
 Be aggressive: a simple single-action request (e.g. "merge the PR") needs only
@@ -117,7 +117,7 @@ export function buildPrompt(taskText: string, template?: string): string {
 
 const ASSESSMENT_SHAPE = `{
   "verdict": "continue | stop",
-  "tool_plan": { "use": ["<tool>"], "skip": ["<tool>"] },
+  "tool_plan": { "use": ["<tool>"] },
   "reason": "<one short sentence>"
 }`;
 

@@ -34,7 +34,7 @@ function makeClassification(): ClassificationOutcome {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
-      tool_plan: { use: ['optimize_context'], skip: ['compress_command_output'] },
+      tool_plan: { use: ['optimize_context'] },
       response_policy: ['compact', 'delta_only'],
     },
     degraded: false,
@@ -186,10 +186,7 @@ describe('optimize_context', () => {
       compact: RESPONSE_POLICY_DIRECTIVES.compact,
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
-    expect(result.tool_plan).toEqual({
-      use: ['optimize_context'],
-      skip: ['compress_command_output'],
-    });
+    expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
     expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
@@ -280,10 +277,7 @@ describe('classify', () => {
       compact: RESPONSE_POLICY_DIRECTIVES.compact,
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
-    expect(result.tool_plan).toEqual({
-      use: ['optimize_context'],
-      skip: ['compress_command_output'],
-    });
+    expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
     expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
@@ -558,10 +552,10 @@ describe('assess_context', () => {
     const { deps } = makeDeps({
       assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
         assessment: {
-          verdict: 'continue',
-          tool_plan: { use: ['find_relevant_symbols'], skip: [] },
-          reason: 'need the symbol definitions',
-        },
+            verdict: 'continue',
+            tool_plan: { use: ['find_relevant_symbols'] },
+            reason: 'need the symbol definitions',
+          },
         degraded: false,
       })),
     });
@@ -592,10 +586,7 @@ describe('assess_context', () => {
     );
 
     expect(result.verdict).toBe('continue');
-    expect(result.tool_plan).toEqual({
-      use: ['find_relevant_symbols'],
-      skip: [],
-    });
+    expect(result.tool_plan).toEqual({ use: ['find_relevant_symbols'] });
     expect(result.reason).toBe('need the symbol definitions');
     expect(result.degraded).toBe(false);
     expect(result.inventory).toHaveLength(1);
@@ -609,7 +600,7 @@ describe('assess_context', () => {
       assess: vi.fn(async (): Promise<ContextAssessmentOutcome> => ({
         assessment: {
           verdict: 'stop',
-          tool_plan: { use: [], skip: [] },
+          tool_plan: { use: [] },
           reason: 'controller unavailable — no loop',
         },
         degraded: true,

@@ -49,18 +49,20 @@ precision (pick ONE):
 - exact       → must be precise/verified (security, financial, prod configs,
                data migrations, anything high risk)
 
-tool_plan: from {{{tools}}} — list tools that clearly help in "use", list
-obviously irrelevant ones in "skip". If unsure whether a tool helps, put it
-in "skip".
+tool_plan: from {{{tools}}} — list tools that clearly help in "use".
 
-Guidance: Prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when they cover the need. Recommend the smallest set of tools sufficient for the task. Do NOT recommend tools without a concrete reason. Prefer fewer tools and semantic search over broad file reads.
+Guidance: Prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when they cover the need. Recommend the smallest set of tools sufficient for the task. Do NOT recommend tools without a concrete reason. Prefer fewer tools and semantic search over broad file reads. Do NOT include an exclusion/`skip` list in the output — only recommend tools to *use*; do not attempt to forbid tools the downstream agent might need later.
 
 response_policy: from {{{directives}}}.
 - Mandatory compact directives for ordinary requests: `delta_only`, `no_filler`, `no_tool_narration`, `no_unnecessary_formatting`.
 - For exploratory/debugging/review add `preserve_evidence` and `progressive_disclosure` as needed.
 - If the recommended tool_plan is essential, add `follow_tool_plan` to instruct the downstream agent to honor MCP tools.
 
-memory: OPTIONAL. When present, an object with `{ "use": boolean, "reason": string }`. Default to omitting the field unless the request explicitly references prior decisions or memories. Do NOT query memory by default.
+memory: OPTIONAL. When present, an object with `{ "use": true|false|"if_necessary", "reason": string }`.
+ - Use `use: true` when the classifier is confident that stored memories should be consulted for this request.
+ - Use `use: "if_necessary"` when memory might help but is not strictly required (the downstream agent may consult memory if it becomes useful during reasoning).
+ - Omit the field or use `use: false` when memory is clearly irrelevant. Default to omitting the field.
+Do NOT recommend withholding access to memory; prefer recommending it when appropriate.
 
 retrieval: concrete search terms (function names, file names, config keys) mentioned or implied by the request, plus a short "scope" string. Omit this whole field if nothing needs to be searched (e.g. task = question).
 
@@ -81,13 +83,15 @@ CHEAPEST-FIRST TIE-BREAK RULES (apply in this order when unsure)
 EXAMPLES (routing-first outputs)
 ══════════════════════════════════════
 Request: "merge the open PR on the auth branch"
-{"task":"review","complexity":"low","risk":"medium","context_need":"targeted","precision":"normal","tool_plan":{"use":["git"],"skip":["search","optimize_context"]},"response_policy":["delta_only","no_filler","no_tool_narration","no_unnecessary_formatting"],"retrieval":{"queries":["auth branch","open PR"],"scope":"git/PR metadata only"},"confidence":0.9,"needs_more_context":false}
+
+{"task":"review","complexity":"low","risk":"medium","context_need":"targeted","precision":"normal","tool_plan":{"use":["git"]},"response_policy":["delta_only","no_filler","no_tool_narration","no_unnecessary_formatting"],"retrieval":{"queries":["auth branch","open PR"],"scope":"git/PR metadata only"},"confidence":0.9,"needs_more_context":false}
 
 Request: "why is the checkout page throwing a 500 sometimes"
-{"task":"debug","complexity":"medium","risk":"high","context_need":"targeted","precision":"exact","tool_plan":{"use":["find_relevant_symbols","optimize_context","logs"],"skip":["docs"]},"response_policy":["preserve_evidence","progressive_disclosure"],"retrieval":{"queries":["checkout","500","error handler","payment"],"scope":"checkout module + error/logging layer"},"confidence":0.8,"needs_more_context":true}
+
+{"task":"debug","complexity":"medium","risk":"high","context_need":"targeted","precision":"exact","tool_plan":{"use":["find_relevant_symbols","optimize_context","logs"]},"response_policy":["preserve_evidence","progressive_disclosure"],"retrieval":{"queries":["checkout","500","error handler","payment"],"scope":"checkout module + error/logging layer"},"confidence":0.8,"needs_more_context":true}
 
 Request: "what does the debounce function do in utils.js"
-{"task":"question","complexity":"low","risk":"low","context_need":"minimal","precision":"normal","tool_plan":{"use":["search"],"skip":["git","optimize_context"]},"response_policy":["delta_only","no_filler","no_unnecessary_formatting"],"retrieval":{"queries":["debounce","utils.js"],"scope":"utils.js"},"confidence":0.97,"needs_more_context":false}
+{"task":"question","complexity":"low","risk":"low","context_need":"minimal","precision":"normal","tool_plan":{"use":["search"]},"response_policy":["delta_only","no_filler","no_unnecessary_formatting"],"retrieval":{"queries":["debounce","utils.js"],"scope":"utils.js"},"confidence":0.97,"needs_more_context":false}
 
 ══════════════════════════════════════
 USER REQUEST TO CLASSIFY

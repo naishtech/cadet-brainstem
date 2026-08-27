@@ -34,7 +34,6 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const toolPlanSchema = z.object({
   use: z.array(toolNameSchema),
-  skip: z.array(toolNameSchema),
 });
 export type ToolPlan = z.infer<typeof toolPlanSchema>;
 
@@ -101,7 +100,7 @@ export const RESPONSE_POLICY_DIRECTIVES: Record<ResponsePolicyKey, string> = {
 };
 
 /** Conservative tool plan applied when the model omits a recommendation. */
-export const DEFAULT_TOOL_PLAN: ToolPlan = { use: [], skip: [] };
+export const DEFAULT_TOOL_PLAN: ToolPlan = { use: [] };
 /** Default response directives applied when the model omits them. */
 export const DEFAULT_RESPONSE_POLICY_KEYS: ResponsePolicyKey[] = [
   'compact',
@@ -138,7 +137,7 @@ export interface Classification {
   tool_plan: ToolPlan;
   response_policy: ResponsePolicyKey[];
   /** Optional memory hint: whether to consult stored memories and why. */
-  memory?: { use: boolean; reason?: string };
+  memory?: { use: boolean | 'if_necessary'; reason?: string };
   /** Model's self-assessed confidence in this classification (0..1). */
   confidence?: number;
   /** True when the model needs more context to classify well. */
@@ -186,12 +185,11 @@ function sanitizeStringList<T extends string>(
 
 function sanitizeToolPlan(raw: unknown): ToolPlan {
   if (typeof raw !== 'object' || raw === null) {
-    return { use: [], skip: [] };
+    return { use: [] };
   }
-  const plan = raw as { use?: unknown; skip?: unknown };
+  const plan = raw as { use?: unknown };
   return {
     use: sanitizeStringList(plan.use, isToolName),
-    skip: sanitizeStringList(plan.skip, isToolName),
   };
 }
 
@@ -239,9 +237,14 @@ function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
   return { queries, ...(scope !== undefined ? { scope } : {}) };
 }
 
-function sanitizeMemory(raw: unknown): { use: boolean; reason?: string } | undefined {
+function sanitizeMemory(raw: unknown): { use: boolean | 'if_necessary'; reason?: string } | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const m = raw as { use?: unknown; reason?: unknown };
+  if (m.use === 'if_necessary') {
+    return typeof m.reason === 'string' && m.reason.length > 0
+      ? { use: 'if_necessary', reason: m.reason.trim() }
+      : { use: 'if_necessary' };
+  }
   if (typeof m.use !== 'boolean') return undefined;
   return typeof m.reason === 'string' && m.reason.length > 0
     ? { use: m.use, reason: m.reason.trim() }
