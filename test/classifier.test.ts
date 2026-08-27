@@ -171,6 +171,13 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('User request: Fix config loading');
     expect(prompt).toContain('Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store');
   });
+
+  it('recommends prioritizing MCP tools over raw grep/file search', () => {
+    const prompt = buildPrompt('Analyze a fresh trace with the toolchain.');
+    expect(prompt).toContain('This classifier recommends that the downstream intelligence prioritize MCP tools over raw repo search, grep, or direct file inspection when possible.');
+    expect(prompt).toContain('The final agent response should honor the recommended tool plan unless MCP tooling is unavailable.');
+    expect(prompt).toContain('When the tool plan is essential, include follow_tool_plan');
+  });
 });
 
 describe('classify', () => {

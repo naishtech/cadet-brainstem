@@ -74,6 +74,7 @@ export const RESPONSE_POLICY_KEYS = [
   'compact',
   'no_decoration',
   'preserve_evidence',
+  'follow_tool_plan',
 ] as const;
 
 export const responsePolicyKeySchema = z.enum(RESPONSE_POLICY_KEYS);
@@ -92,6 +93,8 @@ export const RESPONSE_POLICY_DIRECTIVES: Record<ResponsePolicyKey, string> = {
     'Avoid decorative formatting, emojis, and headings that add no information.',
   preserve_evidence:
     'Preserve decisions, constraints, actions, errors and evidence.',
+  follow_tool_plan:
+    'Honor the recommended tool plan and prefer MCP tools over raw repo search when appropriate.',
 };
 
 /** Conservative tool plan applied when the model omits a recommendation. */
