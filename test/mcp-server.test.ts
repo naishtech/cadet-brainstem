@@ -422,7 +422,9 @@ describe('find_relevant_symbols', () => {
     expect(serenaSearch).toHaveBeenCalledWith(
       expect.objectContaining({ query: 'Foo', cwd: 'E:/proj' }),
     );
-    expect(savingsByTool(metricsPath).serena).toBe(0);
+    // Serena records hit-rate (symbols/files), not token savings — so it does
+    // not appear under "Savings by tool" (filtered to >0) but is tracked here.
+    expect(savingsByTool(metricsPath).serena).toBeUndefined();
     expect(callStatsByTool(metricsPath).serena?.calls).toBe(1);
     const serenaRow = firstRowForTool(metricsPath, 'serena');
     expect(serenaRow.symbols_found).toBe(1);

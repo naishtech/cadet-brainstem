@@ -396,6 +396,7 @@ export class MetricsStore {
         `SELECT ${column} AS key, COALESCE(SUM(estimated_tokens_saved), 0) AS estimatedTokensSaved
          FROM optimisation_events
          GROUP BY ${column}
+         HAVING COALESCE(SUM(estimated_tokens_saved), 0) > 0
          ORDER BY estimatedTokensSaved DESC`,
       )
       .all() as { key: string; estimatedTokensSaved: number }[];

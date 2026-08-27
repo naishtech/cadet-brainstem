@@ -81,18 +81,28 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
 
     log('');
     log('Savings by tool:');
-    for (const row of byTool) {
+    if (byTool.length === 0) {
       log(
-        `  ${row.key.padEnd(12)} ${formatTokens(row.estimatedTokensSaved)} tokens`,
+        '  (none recorded yet — use compress_command_output / optimize_context to start saving tokens)',
       );
+    } else {
+      for (const row of byTool) {
+        log(
+          `  ${row.key.padEnd(12)} ${formatTokens(row.estimatedTokensSaved)} tokens`,
+        );
+      }
     }
 
     log('');
     log('Savings by task type:');
-    for (const row of byTask) {
-      log(
-        `  ${row.key.padEnd(12)} ${formatTokens(row.estimatedTokensSaved)} tokens`,
-      );
+    if (byTask.length === 0) {
+      log('  (none recorded yet)');
+    } else {
+      for (const row of byTask) {
+        log(
+          `  ${row.key.padEnd(12)} ${formatTokens(row.estimatedTokensSaved)} tokens`,
+        );
+      }
     }
 
     log('');
