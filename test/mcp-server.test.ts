@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_POLICY,
-  MEMORY_POLICY_SKIP,
   assessContextTool,
   chatMemoryStoreTool,
   classifyTool,
@@ -187,7 +186,7 @@ describe('optimize_context', () => {
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
     expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
-    expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
+    expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
@@ -278,7 +277,7 @@ describe('classify', () => {
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
     expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
-    expect(result.memory_policy).toBe(MEMORY_POLICY_SKIP);
+    expect(result.memory_policy).toBe(MEMORY_POLICY);
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 

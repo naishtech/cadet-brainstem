@@ -182,7 +182,7 @@ Informed by a recent prompt review, the classifier must act strictly as a lightw
 - Cheapest-first principle: replace any "safer, higher option" guidance with "prefer the cheapest plausible retrieval strategy and escalate only when necessary".
 - Response policy: include `no_unnecessary_formatting` alongside `delta_only`, `no_filler`, and `no_tool_narration`. Prefer compact, token-efficient responses.
 - Memory opt-in: add an optional `memory` field in the classifier output (boolean + reason) and document when memory should be used; default to not using memory for routing decisions.
-- Tool plan: prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when appropriate; recommend the smallest set of tools required and mark all others as `skip`.
+- Tool plan: prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when appropriate; recommend the smallest set of tools required. Do NOT include an exclusion/`skip` list in the classifier output — only recommend tools to use.
 - Escalation loop: document an explicit escalation pattern — start with narrow queries and semantic search, then request compressed context (LeanCTX), and only read raw large files when strictly necessary.
 - Tie-break rules: favor strategies that reduce context size and token usage (prefer fewer tools, prefer semantic search over broad reads, prefer compressed output over raw output).
 - Examples: add concrete examples demonstrating routing-first behavior and expected `tool_plan` outputs for typical tasks (question, coding_new, debug).

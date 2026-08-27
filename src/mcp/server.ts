@@ -34,6 +34,7 @@ import {
   resolveMemoryDbPath,
   resolveProjectId,
   resolveProjectRootFor,
+  type Memory,
 } from '../memory';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
@@ -104,12 +105,12 @@ export const MEMORY_POLICY =
   'rediscover (decisions, constraints, verified commands, gotchas). Never store secrets.';
 
 /** Policy when the tool plan skips memory: don't even check it. */
-export const MEMORY_POLICY_SKIP =
-  'Memory is optional evidence, never authoritative state. Skip chat_memory_store for this request.';
-
 /** Pick the memory-policy text based on whether the tool plan uses memory. */
-export function memoryPolicyFor(usesMemory: boolean): string {
-  return usesMemory ? MEMORY_POLICY : MEMORY_POLICY_SKIP;
+export function memoryPolicyFor(usesMemory: boolean | 'if_necessary' | undefined): string {
+  if (usesMemory === 'if_necessary')
+    return 'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.';
+  // Default: memory is optional evidence (never authoritative). Do not suggest skipping memory.
+  return MEMORY_POLICY;
 }
 
 export interface SerenaTools {
@@ -296,7 +297,8 @@ export async function optimizeContextTool(
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
     retrieval: compileRetrieval(outcome.classification.retrieval),
     memory_policy: memoryPolicyFor(
-      outcome.classification.tool_plan.use.includes('chat_memory_store'),
+      outcome.classification.memory?.use ??
+        (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
     ),
     ...(note !== undefined ? { note } : {}),
   };
@@ -316,6 +318,44 @@ export async function classifyTool(
     throw new Error('classify requires a non-empty string "task"');
   }
   const d = resolveDeps(deps);
+  // Quick, inexpensive memory lookup: if the project-scoped memory DB contains
+  // matching memories for this task, surface them as an auto-generated plan
+  // placed into the `tasks/` directory. This is intentionally shallow (simple
+  // substring search) to keep the classifier stateless and fast.
+  let relevant_memories: Array<Record<string, unknown>> | undefined = undefined;
+  try {
+    const store =
+      deps.memory ??
+      new MemoryStore(
+        resolveMemoryDbPath(
+          process.cwd(),
+          undefined,
+          loadConfig().memory.active_project,
+          loadConfig().memory.projects,
+        ),
+      );
+    try {
+      const memories = store.search({ query: args.task, project: d.defaultProject }) as Memory[];
+      if (Array.isArray(memories) && memories.length > 0) {
+        const max = Math.min(5, memories.length);
+        relevant_memories = [];
+        for (let i = 0; i < max; i++) {
+          const m = memories[i];
+          const content = m.content ?? '';
+          const snippet = String(content).split('\n')[0].slice(0, 200);
+          relevant_memories.push({ id: m.id, snippet, tags: m.tags, project: m.project });
+        }
+      }
+    } finally {
+      if (deps.memory === undefined) {
+        try {
+          store.close();
+        } catch {}
+      }
+    }
+  } catch (err) {
+    d.log(`memory lookup skipped: ${(err as Error).message}`);
+  }
   const requestId = resolveRequestId(args.request_id);
   const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
@@ -329,9 +369,11 @@ export async function classifyTool(
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
     retrieval: compileRetrieval(outcome.classification.retrieval),
     memory_policy: memoryPolicyFor(
-      outcome.classification.tool_plan.use.includes('chat_memory_store'),
+      outcome.classification.memory?.use ??
+        (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
     ),
     degraded: outcome.degraded,
+    ...(relevant_memories !== undefined ? { relevant_memories } : {}),
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };

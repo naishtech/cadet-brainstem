@@ -71,12 +71,43 @@ async function main(): Promise<void> {
     throw new Error('classify NOT listed');
   }
 
+  // Store a short memory for the project so classify can pick it up.
+  const memStore = await request('tools/call', {
+    name: 'chat_memory_store',
+    arguments: {
+      action: 'store',
+      content:
+        'Loader gotcha: Windows startup path requires special handling\nObserved on CI and Windows 10',
+      tags: ['gotcha'],
+    },
+  });
+  console.log('memory stored, isError:', memStore.result?.isError);
+
   const call = await request('tools/call', {
     name: 'classify',
-    arguments: { task: 'Debug why the loader fails to start on Windows.' },
+    arguments: { task: 'loader' },
   });
   console.log('isError:', call.result?.isError);
   console.log(call.result?.content?.[0]?.text);
+
+  // Verify the classify response contains relevant_memories
+  try {
+    const text = call.result?.content?.[0]?.text;
+    if (!text) {
+      throw new Error('no classify text');
+    }
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    if ((parsed.relevant_memories as unknown[]) === undefined) {
+      console.error('no relevant_memories in classify response');
+      child.kill();
+      process.exit(2);
+    }
+    console.log('relevant_memories:', (parsed.relevant_memories as unknown[]).length);
+  } catch (err) {
+    console.error('failed to validate classify response:', (err as Error).message);
+    child.kill();
+    process.exit(2);
+  }
 
   clearTimeout(guard);
   child.kill();
