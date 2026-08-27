@@ -108,6 +108,14 @@ describe('parseClassification', () => {
     });
   });
 
+  it('parses optional memory field when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      memory: { use: true, reason: 'previous decision: prefer-leanctx' },
+    });
+    expect(parsed.memory).toEqual({ use: true, reason: 'previous decision: prefer-leanctx' });
+  });
+
   it('normalizes retrieval scope strings', () => {
     const parsed = parseClassification({
       ...validClassification,
@@ -145,9 +153,9 @@ describe('parseClassification', () => {
 describe('buildPrompt', () => {
   it('enforces the key classifier constraints', () => {
     const prompt = buildPrompt('fix the blueprint loader');
-    expect(prompt).toContain('You are a fast, lightweight classifier');
-    expect(prompt).toContain('You do NOT solve, answer,');
-    expect(prompt).toContain('or explain the request. You ONLY classify it.');
+    expect(prompt).toContain('You are a fast, lightweight routing classifier');
+    expect(prompt).toContain('Do NOT solve');
+    expect(prompt).toContain('DO NOT invent repository facts');
     expect(prompt).toContain('Output ONLY valid JSON');
     expect(prompt).toContain('No markdown fences');
     expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
@@ -174,9 +182,9 @@ describe('buildPrompt', () => {
 
   it('recommends prioritizing MCP tools over raw grep/file search', () => {
     const prompt = buildPrompt('Analyze a fresh trace with the toolchain.');
-    expect(prompt).toContain('This classifier recommends that the downstream intelligence prioritize MCP tools over raw repo search, grep, or direct file inspection when possible.');
-    expect(prompt).toContain('The final agent response should honor the recommended tool plan unless MCP tooling is unavailable.');
-    expect(prompt).toContain('When the tool plan is essential, include follow_tool_plan');
+    expect(prompt).toContain('Prefer MCP/semantic tools');
+    expect(prompt).toContain('Recommend the smallest set of tools sufficient for the task');
+    expect(prompt).toContain('follow_tool_plan');
   });
 });
 

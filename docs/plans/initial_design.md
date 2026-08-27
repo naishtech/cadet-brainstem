@@ -174,6 +174,21 @@ classifier:
 
 Do not hard-code a single model name throughout the codebase.
 
+### Classifier prompt improvements (routing-first)
+
+Informed by a recent prompt review, the classifier must act strictly as a lightweight routing model that emits a cheap, safe strategy for downstream agents rather than attempting to solve or over-reason about the task. Changes required:
+
+- Routing-only: the prompt must instruct the model to produce only the structured JSON routing shape; no explanations, no solutions, no assumptions about repo state.
+- Cheapest-first principle: replace any "safer, higher option" guidance with "prefer the cheapest plausible retrieval strategy and escalate only when necessary".
+- Response policy: include `no_unnecessary_formatting` alongside `delta_only`, `no_filler`, and `no_tool_narration`. Prefer compact, token-efficient responses.
+- Memory opt-in: add an optional `memory` field in the classifier output (boolean + reason) and document when memory should be used; default to not using memory for routing decisions.
+- Tool plan: prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when appropriate; recommend the smallest set of tools required and mark all others as `skip`.
+- Escalation loop: document an explicit escalation pattern — start with narrow queries and semantic search, then request compressed context (LeanCTX), and only read raw large files when strictly necessary.
+- Tie-break rules: favor strategies that reduce context size and token usage (prefer fewer tools, prefer semantic search over broad reads, prefer compressed output over raw output).
+- Examples: add concrete examples demonstrating routing-first behavior and expected `tool_plan` outputs for typical tasks (question, coding_new, debug).
+
+Make these changes in `src/classifier/classifier-prompt.mustache`, update the JSON schema validation, and add tests/examples that assert the prompt produces the new routing-only JSON outputs.
+
 ---
 
 # 4. Policy engine

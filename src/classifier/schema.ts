@@ -73,6 +73,7 @@ export const RESPONSE_POLICY_KEYS = [
   'progressive_disclosure',
   'compact',
   'no_decoration',
+  'no_unnecessary_formatting',
   'preserve_evidence',
   'follow_tool_plan',
 ] as const;
@@ -91,6 +92,8 @@ export const RESPONSE_POLICY_DIRECTIVES: Record<ResponsePolicyKey, string> = {
   compact: 'Keep output compact and information-dense.',
   no_decoration:
     'Avoid decorative formatting, emojis, and headings that add no information.',
+  no_unnecessary_formatting:
+    'Avoid unnecessary formatting, large markdown blocks, and decorative elements that increase token usage.',
   preserve_evidence:
     'Preserve decisions, constraints, actions, errors and evidence.',
   follow_tool_plan:
@@ -120,6 +123,7 @@ export const classificationSchema = z.object({
   precision: precisionSchema,
   tool_plan: z.unknown().optional(),
   response_policy: z.unknown().optional(),
+  memory: z.unknown().optional(),
   confidence: z.unknown().optional(),
   needs_more_context: z.unknown().optional(),
   retrieval: z.unknown().optional(),
@@ -133,6 +137,8 @@ export interface Classification {
   precision: Precision;
   tool_plan: ToolPlan;
   response_policy: ResponsePolicyKey[];
+  /** Optional memory hint: whether to consult stored memories and why. */
+  memory?: { use: boolean; reason?: string };
   /** Model's self-assessed confidence in this classification (0..1). */
   confidence?: number;
   /** True when the model needs more context to classify well. */
@@ -233,6 +239,15 @@ function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
   return { queries, ...(scope !== undefined ? { scope } : {}) };
 }
 
+function sanitizeMemory(raw: unknown): { use: boolean; reason?: string } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const m = raw as { use?: unknown; reason?: unknown };
+  if (typeof m.use !== 'boolean') return undefined;
+  return typeof m.reason === 'string' && m.reason.length > 0
+    ? { use: m.use, reason: m.reason.trim() }
+    : { use: m.use };
+}
+
 /** Raised when classifier output does not match the classification schema. */
 export class ClassificationValidationError extends Error {
   constructor(message: string) {
@@ -266,6 +281,7 @@ export function parseClassification(raw: unknown): Classification {
   const confidence = sanitizeConfidence(result.data.confidence);
   const needsMoreContext = sanitizeBoolean(result.data.needs_more_context);
   const retrieval = sanitizeRetrieval(result.data.retrieval);
+  const memory = sanitizeMemory(result.data.memory);
   return {
     task: result.data.task,
     complexity: result.data.complexity,
@@ -277,6 +293,7 @@ export function parseClassification(raw: unknown): Classification {
     ...(confidence !== undefined ? { confidence } : {}),
     ...(needsMoreContext !== undefined ? { needs_more_context: needsMoreContext } : {}),
     ...(retrieval !== undefined ? { retrieval } : {}),
+    ...(memory !== undefined ? { memory } : {}),
   };
 }
 

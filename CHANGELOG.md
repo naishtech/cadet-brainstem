@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.12] — 2026-08-27
+
+### Changed
+
+- **Classifier prompt: routing-first** — Updated the Ollama classifier prompt to be strictly routing-only (no solving or extra reasoning), JSON-only output, and to prefer the cheapest plausible retrieval strategy. Added explicit cheapest-first tie-break rules and an escalation loop (semantic search → compressed context → raw reads).
+- **Response policy directives** — Added `no_unnecessary_formatting` to reduce token-heavy formatting; updated defaults and documentation to prefer compact, token-efficient downstream responses.
+- **Memory opt-in** — Classifier output now supports an optional `memory` field (`{ use: boolean, reason?: string }`) and the system treats memory as optional evidence by default.
+- **Tool plan guidance** — Prompt and docs now emphasize preferring MCP/semantic tools and recommending the smallest set of tools necessary.
+
+### Added
+
+- Task file: `tasks/35-implement-classifier-routing-prompt.md` describing implementation steps and tests.
+
+### Tests
+
+- Schema and tests updated to validate the `memory` field and the new response directive; local test suite passes.
+
+### Integration
+
+- Successfully ran the MCP end-to-end classify smoke test (`scripts/mcp-classify-e2e.ts`), confirming the MCP-exposed classifier produces routing strategies.
+
 ## [0.1.11] — 2026-08-26
 
 ### Changed
