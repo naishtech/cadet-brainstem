@@ -103,6 +103,27 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     console.log('relevant_memories:', (parsed.relevant_memories as unknown[]).length);
+    // Response-schema smoke checks (Task 36): guidance + evidence_plan present.
+    if (
+      typeof parsed.guidance !== 'string' ||
+      parsed.guidance.trim().length === 0
+    ) {
+      console.error('no non-empty guidance in classify response');
+      child.kill();
+      process.exit(2);
+    }
+    const ep = parsed.evidence_plan as { prioritized_queries?: unknown[] } | null;
+    if (ep === null || typeof ep !== 'object' || !Array.isArray(ep.prioritized_queries)) {
+      console.error('no evidence_plan.prioritized_queries in classify response');
+      child.kill();
+      process.exit(2);
+    }
+    console.log(
+      'guidance:',
+      parsed.guidance,
+      '| evidence_plan queries:',
+      ep.prioritized_queries.length,
+    );
   } catch (err) {
     console.error('failed to validate classify response:', (err as Error).message);
     child.kill();

@@ -33,8 +33,21 @@ function makeClassification(): ClassificationOutcome {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
-      tool_plan: { use: ['optimize_context'] },
+      tool_plan: {
+        use: ['optimize_context'],
+        recommended_tools: [
+          { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
+        ],
+      },
       response_policy: ['compact', 'delta_only'],
+      guidance: 'Advisory: trace the loader debug path and verify before concluding.',
+      evidence_plan: {
+        prioritized_queries: [
+          { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
+        ],
+        scope: 'src/loader',
+      },
+      memory: { use: 'if_necessary', reason: 'check prior loader notes' },
     },
     degraded: false,
   };
@@ -185,8 +198,28 @@ describe('optimize_context', () => {
       compact: RESPONSE_POLICY_DIRECTIVES.compact,
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
-    expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
-    expect(result.memory_policy).toBe(MEMORY_POLICY);
+    expect(result.tool_plan).toEqual({
+      use: ['optimize_context'],
+      recommended_tools: [
+        { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
+      ],
+    });
+    expect(result.guidance).toBe(
+      'Advisory: trace the loader debug path and verify before concluding.',
+    );
+    expect(result.evidence_plan).toEqual({
+      prioritized_queries: [
+        { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
+      ],
+      scope: 'src/loader',
+    });
+    expect(result.memory_hints).toEqual({
+      use: 'if_necessary',
+      reason: 'check prior loader notes',
+    });
+    expect(result.memory_policy).toBe(
+      'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
+    );
     expect(leanctxOptimize).toHaveBeenCalledWith(
       expect.objectContaining({ target: 'src/foo.ts', mode: 'cognitive', taskType: 'debug' }),
     );
@@ -276,8 +309,28 @@ describe('classify', () => {
       compact: RESPONSE_POLICY_DIRECTIVES.compact,
       delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
     });
-    expect(result.tool_plan).toEqual({ use: ['optimize_context'] });
-    expect(result.memory_policy).toBe(MEMORY_POLICY);
+    expect(result.tool_plan).toEqual({
+      use: ['optimize_context'],
+      recommended_tools: [
+        { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
+      ],
+    });
+    expect(result.guidance).toBe(
+      'Advisory: trace the loader debug path and verify before concluding.',
+    );
+    expect(result.evidence_plan).toEqual({
+      prioritized_queries: [
+        { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
+      ],
+      scope: 'src/loader',
+    });
+    expect(result.memory_hints).toEqual({
+      use: 'if_necessary',
+      reason: 'check prior loader notes',
+    });
+    expect(result.memory_policy).toBe(
+      'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
+    );
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 

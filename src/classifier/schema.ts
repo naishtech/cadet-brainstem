@@ -35,11 +35,53 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 export const toolPlanSchema = z.object({
   use: z.array(toolNameSchema),
 });
-export type ToolPlan = z.infer<typeof toolPlanSchema>;
 
-/** Search queries + initial scope the agent should start with (retrieval plan). */
+/** Default intent text used when the model omits it for a recommended tool. */
+export const RECOMMENDED_TOOL_INTENTS: Record<ToolName, string> = {
+  optimize_context: 'extract and compress the relevant file context',
+  find_relevant_symbols: 'semantic search for relevant symbols across the project',
+  compress_command_output: 'compress noisy command output for cheap analysis',
+  chat_memory_store: 'consult stored project memories as optional evidence',
+};
+
+/** A single recommended tool paired with its intent and priority. */
+export interface RecommendedTool {
+  name: ToolName;
+  /** Why this tool helps for this request (advisory). */
+  intent: string;
+  /** 1-based priority; lower runs first (cheapest-first retrieval). */
+  priority: number;
+  /** Optional tool-specific constraints, e.g. ["max_results:10"]. */
+  constraints?: string[];
+}
+
+/** Tools the agent should use / skip, plus prioritized recommendations. */
+export interface ToolPlan {
+  use: ToolName[];
+  skip?: ToolName[];
+  /** Prioritized recommendations with intent (steers orchestration). */
+  recommended_tools?: RecommendedTool[];
+}
+
+/** Search queries + initial scope the agent should start with (legacy alias). */
 export interface RetrievalPlan {
   queries: string[];
+  scope?: string;
+}
+
+/** A single prioritized, source-tagged retrieval query (evidence_plan). */
+export interface EvidenceQuery {
+  id: string;
+  query: string;
+  reason?: string;
+  sources: string[];
+  cost_estimate?: string;
+  fallback?: string[];
+}
+
+/** Prioritized, source-tagged retrieval plan (replaces the older `retrieval`). */
+export interface EvidencePlan {
+  prioritized_queries: EvidenceQuery[];
   scope?: string;
 }
 
@@ -126,6 +168,8 @@ export const classificationSchema = z.object({
   confidence: z.unknown().optional(),
   needs_more_context: z.unknown().optional(),
   retrieval: z.unknown().optional(),
+  guidance: z.unknown().optional(),
+  evidence_plan: z.unknown().optional(),
 });
 
 export interface Classification {
@@ -142,8 +186,12 @@ export interface Classification {
   confidence?: number;
   /** True when the model needs more context to classify well. */
   needs_more_context?: boolean;
-  /** Search queries + initial scope to start retrieval with. */
+  /** Search queries + initial scope to start retrieval with (legacy alias). */
   retrieval?: RetrievalPlan;
+  /** One-line advisory summary of how to approach the request. */
+  guidance?: string;
+  /** Prioritized, source-tagged retrieval plan (replaces `retrieval`). */
+  evidence_plan?: EvidencePlan;
 }
 
 export type TaskType = z.infer<typeof taskTypeSchema>;
@@ -187,10 +235,65 @@ function sanitizeToolPlan(raw: unknown): ToolPlan {
   if (typeof raw !== 'object' || raw === null) {
     return { use: [] };
   }
-  const plan = raw as { use?: unknown };
-  return {
-    use: sanitizeStringList(plan.use, isToolName),
+  const plan = raw as {
+    use?: unknown;
+    skip?: unknown;
+    recommended_tools?: unknown;
   };
+  const use = sanitizeStringList(plan.use, isToolName);
+  const skip = sanitizeStringList(plan.skip, isToolName);
+  const recommended = sanitizeRecommendedTools(plan.recommended_tools);
+  const result: ToolPlan = { use };
+  if (skip.length > 0) {
+    result.skip = skip;
+  }
+  if (recommended !== undefined) {
+    result.recommended_tools = recommended;
+  }
+  return result;
+}
+
+/** Keep valid recommended tools; fill missing intent, drop invalid names. */
+function sanitizeRecommendedTools(
+  raw: unknown,
+): RecommendedTool[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+  const result: RecommendedTool[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) {
+      continue;
+    }
+    const t = item as {
+      name?: unknown;
+      intent?: unknown;
+      priority?: unknown;
+      constraints?: unknown;
+    };
+    if (!isToolName(t.name)) {
+      continue;
+    }
+    const intent =
+      typeof t.intent === 'string' && t.intent.trim().length > 0
+        ? t.intent.trim().slice(0, 200)
+        : RECOMMENDED_TOOL_INTENTS[t.name];
+    const priority =
+      typeof t.priority === 'number' && Number.isFinite(t.priority)
+        ? t.priority
+        : 0;
+    const constraints = sanitizeStringList(
+      t.constraints,
+      (value): value is string => typeof value === 'string',
+    );
+    result.push({
+      name: t.name,
+      intent,
+      priority,
+      ...(constraints.length > 0 ? { constraints } : {}),
+    });
+  }
+  return result.length > 0 ? result : undefined;
 }
 
 function sanitizeResponsePolicy(raw: unknown): ResponsePolicyKey[] {
@@ -235,6 +338,108 @@ function sanitizeRetrieval(raw: unknown): RetrievalPlan | undefined {
     return undefined;
   }
   return { queries, ...(scope !== undefined ? { scope } : {}) };
+}
+
+/** Keep a short one-line advisory, else undefined. */
+function sanitizeGuidance(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const text = raw.trim().replace(/\s+/g, ' ');
+  if (text.length === 0) {
+    return undefined;
+  }
+  return text.length > 400 ? `${text.slice(0, 397)}...` : text;
+}
+
+/** Keep a prioritized evidence plan, else undefined. */
+function sanitizeEvidencePlan(raw: unknown): EvidencePlan | undefined {
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const plan = raw as { prioritized_queries?: unknown; scope?: unknown };
+  const queries = sanitizeEvidenceQueries(plan.prioritized_queries);
+  const scope = normalizeScope(plan.scope);
+  if (queries.length === 0 && scope === undefined) {
+    return undefined;
+  }
+  const result: EvidencePlan = { prioritized_queries: queries };
+  if (scope !== undefined) {
+    result.scope = scope;
+  }
+  return result;
+}
+
+/** Sanitize evidence queries, dropping entries without a usable query. */
+function sanitizeEvidenceQueries(raw: unknown): EvidenceQuery[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const result: EvidenceQuery[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) {
+      continue;
+    }
+    const q = item as {
+      id?: unknown;
+      query?: unknown;
+      reason?: unknown;
+      sources?: unknown;
+      cost_estimate?: unknown;
+      fallback?: unknown;
+    };
+    if (typeof q.query !== 'string' || q.query.trim().length === 0) {
+      continue;
+    }
+    const sources = sanitizeStringList(
+      q.sources,
+      (value): value is string => typeof value === 'string',
+    );
+    const fallback = sanitizeStringList(
+      q.fallback,
+      (value): value is string => typeof value === 'string',
+    );
+    const id =
+      typeof q.id === 'string' && q.id.trim().length > 0
+        ? q.id.trim().slice(0, 40)
+        : `q${result.length + 1}`;
+    const entry: EvidenceQuery = {
+      id,
+      query: q.query.trim().slice(0, 200),
+      sources: sources.length > 0 ? sources : ['serena', 'file_search'],
+    };
+    if (typeof q.reason === 'string' && q.reason.trim().length > 0) {
+      entry.reason = q.reason.trim().slice(0, 200);
+    }
+    if (
+      typeof q.cost_estimate === 'string' &&
+      q.cost_estimate.trim().length > 0
+    ) {
+      entry.cost_estimate = q.cost_estimate.trim().slice(0, 40);
+    }
+    if (fallback.length > 0) {
+      entry.fallback = fallback;
+    }
+    result.push(entry);
+  }
+  return result;
+}
+
+/** Build an evidence plan from the legacy `retrieval` alias. */
+function evidencePlanFromRetrieval(retrieval: RetrievalPlan): EvidencePlan {
+  const prioritized_queries: EvidenceQuery[] = retrieval.queries.map(
+    (query, i) => ({
+      id: `q${i + 1}`,
+      query,
+      sources: ['serena', 'file_search'],
+      cost_estimate: 'cheap',
+    }),
+  );
+  const result: EvidencePlan = { prioritized_queries };
+  if (retrieval.scope !== undefined) {
+    result.scope = retrieval.scope;
+  }
+  return result;
 }
 
 function sanitizeMemory(raw: unknown): { use: boolean | 'if_necessary'; reason?: string } | undefined {
@@ -284,6 +489,10 @@ export function parseClassification(raw: unknown): Classification {
   const confidence = sanitizeConfidence(result.data.confidence);
   const needsMoreContext = sanitizeBoolean(result.data.needs_more_context);
   const retrieval = sanitizeRetrieval(result.data.retrieval);
+  const guidance = sanitizeGuidance(result.data.guidance);
+  const evidencePlan =
+    sanitizeEvidencePlan(result.data.evidence_plan) ??
+    (retrieval !== undefined ? evidencePlanFromRetrieval(retrieval) : undefined);
   const memory = sanitizeMemory(result.data.memory);
   return {
     task: result.data.task,
@@ -296,6 +505,8 @@ export function parseClassification(raw: unknown): Classification {
     ...(confidence !== undefined ? { confidence } : {}),
     ...(needsMoreContext !== undefined ? { needs_more_context: needsMoreContext } : {}),
     ...(retrieval !== undefined ? { retrieval } : {}),
+    ...(guidance !== undefined ? { guidance } : {}),
+    ...(evidencePlan !== undefined ? { evidence_plan: evidencePlan } : {}),
     ...(memory !== undefined ? { memory } : {}),
   };
 }

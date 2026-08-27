@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Response schema & guidance (Task 36)** — The classifier response now carries:
+  - `guidance` — a one-line advisory summary of how to approach the request (synthesized from the task when the model omits it, so it is always non-empty).
+  - `evidence_plan.prioritized_queries[]` — prioritized, source-tagged retrieval queries (`id`, `query`, `sources`, `cost_estimate`, optional `reason`/`fallback`). Replaces the older `retrieval`; `retrieval` is still returned as a legacy alias during the transition.
+  - `tool_plan.recommended_tools[]` — recommended tools paired with `name`, `intent`, and 1-based `priority` (cheapest-first). Missing intents are filled from defaults; invalid entries are dropped.
+  - `memory_hints` — advisory `{ use: true | false | "if_necessary" }`, never instructs to skip memory.
+- Exported `RECOMMENDED_TOOL_INTENTS` and the `EvidencePlan`/`EvidenceQuery`/`RecommendedTool` types from the classifier.
+- Prompt (`classifier-prompt.mustache` + default template) now teaches `guidance`, `evidence_plan`, and `recommended_tools`, with updated JSON shape and examples.
+
+### Tests
+
+- Added schema tests for `guidance`, `evidence_plan`, `recommended_tools`, and the legacy `retrieval` → `evidence_plan` synthesis; updated MCP `classify`/`optimize_context` tests to assert the new fields.
+
 ## [0.1.12] — 2026-08-27
 
 ### Changed
