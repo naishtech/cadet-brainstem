@@ -36,7 +36,7 @@ describe('default config', () => {
       classifier: {
         provider: 'ollama',
         model: 'qwen3:1.7b',
-        timeout_ms: 30000,
+        timeout_ms: 60000,
         keep_alive: '30m',
       },
       session: { max_turns: 30 },
@@ -68,7 +68,7 @@ describe('loadConfig', () => {
     expect(cfg.classifier).toEqual({
       provider: 'ollama',
       model: 'llama3',
-      timeout_ms: 30000,
+      timeout_ms: 60000,
       keep_alive: '30m',
     });
     expect(cfg.session.max_turns).toBe(30);

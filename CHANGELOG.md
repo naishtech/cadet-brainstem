@@ -6,6 +6,39 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **`response_policy` is now an object + recommended language standard** —
+  `response_policy` was refactored from a flat list of directive keys into an
+  object the cloud LLM follows when composing its reply:
+  `{ directives: [...], language_standard?: "<one>" }`. The local classifier
+  picks a recommended documentation language standard (ASD-STE100, Microsoft,
+  Google, Diátaxis, ISO 24495, IEEE) from a fixed, validated set, nested under
+  `response_policy.language_standard`. Backward-compatible: a legacy flat-array
+  `response_policy` is still accepted and normalized to `{ directives }`. Taught
+  in the classifier prompt and documented in `AGENTS.md` steering.
+- **Metrics evaluation (Task 38, Part C)** — Evaluated LeanCTX analytics
+  (`ctx_gain`/`ctx_cost`/`ctx_radar` + persisted `cost_attribution.json` /
+  `savings/ledger.jsonl`): complementary to (not a replacement for) our
+  `MetricsStore`. Confirmed **Serena exposes no token-usage metrics**. Spawn
+  `lean-ctx mcp` with `LEAN_CTX_AGENT_ID=cadet-token-saver` so its persisted
+  analytics attribute to us.
+- **Shell-output routing (Task 38, Part B)** — Added `scripts/benchmark-shell-compression.ts`
+  (`npm run benchmark:shell`) comparing RTK vs LeanCTX `ctx_shell` for
+  command-output compression. Data-driven result: `ctx_shell` compresses better
+  (avg 58% vs RTK 23% tokens saved) but is slower with a cold-start; routing
+  decision applied is **"offer both"** — the classifier prompt now teaches
+  shell-output tasks to recommend `compress_command_output` (RTK, fast) **and**
+  `leanctx_call`/`ctx_shell` (aggressive) so the agent chooses. Added
+  `leanctx_call` and `leanctx_list_tools` to the classifier `TOOL_NAMES`.
+- **LeanCTX MCP proxy (Task 38, Part A)** — Expose LeanCTX's full MCP tool
+  surface (`ctx_*`) to the agent the same way Serena is proxied:
+  - `LeanCtxAdapter.callTool()` / `listTools()` over a persistent
+    `lean-ctx mcp` stdio session (mirrors `SerenaAdapter`; cwd-based, no
+    project-activation ceremony, reconnect-once on failure).
+  - New MCP tools `leanctx_call` (forward any `ctx_*` tool verbatim) and
+    `leanctx_list_tools` (discovery), each recording a `leanctx` metrics row.
+  - `McpDeps.leanctx` widened to `Partial<LeanCtxTools>` (optimize + callTool +
+    listTools + close). Verified live: `listTools` returns the exposed `ctx_*`
+    tools and `ctx_tree`/`ctx_shell` calls forward successfully.
 - **Response schema & guidance (Task 36)** — The classifier response now carries:
   - `guidance` — a one-line advisory summary of how to approach the request (synthesized from the task when the model omits it, so it is always non-empty).
   - `evidence_plan.prioritized_queries[]` — prioritized, source-tagged retrieval queries (`id`, `query`, `sources`, `cost_estimate`, optional `reason`/`fallback`). Replaces the older `retrieval`; `retrieval` is still returned as a legacy alias during the transition.

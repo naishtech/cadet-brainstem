@@ -42,7 +42,7 @@ describe('classifyTool memory auto-plan', () => {
           context_need: 'targeted',
           precision: 'normal',
           tool_plan: { use: [] },
-          response_policy: ['compact'],
+          response_policy: { directives: ['compact'] },
         },
         degraded: false,
       } as any;

@@ -21,12 +21,41 @@ export const riskSchema = z.enum(['low', 'medium', 'high']);
 export const contextNeedSchema = z.enum(['minimal', 'targeted', 'broad', 'exhaustive']);
 export const precisionSchema = z.enum(['approximate', 'normal', 'exact']);
 
+/** Recommended documentation language standard the classifier may pick. */
+export const LANGUAGE_STANDARDS = [
+  'asd_ste100',
+  'microsoft',
+  'google',
+  'diataxis',
+  'iso_24495',
+  'ieee',
+] as const;
+
+export const languageStandardSchema = z.enum(LANGUAGE_STANDARDS);
+export type LanguageStandard = z.infer<typeof languageStandardSchema>;
+
+/** Human-readable guidance for each language standard (for the prompt). */
+export const LANGUAGE_STANDARD_DESCRIPTIONS: Record<LanguageStandard, string> = {
+  asd_ste100:
+    'ASD-STE100 — controlled language; maximum clarity, minimal ambiguity (safety-critical, runbooks, instructions)',
+  microsoft:
+    'Microsoft Style Guide — house style; consistency, UI terminology (developer docs, product docs)',
+  google:
+    'Google Style Guide — house style; concise, example-driven (API docs, tutorials)',
+  diataxis: 'Diátaxis — structure; reader-mode clarity (documentation portals)',
+  iso_24495:
+    'ISO 24495 — controlled language; plain language (general tech writing)',
+  ieee: 'IEEE Style — academic; formal precision (research, standards)',
+};
+
 /** Context tools the agent can be told to use or skip (tool_plan). */
 export const TOOL_NAMES = [
   'optimize_context',
   'find_relevant_symbols',
   'compress_command_output',
   'chat_memory_store',
+  'leanctx_call',
+  'leanctx_list_tools',
 ] as const;
 
 export const toolNameSchema = z.enum(TOOL_NAMES);
@@ -42,6 +71,9 @@ export const RECOMMENDED_TOOL_INTENTS: Record<ToolName, string> = {
   find_relevant_symbols: 'semantic search for relevant symbols across the project',
   compress_command_output: 'compress noisy command output for cheap analysis',
   chat_memory_store: 'consult stored project memories as optional evidence',
+  leanctx_call:
+    'invoke a LeanCTX tool, e.g. ctx_shell for aggressive shell-output compression',
+  leanctx_list_tools: 'discover the tools the LeanCTX MCP server exposes',
 };
 
 /** A single recommended tool paired with its intent and priority. */
@@ -152,6 +184,18 @@ export const DEFAULT_RESPONSE_POLICY_KEYS: ResponsePolicyKey[] = [
 ];
 
 /**
+ * Response policy the cloud LLM should follow when composing its reply.
+ * Holds the behavioral directive keys plus optional categorical choices
+ * (e.g. a recommended documentation `language_standard`).
+ */
+export interface ResponsePolicy {
+  /** Behavioral directives to apply when replying. */
+  directives: ResponsePolicyKey[];
+  /** Optional recommended documentation language standard. */
+  language_standard?: LanguageStandard;
+}
+
+/**
  * Raw model output schema. The five core fields are strict; `tool_plan` and
  * `response_policy` are lenient (sanitised by `parseClassification`) so an
  * invalid tool name or directive key never throws away a good classification.
@@ -179,7 +223,8 @@ export interface Classification {
   context_need: ContextNeed;
   precision: Precision;
   tool_plan: ToolPlan;
-  response_policy: ResponsePolicyKey[];
+  /** Response policy the cloud LLM should follow (directives + choices). */
+  response_policy: ResponsePolicy;
   /** Optional memory hint: whether to consult stored memories and why. */
   memory?: { use: boolean | 'if_necessary'; reason?: string };
   /** Model's self-assessed confidence in this classification (0..1). */
@@ -296,9 +341,26 @@ function sanitizeRecommendedTools(
   return result.length > 0 ? result : undefined;
 }
 
-function sanitizeResponsePolicy(raw: unknown): ResponsePolicyKey[] {
+function sanitizeResponsePolicy(raw: unknown): ResponsePolicy {
+  const result: ResponsePolicy = { directives: DEFAULT_RESPONSE_POLICY_KEYS };
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    const r = raw as { directives?: unknown; language_standard?: unknown };
+    const keys = sanitizeStringList(r.directives, isResponsePolicyKey);
+    if (keys.length > 0) {
+      result.directives = keys;
+    }
+    const languageStandard = sanitizeLanguageStandard(r.language_standard);
+    if (languageStandard !== undefined) {
+      result.language_standard = languageStandard;
+    }
+    return result;
+  }
+  // Legacy flat-array form — treat as the directive list.
   const keys = sanitizeStringList(raw, isResponsePolicyKey);
-  return keys.length > 0 ? keys : DEFAULT_RESPONSE_POLICY_KEYS;
+  if (keys.length > 0) {
+    result.directives = keys;
+  }
+  return result;
 }
 
 /** Keep a finite 0..1 confidence, else undefined (model said nothing useful). */
@@ -310,6 +372,14 @@ function sanitizeConfidence(raw: unknown): number | undefined {
 
 function sanitizeBoolean(raw: unknown): boolean | undefined {
   return typeof raw === 'boolean' ? raw : undefined;
+}
+
+/** Keep a valid language standard, else undefined (model said nothing useful). */
+function sanitizeLanguageStandard(raw: unknown): LanguageStandard | undefined {
+  return typeof raw === 'string' &&
+    (LANGUAGE_STANDARDS as readonly string[]).includes(raw)
+    ? (raw as LanguageStandard)
+    : undefined;
 }
 
 function normalizeScope(raw: unknown): string | undefined {

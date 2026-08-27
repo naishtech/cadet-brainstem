@@ -19,7 +19,7 @@ const validClassification = {
   context_need: 'broad',
   precision: 'normal',
     tool_plan: { use: ['find_relevant_symbols'] },
-  response_policy: ['compact', 'no_filler'],
+  response_policy: { directives: ['compact', 'no_filler'] },
 };
 
 function mockFetchJson(body: unknown, ok = true, status = 200): Mock {
@@ -68,12 +68,9 @@ describe('parseClassification', () => {
       precision: 'normal',
     });
     expect(parsed.tool_plan).toEqual({ use: [] });
-    expect(parsed.response_policy).toEqual([
-      'compact',
-      'no_filler',
-      'no_repetition',
-      'no_tool_narration',
-    ]);
+    expect(parsed.response_policy).toEqual({
+      directives: ['compact', 'no_filler', 'no_repetition', 'no_tool_narration'],
+    });
   });
 
   it('drops invalid tool_plan/response_policy entries instead of failing', () => {
@@ -89,7 +86,15 @@ describe('parseClassification', () => {
       response_policy: ['delta_only', 'not_a_directive', 7],
     });
     expect(parsed.tool_plan).toEqual({ use: ['optimize_context'] });
-    expect(parsed.response_policy).toEqual(['delta_only']);
+    expect(parsed.response_policy).toEqual({ directives: ['delta_only'] });
+  });
+
+  it('accepts a legacy flat-array response_policy as directives', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      response_policy: ['compact', 'delta_only'],
+    });
+    expect(parsed.response_policy).toEqual({ directives: ['compact', 'delta_only'] });
   });
 
   it('captures confidence, needs_more_context, and retrieval when present', () => {
@@ -253,6 +258,24 @@ describe('parseClassification', () => {
     expect(parsed.guidance).toBeUndefined();
     expect(parsed.evidence_plan).toBeUndefined();
   });
+
+  it('captures a valid nested language_standard when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      response_policy: { directives: ['compact'], language_standard: 'asd_ste100' },
+    });
+    expect(parsed.response_policy.language_standard).toBe('asd_ste100');
+    expect(parsed.response_policy.directives).toEqual(['compact']);
+  });
+
+  it('drops an invalid language_standard and omits it when absent', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      response_policy: { directives: ['compact'], language_standard: 'chicago' },
+    });
+    expect(parsed.response_policy.language_standard).toBeUndefined();
+    expect(parseClassification(validClassification).response_policy.language_standard).toBeUndefined();
+  });
 });
 
 describe('buildPrompt', () => {
@@ -282,7 +305,9 @@ describe('buildPrompt', () => {
     const template = 'User request: {{{userRequest}}}\nTools: {{{tools}}}';
     const prompt = buildPrompt('Fix config loading', template);
     expect(prompt).toContain('User request: Fix config loading');
-    expect(prompt).toContain('Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store');
+    expect(prompt).toContain(
+      'Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store, leanctx_call, leanctx_list_tools',
+    );
   });
 
   it('recommends prioritizing MCP tools over raw grep/file search', () => {
@@ -299,6 +324,23 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('recommended_tools');
     expect(prompt).toContain('cost_estimate');
     expect(prompt).toContain('"sources"');
+  });
+
+  it('teaches offering both RTK and ctx_shell for shell-output compression', () => {
+    const prompt = buildPrompt('Check in, push, then start the next task.');
+    expect(prompt).toContain('compress_command_output');
+    expect(prompt).toContain('ctx_shell');
+    expect(prompt).toContain('aggressive compression');
+  });
+
+  it('teaches the recommended language-standard field', () => {
+    const prompt = buildPrompt('Write release notes for the auth change.');
+    expect(prompt).toContain('language_standard');
+    expect(prompt).toContain('ASD-STE100');
+    expect(prompt).toContain('Microsoft Style Guide');
+    expect(prompt).toContain('Diátaxis');
+    expect(prompt).toContain('ISO 24495');
+    expect(prompt).toContain('IEEE Style');
   });
 });
 

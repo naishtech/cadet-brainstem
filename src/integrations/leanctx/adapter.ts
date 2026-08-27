@@ -1,12 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { ContextOptimizer } from '../../core';
 import type { LeanCtxMode } from '../../policy/schema';
 
 const execFile = promisify(execFileCb);
 
 export const LEAN_CTX_BIN = 'lean-ctx';
+/** Arguments that launch LeanCTX's stdio MCP server (`lean-ctx mcp`). */
+export const LEAN_CTX_MCP_ARGS = ['mcp'];
 
 /**
  * Map the design-doc LeanCTX modes (the policy's `leanctx_mode`) to the CLI's
@@ -50,6 +54,55 @@ export interface LeanCtxResult {
   degraded: boolean;
 }
 
+/** Generic passthrough request — forward any call to any `ctx_*` tool. */
+export interface LeanCtxCallRequest {
+  /** LeanCTX tool name, e.g. ctx_read, ctx_shell, ctx_search, ctx_explore. */
+  tool: string;
+  /** Arguments forwarded verbatim to the LeanCTX tool. */
+  arguments?: Record<string, unknown>;
+  /** Project directory LeanCTX should operate in (defaults to process.cwd()). */
+  cwd?: string;
+}
+
+export interface LeanCtxToolResult {
+  tool: string;
+  /** Raw MCP callTool result — always preserved. */
+  result: unknown;
+  /** Extracted text content of the result. */
+  rawText: string;
+  degraded: boolean;
+}
+
+export interface LeanCtxListRequest {
+  cwd?: string;
+}
+
+export interface LeanCtxListResult {
+  tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  degraded: boolean;
+}
+
+/** A live, reusable connection to a single `lean-ctx mcp` server process. */
+interface LeanCtxSession {
+  client: Client;
+  transport: StdioClientTransport;
+  /** cwd the process was spawned in. */
+  cwd: string;
+}
+
+/** LeanCTX reports tool failures as text blocks — detect them as degraded. */
+const ERROR_RE = /^Error(?: executing tool[^:]*)?:/i;
+
+/** Extract the concatenated text content from an MCP callTool result. */
+function extractText(result: unknown): string {
+  const content = (result as { content?: unknown[] } | null)?.content;
+  const blocks = (content ?? []) as Array<{ type?: string; text?: unknown }>;
+  return blocks
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text as string)
+    .join('\n');
+}
+
 /** Resolve the CLI read-mode string for a request. */
 export function resolveCliMode(request: LeanCtxOptimizeRequest): string {
   if (request.mode === 'lines' && request.lines !== undefined) {
@@ -75,6 +128,9 @@ async function runLeanCtx(args: string[]): Promise<string> {
  */
 export class LeanCtxAdapter implements ContextOptimizer {
   readonly name = 'leanctx';
+
+  /** Persistent MCP session — spawned once, reused for the server lifetime. */
+  private session: LeanCtxSession | null = null;
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -118,6 +174,108 @@ export class LeanCtxAdapter implements ContextOptimizer {
       taskType: request.taskType,
       degraded: false,
     };
+  }
+
+  /**
+   * Lazily spawn `lean-ctx mcp` once and reuse the connection for the server
+   * lifetime, so tools don't pay a per-call process start. LeanCTX is
+   * cwd-based (no project-activation ceremony like Serena); the session is
+   * keyed by cwd.
+   */
+  private async getSession(cwd: string): Promise<LeanCtxSession> {
+    const existing = this.session;
+    if (existing !== null && existing.cwd === cwd) {
+      return existing;
+    }
+    if (existing !== null) {
+      await this.close().catch(() => undefined);
+    }
+    return this.connect(cwd);
+  }
+
+  private async connect(cwd: string): Promise<LeanCtxSession> {
+    const transport = new StdioClientTransport({
+      command: LEAN_CTX_BIN,
+      args: LEAN_CTX_MCP_ARGS,
+      cwd,
+      // Tag LeanCTX's persisted analytics (gain/cost/ledger/heatmap) as ours so
+      // `ctx_gain agents` / `ctx_cost agent` attribute the usage to us.
+      env: { ...process.env, LEAN_CTX_AGENT_ID: 'cadet-token-saver' },
+    });
+    const client = new Client({ name: 'cadet-token-saver', version: '0.1.0' });
+    await client.connect(transport);
+    this.session = { client, transport, cwd };
+    return this.session;
+  }
+
+  /** Run a call against the persistent session; reconnect once on failure. */
+  private async retryOnConnection<T>(
+    cwd: string,
+    fn: (session: LeanCtxSession) => Promise<T>,
+  ): Promise<T> {
+    let session = await this.getSession(cwd);
+    try {
+      return await fn(session);
+    } catch {
+      // Connection-level failure: tear down and reconnect once, then retry.
+      await this.close().catch(() => undefined);
+      session = await this.connect(cwd);
+      return await fn(session);
+    }
+  }
+
+  /**
+   * Generic passthrough — forward any call to any `ctx_*` tool over MCP, so
+   * new LeanCTX tools work without updating this adapter (mirrors Serena).
+   */
+  async callTool(request: LeanCtxCallRequest): Promise<LeanCtxToolResult> {
+    const cwd = request.cwd ?? process.cwd();
+    const tool = request.tool;
+    try {
+      return await this.retryOnConnection(cwd, async (session) => {
+        const result = await session.client.callTool({
+          name: tool,
+          arguments: request.arguments ?? {},
+        });
+        const rawText = extractText(result);
+        return {
+          tool,
+          result,
+          rawText,
+          degraded: ERROR_RE.test(rawText.trim()) || result.isError === true,
+        };
+      });
+    } catch {
+      return { tool, result: null, rawText: '', degraded: true };
+    }
+  }
+
+  /** List the tools LeanCTX currently exposes (dynamic discovery). */
+  async listTools(request: LeanCtxListRequest = {}): Promise<LeanCtxListResult> {
+    const cwd = request.cwd ?? process.cwd();
+    try {
+      return await this.retryOnConnection(cwd, async (session) => {
+        const result = await session.client.listTools();
+        const tools = (result.tools ?? []).map((tool) => ({
+          name: tool.name,
+          ...(tool.description !== undefined ? { description: tool.description } : {}),
+          ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : {}),
+        }));
+        return { tools, degraded: false };
+      });
+    } catch {
+      return { tools: [], degraded: true };
+    }
+  }
+
+  /** Close the persistent session (call on server shutdown). */
+  async close(): Promise<void> {
+    if (this.session !== null) {
+      const { client, transport } = this.session;
+      this.session = null;
+      await client.close().catch(() => undefined);
+      transport.close();
+    }
   }
 
   async install(): Promise<void> {

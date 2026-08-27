@@ -73,7 +73,7 @@ export type Config = z.infer<typeof configSchema>;
  * of this before validation.
  *
  * Note: the default classifier model is qwen3:1.7b (not §13's qwen3:4b) — a
- * smaller, faster model that classifies well within the 30s latency budget on
+ * smaller, faster model that classifies well within the latency budget on
  * CPU. Thinking is disabled in the Ollama adapter (see classifier/ollama.ts),
  * and keep_alive keeps the model warm between calls so a cold model reload
  * doesn't blow the timeout (see classifier/ollama.ts).
@@ -82,7 +82,7 @@ export const defaultConfig: Config = {
   classifier: {
     provider: 'ollama',
     model: 'qwen3:1.7b',
-    timeout_ms: 30_000,
+    timeout_ms: 60_000,
     keep_alive: '30m',
   },
   session: { max_turns: 30 },

@@ -14,9 +14,11 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
 - Use the returned `strategy` (LeanCTX mode, compression, search approach)
   and `tool_plan` (tools to use / skip) to decide how to use the tools below
   for the rest of that request.
-- The returned `response_policy` is a set of per-task directives (e.g.
-  `delta_only`, `no_filler`, `no_tool_narration`). Follow every directive
-  given in your reply.
+- The returned `response_policy` is an object the cloud LLM must follow when
+  composing its reply: `directives` (per-task behavioral directives, e.g.
+  `delta_only`, `no_filler`, `no_tool_narration`) and an optional
+  `language_standard` (a documentation style guide to write in). Follow every
+  directive and the chosen language standard in your reply.
 - Parse the returned `memory_policy` and follow it too: treat memory as
   optional evidence, never authoritative state — retrieve hints before work,
   verify them against the current project, and store expensive-to-rediscover
