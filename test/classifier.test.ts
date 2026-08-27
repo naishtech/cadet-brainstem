@@ -155,6 +155,104 @@ describe('parseClassification', () => {
     expect(parsed.needs_more_context).toBeUndefined();
     expect(parsed.retrieval).toBeUndefined();
   });
+
+  it('captures guidance and evidence_plan when present', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      guidance:
+        'Advisory: compare overrides between A and B; verify before concluding.',
+      evidence_plan: {
+        prioritized_queries: [
+          {
+            id: 'q1',
+            query: 'BP_Koala overrides',
+            reason: 'find canonical overrides',
+            sources: ['serena', 'file_search'],
+            cost_estimate: 'cheap',
+            fallback: ['q2'],
+          },
+          { id: 'q2', query: 'override table', sources: ['serena'] },
+        ],
+        scope: 'reference blueprint',
+      },
+    });
+    expect(parsed.guidance).toBe(
+      'Advisory: compare overrides between A and B; verify before concluding.',
+    );
+    expect(parsed.evidence_plan).toEqual({
+      prioritized_queries: [
+        {
+          id: 'q1',
+          query: 'BP_Koala overrides',
+          reason: 'find canonical overrides',
+          sources: ['serena', 'file_search'],
+          cost_estimate: 'cheap',
+          fallback: ['q2'],
+        },
+        { id: 'q2', query: 'override table', sources: ['serena'] },
+      ],
+      scope: 'reference blueprint',
+    });
+  });
+
+  it('synthesizes evidence_plan from the legacy retrieval alias', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      retrieval: { queries: ['.serena', '.cadet'], scope: 'project root' },
+    });
+    expect(parsed.retrieval).toEqual({
+      queries: ['.serena', '.cadet'],
+      scope: 'project root',
+    });
+    expect(parsed.evidence_plan).toEqual({
+      prioritized_queries: [
+        {
+          id: 'q1',
+          query: '.serena',
+          sources: ['serena', 'file_search'],
+          cost_estimate: 'cheap',
+        },
+        {
+          id: 'q2',
+          query: '.cadet',
+          sources: ['serena', 'file_search'],
+          cost_estimate: 'cheap',
+        },
+      ],
+      scope: 'project root',
+    });
+  });
+
+  it('keeps recommended_tools and drops invalid entries', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      tool_plan: {
+        use: ['optimize_context'],
+        recommended_tools: [
+          { name: 'optimize_context', intent: 'extract context', priority: 2 },
+          { name: 'not_a_tool', intent: 'x', priority: 1 },
+          { name: 'compress_command_output', priority: 'high' },
+        ],
+      },
+    });
+    expect(parsed.tool_plan).toEqual({
+      use: ['optimize_context'],
+      recommended_tools: [
+        { name: 'optimize_context', intent: 'extract context', priority: 2 },
+        {
+          name: 'compress_command_output',
+          intent: 'compress noisy command output for cheap analysis',
+          priority: 0,
+        },
+      ],
+    });
+  });
+
+  it('omits guidance/evidence_plan when absent', () => {
+    const parsed = parseClassification(validClassification);
+    expect(parsed.guidance).toBeUndefined();
+    expect(parsed.evidence_plan).toBeUndefined();
+  });
 });
 
 describe('buildPrompt', () => {
@@ -192,6 +290,15 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('Prefer MCP/semantic tools');
     expect(prompt).toContain('Recommend the smallest set of tools sufficient for the task');
     expect(prompt).toContain('follow_tool_plan');
+  });
+
+  it('teaches the guidance, evidence_plan, and recommended_tools fields', () => {
+    const prompt = buildPrompt('Compare the overrides between A and B.');
+    expect(prompt).toContain('guidance');
+    expect(prompt).toContain('prioritized_queries');
+    expect(prompt).toContain('recommended_tools');
+    expect(prompt).toContain('cost_estimate');
+    expect(prompt).toContain('"sources"');
   });
 });
 

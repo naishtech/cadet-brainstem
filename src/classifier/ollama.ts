@@ -40,9 +40,11 @@ const CLASSIFICATION_SHAPE = `{
   "risk": "low | medium | high",
   "context_need": "minimal | targeted | broad | exhaustive",
   "precision": "approximate | normal | exact",
-  "tool_plan": { "use": ["<tool>", "<tool>"] },
+  "guidance": "<one advisory sentence>",
+  "tool_plan": { "use": ["<tool>"], "recommended_tools": [{ "name": "<tool>", "intent": "<why>", "priority": 1 }] },
   "response_policy": ["<directive>", "<directive>"],
-  "retrieval": { "queries": ["<search term>", "<search term>"], "scope": "<initial scope>" },
+  "evidence_plan": { "prioritized_queries": [{ "id": "q1", "query": "<search term>", "sources": ["serena", "file_search"], "cost_estimate": "cheap" }], "scope": "<initial scope>" },
+  "memory": { "use": true },
   "confidence": 0.0,
   "needs_more_context": false
 }`;
@@ -68,7 +70,9 @@ or area is "targeted"; reserve "broad"/"exhaustive" for tasks that genuinely
 need the whole repository.
 
 tool_plan: recommend the context tools to use from: {{{tools}}}.
-Only recommend a tool when it clearly helps this request.
+Only recommend a tool when it clearly helps this request. Pair each tool in
+"use" with a "recommended_tools" entry { "name", "intent", "priority" }
+(1-based, cheapest-first).
 
 response_policy: pick the directives the agent should follow when replying.
 Be aggressive: a simple single-action request (e.g. "merge the PR") needs only
@@ -76,9 +80,18 @@ a minimal set (delta_only, no_filler, no_tool_narration). A research-heavy
 request should include preserve_evidence and progressive_disclosure.
 {{{directives}}}
 
-retrieval: list the specific search terms (identifiers, file/dir names, config
-keys) the agent should search for first, and a short "scope" (e.g. "project
-root + config + memory implementation"). Omit when no search is needed.
+guidance: ONE short advisory sentence describing how to approach the request
+(e.g. compare/search/summarize focus). Concise, actionable, non-authoritative.
+
+evidence_plan: the prioritized, source-tagged retrieval plan. Shape:
+{ "prioritized_queries": [{ "id", "query", "sources", "cost_estimate", "fallback" }], "scope" }.
+List specific search terms (identifiers, file/dir names, config keys) cheapest-first.
+"sources" are hint labels (serena, rtk, file_search, leanctx) — the orchestrator
+executes each. Omit when no search is needed. "retrieval" {queries, scope} is a
+legacy alias still accepted.
+
+memory: OPTIONAL { "use": true | false | "if_necessary", "reason" }.
+"use" may never be "skip"; prefer recommending memory when it may help.
 
 confidence: a number 0..1 for how sure you are of this classification.
 needs_more_context: true only when you cannot classify well without seeing

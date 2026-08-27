@@ -23,6 +23,9 @@ export const conservativeDefaultClassification: Classification = {
   precision: 'normal',
   tool_plan: { use: [] },
   response_policy: ['preserve_evidence', 'progressive_disclosure', 'no_repetition'],
+  guidance:
+    'Advisory: investigate the request conservatively and verify facts against the project before concluding.',
+  memory: { use: false },
 };
 
 export interface ClassificationOutcome {

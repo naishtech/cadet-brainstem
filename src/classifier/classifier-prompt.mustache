@@ -49,9 +49,11 @@ precision (pick ONE):
 - exact       → must be precise/verified (security, financial, prod configs,
                data migrations, anything high risk)
 
-tool_plan: from {{{tools}}} — list tools that clearly help in "use".
+tool_plan: from {{{tools}}} — list tools that clearly help in "use", and pair each with a short "intent" and 1-based "priority" in "recommended_tools".
 
 Guidance: Prefer MCP/semantic tools (e.g., `find_relevant_symbols`, `optimize_context`) when they cover the need. Recommend the smallest set of tools sufficient for the task. Do NOT recommend tools without a concrete reason. Prefer fewer tools and semantic search over broad file reads. Do NOT include an exclusion/`skip` list in the output — only recommend tools to *use*; do not attempt to forbid tools the downstream agent might need later.
+
+recommended_tools: array of objects `{ "name": "<tool>", "intent": "<why this tool helps>", "priority": 1, "constraints": ["max_results:10"] }`. `priority` orders cheapest-first retrieval (1 = run first). `intent` is one short phrase. `constraints` is optional. Keep the list minimal and only for tools in "use".
 
 response_policy: from {{{directives}}}.
 - Mandatory compact directives for ordinary requests: `delta_only`, `no_filler`, `no_tool_narration`, `no_unnecessary_formatting`.
@@ -64,7 +66,11 @@ memory: OPTIONAL. When present, an object with `{ "use": true|false|"if_necessar
  - Omit the field or use `use: false` when memory is clearly irrelevant. Default to omitting the field.
 Do NOT recommend withholding access to memory; prefer recommending it when appropriate.
 
-retrieval: concrete search terms (function names, file names, config keys) mentioned or implied by the request, plus a short "scope" string. Omit this whole field if nothing needs to be searched (e.g. task = question).
+guidance: ONE short advisory sentence summarizing how the downstream agent should approach this request (e.g. compare/search/summarize focus). Non-empty, concise, actionable, non-authoritative.
+
+evidence_plan: the prioritized, source-tagged retrieval plan replacing `retrieval`. Shape: `{ "prioritized_queries": [ { "id": "q1", "query": "<search term>", "reason": "<why>", "sources": ["serena","file_search"], "cost_estimate": "cheap", "fallback": ["q2"] } ], "scope": "<initial scope>" }`. Put the cheapest, highest-value query first. `sources` are hint labels (e.g. `serena`, `rtk`, `file_search`, `leanctx`) — the orchestrator decides how to execute each. Omit the whole field when no search is needed (e.g. task = question). `retrieval` (queries + scope) is still accepted as a legacy alias.
+
+memory: OPTIONAL, `{ "use": true | false | "if_necessary", "reason": string }`. `use` may only be `true`, `false`, or `"if_necessary"` — never "skip". Prefer recommending memory when it may help.
 
 confidence: 0.0-1.0, how sure you are of this classification.
 needs_more_context: true ONLY if the request itself is insufficient to determine classification or retrieval strategy without repo access. Otherwise false.
@@ -84,14 +90,14 @@ EXAMPLES (routing-first outputs)
 ══════════════════════════════════════
 Request: "merge the open PR on the auth branch"
 
-{"task":"review","complexity":"low","risk":"medium","context_need":"targeted","precision":"normal","tool_plan":{"use":["git"]},"response_policy":["delta_only","no_filler","no_tool_narration","no_unnecessary_formatting"],"retrieval":{"queries":["auth branch","open PR"],"scope":"git/PR metadata only"},"confidence":0.9,"needs_more_context":false}
+{"task":"review","complexity":"low","risk":"medium","context_need":"targeted","precision":"normal","guidance":"Advisory: review the open PR on the auth branch; fetch the diff and verify merge readiness before acting.","tool_plan":{"use":["git"],"recommended_tools":[{"name":"compress_command_output","intent":"inspect PR diff/status output cheaply","priority":1}]},"response_policy":["delta_only","no_filler","no_tool_narration","no_unnecessary_formatting"],"evidence_plan":{"prioritized_queries":[{"id":"q1","query":"auth branch open PR","sources":["git"],"cost_estimate":"cheap"}],"scope":"git/PR metadata only"},"memory":{"use":"if_necessary","reason":"check prior PR workflow notes"},"confidence":0.9,"needs_more_context":false}
 
 Request: "why is the checkout page throwing a 500 sometimes"
 
-{"task":"debug","complexity":"medium","risk":"high","context_need":"targeted","precision":"exact","tool_plan":{"use":["find_relevant_symbols","optimize_context","logs"]},"response_policy":["preserve_evidence","progressive_disclosure"],"retrieval":{"queries":["checkout","500","error handler","payment"],"scope":"checkout module + error/logging layer"},"confidence":0.8,"needs_more_context":true}
+{"task":"debug","complexity":"medium","risk":"high","context_need":"targeted","precision":"exact","guidance":"Advisory: trace the checkout 500 by locating the checkout and error/logging code, then verify the failure path before concluding.","tool_plan":{"use":["find_relevant_symbols","optimize_context"],"recommended_tools":[{"name":"find_relevant_symbols","intent":"locate checkout + error handler symbols","priority":1},{"name":"optimize_context","intent":"extract relevant checkout context","priority":2}]},"response_policy":["preserve_evidence","progressive_disclosure"],"evidence_plan":{"prioritized_queries":[{"id":"q1","query":"checkout 500 error handler","sources":["serena","file_search"],"cost_estimate":"cheap"},{"id":"q2","query":"payment","sources":["serena"],"cost_estimate":"medium","fallback":["q1"]}],"scope":"checkout module + error/logging layer"},"memory":{"use":true,"reason":"prior checkout/debug findings"},"confidence":0.8,"needs_more_context":true}
 
 Request: "what does the debounce function do in utils.js"
-{"task":"question","complexity":"low","risk":"low","context_need":"minimal","precision":"normal","tool_plan":{"use":["search"]},"response_policy":["delta_only","no_filler","no_unnecessary_formatting"],"retrieval":{"queries":["debounce","utils.js"],"scope":"utils.js"},"confidence":0.97,"needs_more_context":false}
+{"task":"question","complexity":"low","risk":"low","context_need":"minimal","precision":"normal","guidance":"Advisory: answer what the debounce function in utils.js does; fetch that file only and summarize with a short example.","tool_plan":{"use":["find_relevant_symbols"],"recommended_tools":[{"name":"find_relevant_symbols","intent":"locate debounce in utils.js","priority":1}]},"response_policy":["delta_only","no_filler","no_unnecessary_formatting"],"evidence_plan":{"prioritized_queries":[{"id":"q1","query":"debounce utils.js","sources":["file_search","serena"],"cost_estimate":"cheap"}],"scope":"utils.js"},"confidence":0.97,"needs_more_context":false}
 
 ══════════════════════════════════════
 USER REQUEST TO CLASSIFY

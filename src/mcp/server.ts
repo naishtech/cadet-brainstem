@@ -9,11 +9,16 @@ import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
 import {
+  RECOMMENDED_TOOL_INTENTS,
   RESPONSE_POLICY_DIRECTIVES,
   assessWithFallback,
   type ContextAssessmentOutcome,
+  type EvidencePlan,
+  type RecommendedTool,
   type ResponsePolicyKey,
   type RetrievalPlan,
+  type ToolName,
+  type ToolPlan,
 } from '../classifier';
 import type { Classification } from '../classifier';
 import { PolicyEngine } from '../policy';
@@ -92,6 +97,95 @@ export function compileRetrieval(
   return retrieval.scope !== undefined
     ? { queries: retrieval.queries, scope: retrieval.scope }
     : { queries: retrieval.queries };
+}
+
+export interface CompiledToolPlan {
+  use: ToolName[];
+  skip?: ToolName[];
+  recommended_tools: RecommendedTool[];
+}
+
+/** Default intents for tools the model recommended without one. */
+export function compileToolPlan(plan: ToolPlan | undefined): CompiledToolPlan {
+  const use = plan?.use ?? [];
+  const recommended =
+    plan?.recommended_tools !== undefined && plan.recommended_tools.length > 0
+      ? plan.recommended_tools
+      : use.map<RecommendedTool>((name, i) => ({
+          name,
+          intent: RECOMMENDED_TOOL_INTENTS[name],
+          priority: i + 1,
+        }));
+  const result: CompiledToolPlan = { use, recommended_tools: recommended };
+  if (plan?.skip !== undefined && plan.skip.length > 0) {
+    result.skip = plan.skip;
+  }
+  return result;
+}
+
+export interface CompiledEvidencePlan {
+  prioritized_queries: Array<{
+    id: string;
+    query: string;
+    reason?: string;
+    sources: string[];
+    cost_estimate?: string;
+    fallback?: string[];
+  }>;
+  scope?: string;
+}
+
+/**
+ * Surface the prioritized, source-tagged evidence plan. Prefers the new
+ * `evidence_plan`; falls back to the legacy `retrieval` alias (transition).
+ */
+export function compileEvidencePlan(
+  evidencePlan: EvidencePlan | undefined,
+  retrieval: RetrievalPlan | undefined,
+): CompiledEvidencePlan | null {
+  const plan =
+    evidencePlan ??
+    (retrieval !== undefined
+      ? {
+          prioritized_queries: retrieval.queries.map((query, i) => ({
+            id: `q${i + 1}`,
+            query,
+            sources: ['serena', 'file_search'],
+            cost_estimate: 'cheap',
+          })),
+          ...(retrieval.scope !== undefined ? { scope: retrieval.scope } : {}),
+        }
+      : undefined);
+  if (plan === undefined) {
+    return null;
+  }
+  const result: CompiledEvidencePlan = {
+    prioritized_queries: plan.prioritized_queries,
+  };
+  if (plan.scope !== undefined) {
+    result.scope = plan.scope;
+  }
+  return result;
+}
+
+/** A one-line advisory; synthesized from the task when the model omits it. */
+export function compileGuidance(
+  classification: Classification,
+  task: string,
+): string {
+  if (classification.guidance !== undefined && classification.guidance.trim().length > 0) {
+    return classification.guidance;
+  }
+  const subject = task.trim().length > 0 ? task.trim() : 'unspecified task';
+  return `Advisory: classify and route this request (${subject}); verify facts against the project before concluding.`;
+}
+
+/** Memory hints: advisory use flag, never instructs to skip memory. */
+export function compileMemoryHints(classification: Classification): {
+  use: boolean | 'if_necessary';
+  reason?: string;
+} {
+  return classification.memory ?? { use: false };
 }
 
 /**
@@ -293,9 +387,15 @@ export async function optimizeContextTool(
     request_id: requestId,
     classification: coreClassification(outcome.classification),
     strategy,
-    tool_plan: outcome.classification.tool_plan,
+    guidance: compileGuidance(outcome.classification, args.task),
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
+    evidence_plan: compileEvidencePlan(
+      outcome.classification.evidence_plan,
+      outcome.classification.retrieval,
+    ),
     retrieval: compileRetrieval(outcome.classification.retrieval),
+    memory_hints: compileMemoryHints(outcome.classification),
     memory_policy: memoryPolicyFor(
       outcome.classification.memory?.use ??
         (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
@@ -367,9 +467,15 @@ export async function classifyTool(
   return {
     classification: coreClassification(outcome.classification),
     strategy,
-    tool_plan: outcome.classification.tool_plan,
+    guidance: compileGuidance(outcome.classification, args.task),
+    tool_plan: compileToolPlan(outcome.classification.tool_plan),
     response_policy: compileResponsePolicy(outcome.classification.response_policy),
+    evidence_plan: compileEvidencePlan(
+      outcome.classification.evidence_plan,
+      outcome.classification.retrieval,
+    ),
     retrieval: compileRetrieval(outcome.classification.retrieval),
+    memory_hints: compileMemoryHints(outcome.classification),
     memory_policy: memoryPolicyFor(
       outcome.classification.memory?.use ??
         (outcome.classification.tool_plan?.use ?? []).includes('chat_memory_store'),
