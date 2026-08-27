@@ -339,10 +339,10 @@ export async function classifyTool(
       if (Array.isArray(memories) && memories.length > 0) {
         const max = Math.min(5, memories.length);
         relevant_memories = [];
-        for (let i = 0; i < max; i++) {
-          const m = memories[i];
+        for (const m of memories.slice(0, max)) {
+          if (!m) continue;
           const content = m.content ?? '';
-          const snippet = String(content).split('\n')[0].slice(0, 200);
+          const snippet = (String(content).split('\n')[0] ?? '').slice(0, 200);
           relevant_memories.push({ id: m.id, snippet, tags: m.tags, project: m.project });
         }
       }
@@ -350,7 +350,9 @@ export async function classifyTool(
       if (deps.memory === undefined) {
         try {
           store.close();
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       }
     }
   } catch (err) {

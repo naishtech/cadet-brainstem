@@ -21,7 +21,7 @@ export const conservativeDefaultClassification: Classification = {
   risk: 'low',
   context_need: 'exhaustive',
   precision: 'normal',
-  tool_plan: { use: [], skip: [] },
+  tool_plan: { use: [] },
   response_policy: ['preserve_evidence', 'progressive_disclosure', 'no_repetition'],
 };
 
@@ -69,7 +69,7 @@ export async function classifyWithFallback(
 /** Conservative assessment used when the controller cannot run: stop the loop. */
 export const conservativeDefaultAssessment: ContextAssessment = {
   verdict: 'stop',
-  tool_plan: { use: [], skip: [] },
+  tool_plan: { use: [] },
   reason: 'controller unavailable — no loop',
 };
 
