@@ -4,11 +4,14 @@ import Mustache from 'mustache';
 import {
   Classification,
   ClassificationValidationError,
+  LANGUAGE_STANDARD_DESCRIPTIONS,
+  LANGUAGE_STANDARDS,
   RESPONSE_POLICY_DIRECTIVES,
   TOOL_NAMES,
   parseClassification,
   parseContextAssessment,
   type ContextAssessment,
+  type LanguageStandard,
   type ResponsePolicyKey,
 } from './schema';
 
@@ -42,7 +45,7 @@ const CLASSIFICATION_SHAPE = `{
   "precision": "approximate | normal | exact",
   "guidance": "<one advisory sentence>",
   "tool_plan": { "use": ["<tool>"], "recommended_tools": [{ "name": "<tool>", "intent": "<why>", "priority": 1 }] },
-  "response_policy": ["<directive>", "<directive>"],
+  "response_policy": { "directives": ["<directive>", "<directive>"], "language_standard": "asd_ste100 | microsoft | google | diataxis | iso_24495 | ieee" },
   "evidence_plan": { "prioritized_queries": [{ "id": "q1", "query": "<search term>", "sources": ["serena", "file_search"], "cost_estimate": "cheap" }], "scope": "<initial scope>" },
   "memory": { "use": true },
   "confidence": 0.0,
@@ -78,11 +81,16 @@ large output, offer BOTH compress_command_output (RTK - fast, moderate) and
 leanctx_call with ctx_shell (LeanCTX - aggressive compression, slower, may
 drop detail) so the downstream agent can choose.
 
-response_policy: pick the directives the agent should follow when replying.
-Be aggressive: a simple single-action request (e.g. "merge the PR") needs only
-a minimal set (delta_only, no_filler, no_tool_narration). A research-heavy
-request should include preserve_evidence and progressive_disclosure.
-{{{directives}}}
+response_policy: an object the CLOUD LLM must follow when composing its reply.
+Shape: { "directives": [<directive>, ...], "language_standard": "<one>|omit" }.
+"directives": pick the directives the agent should follow. Be aggressive: a
+simple single-action request (e.g. "merge the PR") needs only a minimal set
+(delta_only, no_filler, no_tool_narration). A research-heavy request should
+include preserve_evidence and progressive_disclosure. {{{directives}}}
+"language_standard": optional; pick ONE recommended documentation language
+standard for the request's expected output from:
+{{{languageStandards}}}
+Omit language_standard only if no standard clearly applies.
 
 guidance: ONE short advisory sentence describing how to approach the request
 (e.g. compare/search/summarize focus). Concise, actionable, non-authoritative.
@@ -122,12 +130,16 @@ export function buildPrompt(taskText: string, template?: string): string {
   )
     .map((key) => `- ${key}: ${RESPONSE_POLICY_DIRECTIVES[key]}`)
     .join('\n');
+  const languageStandards = (LANGUAGE_STANDARDS as readonly LanguageStandard[])
+    .map((key) => `- ${LANGUAGE_STANDARD_DESCRIPTIONS[key]}`)
+    .join('\n');
 
   const promptTemplate = template ?? loadClassifierPromptTemplate();
   return Mustache.render(promptTemplate, {
     classificationShape: CLASSIFICATION_SHAPE,
     tools,
     directives,
+    languageStandards,
     userRequest: taskText,
   });
 }

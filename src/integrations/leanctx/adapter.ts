@@ -198,6 +198,9 @@ export class LeanCtxAdapter implements ContextOptimizer {
       command: LEAN_CTX_BIN,
       args: LEAN_CTX_MCP_ARGS,
       cwd,
+      // Tag LeanCTX's persisted analytics (gain/cost/ledger/heatmap) as ours so
+      // `ctx_gain agents` / `ctx_cost agent` attribute the usage to us.
+      env: { ...process.env, LEAN_CTX_AGENT_ID: 'cadet-token-saver' },
     });
     const client = new Client({ name: 'cadet-token-saver', version: '0.1.0' });
     await client.connect(transport);

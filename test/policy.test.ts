@@ -17,7 +17,7 @@ function makeClassification(task: string): Classification {
     context_need: 'exhaustive',
     precision: 'normal',
     tool_plan: { use: [] },
-    response_policy: [],
+    response_policy: { directives: [] },
   };
 }
 
@@ -28,7 +28,7 @@ const debugClassification: Classification = {
   context_need: 'broad',
   precision: 'approximate',
   tool_plan: { use: [] },
-  response_policy: [],
+  response_policy: { directives: [] },
 };
 
 const questionClassification: Classification = {
@@ -38,7 +38,7 @@ const questionClassification: Classification = {
   context_need: 'minimal',
   precision: 'approximate',
   tool_plan: { use: [] },
-  response_policy: [],
+  response_policy: { directives: [] },
 };
 
 describe('PolicyEngine', () => {

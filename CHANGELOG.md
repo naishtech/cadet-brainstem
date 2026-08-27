@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **`response_policy` is now an object + recommended language standard** —
+  `response_policy` was refactored from a flat list of directive keys into an
+  object the cloud LLM follows when composing its reply:
+  `{ directives: [...], language_standard?: "<one>" }`. The local classifier
+  picks a recommended documentation language standard (ASD-STE100, Microsoft,
+  Google, Diátaxis, ISO 24495, IEEE) from a fixed, validated set, nested under
+  `response_policy.language_standard`. Backward-compatible: a legacy flat-array
+  `response_policy` is still accepted and normalized to `{ directives }`. Taught
+  in the classifier prompt and documented in `AGENTS.md` steering.
+- **Metrics evaluation (Task 38, Part C)** — Evaluated LeanCTX analytics
+  (`ctx_gain`/`ctx_cost`/`ctx_radar` + persisted `cost_attribution.json` /
+  `savings/ledger.jsonl`): complementary to (not a replacement for) our
+  `MetricsStore`. Confirmed **Serena exposes no token-usage metrics**. Spawn
+  `lean-ctx mcp` with `LEAN_CTX_AGENT_ID=cadet-token-saver` so its persisted
+  analytics attribute to us.
 - **Shell-output routing (Task 38, Part B)** — Added `scripts/benchmark-shell-compression.ts`
   (`npm run benchmark:shell`) comparing RTK vs LeanCTX `ctx_shell` for
   command-output compression. Data-driven result: `ctx_shell` compresses better

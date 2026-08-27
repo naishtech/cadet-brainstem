@@ -41,7 +41,10 @@ function makeClassification(): ClassificationOutcome {
           { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
         ],
       },
-      response_policy: ['compact', 'delta_only'],
+      response_policy: {
+        directives: ['compact', 'delta_only'],
+        language_standard: 'microsoft',
+      },
       guidance: 'Advisory: trace the loader debug path and verify before concluding.',
       evidence_plan: {
         prioritized_queries: [
@@ -215,8 +218,11 @@ describe('optimize_context', () => {
     expect(result.mode).toBe('entropy');
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toEqual({
-      compact: RESPONSE_POLICY_DIRECTIVES.compact,
-      delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+      directives: {
+        compact: RESPONSE_POLICY_DIRECTIVES.compact,
+        delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+      },
+      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       use: ['optimize_context'],
@@ -326,8 +332,11 @@ describe('classify', () => {
     expect(result.strategy).toEqual(makeStrategy());
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toEqual({
-      compact: RESPONSE_POLICY_DIRECTIVES.compact,
-      delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+      directives: {
+        compact: RESPONSE_POLICY_DIRECTIVES.compact,
+        delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+      },
+      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       use: ['optimize_context'],

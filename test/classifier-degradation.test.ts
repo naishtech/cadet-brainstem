@@ -14,7 +14,7 @@ const okClassification: Classification = {
   context_need: 'broad',
   precision: 'normal',
   tool_plan: { use: [] },
-  response_policy: [],
+  response_policy: { directives: [] },
 };
 
 describe('conservativeDefaultClassification', () => {

@@ -139,7 +139,7 @@ Checklist
 - [x] Part A: `leanctx_call` + `leanctx_list_tools` MCP tools + metrics
 - [x] Part B: benchmark harness + run RTK vs `ctx_shell`; record decision
 - [x] Part B: apply routing decision to prompt/reminders (offer both)
-- [ ] Part C: evaluate LeanCTX metrics; document Serena has no token metrics
+- [x] Part C: evaluate LeanCTX metrics; document Serena has no token metrics
 - [x] Tests + smoke updated
 - [x] Docs + CHANGELOG updated
 
@@ -173,6 +173,34 @@ downstream agent chooses per the situation. Added `leanctx_call` and
 `leanctx_list_tools` to `TOOL_NAMES` so the classifier can recommend them in
 `tool_plan.recommended_tools`, with default intents. Updated the PR/git prompt
 example to model offering both.
+
+### Part C — metrics evaluation (2026-08-27)
+**LeanCTX analytics (complementary, not a replacement).** `ctx_gain` /
+`ctx_cost` / `ctx_radar` / `ctx_heatmap` (persisted to `stats.json`,
+`cost_attribution.json`, `savings/ledger.jsonl` in `~/.local/share|state/lean-ctx`)
+add real value we don't have: USD cost attribution per tool/agent (with model
+pricing), an independent hash-chained signed savings ledger (verifiable second
+source of truth), heatmap/radar/gain-score context-budget views, and per-mode
+compression previews (`ctx_benchmark`/`ctx_compare`/`ctx_analyze`). `ctx_metrics`
+is session-scoped only. Attribution to us: set `LEAN_CTX_AGENT_ID=cadet-token-saver`
+when spawning `lean-ctx mcp` — **applied** in `LeanCtxAdapter.connect()`.
+
+**Cannot replace our `MetricsStore`** — LeanCTX doesn't track our
+`session_id`/`request_id` correlation, policy decisions/`leanctx_mode`,
+`latency_ms`, `degraded` (classifier fallback), or orchestration choices; and it
+only sees calls that pass through lean-ctx (not RTK/Serena or skipped
+compression). Our `OptimisationEvent` rows (session_id, tool, operation,
+tokens in/out/saved, ratio, strategy, latency, degraded, request_id,
+symbols/files_found) remain the source of truth for our decisions.
+
+**Serena: no token-usage metrics.** Serena is a code-intelligence MCP server;
+its tools return symbol/reference/rename results, not usage or price data. Our
+serena rows already capture calls/latency/degraded/symbols-found — nothing more
+to extract. Stop looking.
+
+**Decision:** keep `MetricsStore` authoritative; optionally surface a
+"LeanCTX gain" line in `stats` later by reading `cost_attribution.json` /
+`ctx_cost json` (deferred, not required).
 
 **Status:** Part A implemented (pending review/commit). Tests: 225 passing /
 21 files. Build, typecheck, lint green. Live-verified against `lean-ctx 3.9.19`:

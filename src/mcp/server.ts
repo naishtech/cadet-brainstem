@@ -14,8 +14,9 @@ import {
   assessWithFallback,
   type ContextAssessmentOutcome,
   type EvidencePlan,
+  type LanguageStandard,
   type RecommendedTool,
-  type ResponsePolicyKey,
+  type ResponsePolicy,
   type RetrievalPlan,
   type ToolName,
   type ToolPlan,
@@ -45,16 +46,24 @@ import {
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
 
+export interface CompiledResponsePolicy {
+  directives: Record<string, string>;
+  language_standard?: LanguageStandard;
+}
+
 /**
- * Compile the selected response-policy keys into their directive descriptions.
- * The classifier picks the subset per request; this returns only those.
+ * Compile the response policy into the cloud LLM's directive descriptions plus
+ * any categorical choice (e.g. `language_standard`). The classifier picks the
+ * subset per request; this returns only those, described for the cloud LLM.
  */
-export function compileResponsePolicy(
-  keys: readonly ResponsePolicyKey[],
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const key of keys) {
-    result[key] = RESPONSE_POLICY_DIRECTIVES[key];
+export function compileResponsePolicy(policy: ResponsePolicy): CompiledResponsePolicy {
+  const directives: Record<string, string> = {};
+  for (const key of policy.directives) {
+    directives[key] = RESPONSE_POLICY_DIRECTIVES[key];
+  }
+  const result: CompiledResponsePolicy = { directives };
+  if (policy.language_standard !== undefined) {
+    result.language_standard = policy.language_standard;
   }
   return result;
 }
