@@ -282,7 +282,9 @@ describe('buildPrompt', () => {
     const template = 'User request: {{{userRequest}}}\nTools: {{{tools}}}';
     const prompt = buildPrompt('Fix config loading', template);
     expect(prompt).toContain('User request: Fix config loading');
-    expect(prompt).toContain('Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store');
+    expect(prompt).toContain(
+      'Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store, leanctx_call, leanctx_list_tools',
+    );
   });
 
   it('recommends prioritizing MCP tools over raw grep/file search', () => {
@@ -299,6 +301,13 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('recommended_tools');
     expect(prompt).toContain('cost_estimate');
     expect(prompt).toContain('"sources"');
+  });
+
+  it('teaches offering both RTK and ctx_shell for shell-output compression', () => {
+    const prompt = buildPrompt('Check in, push, then start the next task.');
+    expect(prompt).toContain('compress_command_output');
+    expect(prompt).toContain('ctx_shell');
+    expect(prompt).toContain('aggressive compression');
   });
 });
 

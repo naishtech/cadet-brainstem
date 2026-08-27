@@ -27,6 +27,8 @@ export const TOOL_NAMES = [
   'find_relevant_symbols',
   'compress_command_output',
   'chat_memory_store',
+  'leanctx_call',
+  'leanctx_list_tools',
 ] as const;
 
 export const toolNameSchema = z.enum(TOOL_NAMES);
@@ -42,6 +44,9 @@ export const RECOMMENDED_TOOL_INTENTS: Record<ToolName, string> = {
   find_relevant_symbols: 'semantic search for relevant symbols across the project',
   compress_command_output: 'compress noisy command output for cheap analysis',
   chat_memory_store: 'consult stored project memories as optional evidence',
+  leanctx_call:
+    'invoke a LeanCTX tool, e.g. ctx_shell for aggressive shell-output compression',
+  leanctx_list_tools: 'discover the tools the LeanCTX MCP server exposes',
 };
 
 /** A single recommended tool paired with its intent and priority. */

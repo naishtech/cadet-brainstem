@@ -214,6 +214,13 @@ export interface SerenaTools {
   close: () => Promise<void>;
 }
 
+export interface LeanCtxTools {
+  optimize: LeanCtxAdapter['optimize'];
+  callTool: LeanCtxAdapter['callTool'];
+  listTools: LeanCtxAdapter['listTools'];
+  close: () => Promise<void>;
+}
+
 export interface McpDeps {
   classify?: (taskText: string) => Promise<ClassificationOutcome>;
   getStrategy?: (classification: Classification) => OptimisationStrategy;
@@ -222,7 +229,7 @@ export interface McpDeps {
     taskText: string,
     inventoryText: string,
   ) => Promise<ContextAssessmentOutcome>;
-  leanctx?: Pick<LeanCtxAdapter, 'optimize'>;
+  leanctx?: Partial<LeanCtxTools>;
   rtk?: Pick<RtkAdapter, 'optimize'>;
   serena?: Partial<SerenaTools>;
   metricsPath?: string;
@@ -241,7 +248,7 @@ interface ResolvedDeps {
     taskText: string,
     inventoryText: string,
   ) => Promise<ContextAssessmentOutcome>;
-  leanctx: Pick<LeanCtxAdapter, 'optimize'>;
+  leanctx: Partial<LeanCtxTools>;
   rtk: Pick<RtkAdapter, 'optimize'>;
   serena: Partial<SerenaTools>;
   metricsPath: string;
@@ -346,6 +353,9 @@ export async function optimizeContextTool(
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  if (d.leanctx.optimize === undefined) {
+    throw new Error('optimize_context requires a LeanCTX optimize adapter');
+  }
   const leanStart = performance.now();
   const result = await d.leanctx.optimize({
     target: args.target,
@@ -881,6 +891,111 @@ export async function serenaListToolsTool(
   };
 }
 
+export interface LeanCtxCallArgs {
+  /** LeanCTX tool name, e.g. ctx_read, ctx_shell, ctx_search, ctx_explore. */
+  tool: string;
+  /** Arguments forwarded verbatim to the LeanCTX tool. */
+  arguments?: Record<string, unknown>;
+  /** Project directory (defaults to the server cwd). */
+  cwd?: string;
+  request_id?: string;
+}
+
+/** `leanctx_call` — forward any call to any `ctx_*` tool over MCP. */
+export async function leanctxCallTool(
+  args: LeanCtxCallArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.tool !== 'string' || args.tool.length === 0) {
+    throw new Error('leanctx_call requires a non-empty string "tool"');
+  }
+  const d = resolveDeps(deps);
+  if (d.leanctx.callTool === undefined) {
+    return { degraded: true, error: 'leanctx passthrough unavailable' };
+  }
+  const requestId = resolveRequestId(args.request_id);
+  const callStart = performance.now();
+  const result = await d.leanctx.callTool({
+    tool: args.tool,
+    ...(args.arguments !== undefined ? { arguments: args.arguments } : {}),
+    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
+  });
+  const callLatencyMs = Math.round(performance.now() - callStart);
+  const textBytes = Buffer.byteLength(result.rawText);
+  d.record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'search',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'leanctx',
+    operation: args.tool,
+    estimated_input_tokens: Math.round(
+      Buffer.byteLength(JSON.stringify(args.arguments ?? {})) / 4,
+    ),
+    estimated_output_tokens: Math.round(textBytes / 4),
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: callLatencyMs,
+    request_id: requestId,
+  });
+  return {
+    tool: result.tool,
+    result: result.result,
+    degraded: result.degraded,
+    request_id: requestId,
+  };
+}
+
+export interface LeanCtxListArgs {
+  cwd?: string;
+  request_id?: string;
+}
+
+/** `leanctx_list_tools` — list what LeanCTX currently exposes (discovery). */
+export async function leanctxListToolsTool(
+  args: LeanCtxListArgs = {},
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  const d = resolveDeps(deps);
+  if (d.leanctx.listTools === undefined) {
+    return { tools: [], degraded: true, error: 'leanctx passthrough unavailable' };
+  }
+  const requestId = resolveRequestId(args.request_id);
+  const callStart = performance.now();
+  const result = await d.leanctx.listTools({
+    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
+  });
+  const callLatencyMs = Math.round(performance.now() - callStart);
+  const textBytes = Buffer.byteLength(
+    JSON.stringify(result.tools.map((t) => t.name)),
+  );
+  d.record({
+    timestamp: new Date().toISOString(),
+    session_id: MCP_SESSION_ID,
+    task_type: 'search',
+    complexity: 'low',
+    risk: 'low',
+    tool: 'leanctx',
+    operation: 'list_tools',
+    estimated_input_tokens: 0,
+    estimated_output_tokens: Math.round(textBytes / 4),
+    estimated_tokens_saved: 0,
+    compression_ratio: null,
+    optimisation_strategy: null,
+    degraded: result.degraded,
+    latency_ms: callLatencyMs,
+    request_id: requestId,
+  });
+  return {
+    tools: result.tools.map((t) => t.name),
+    degraded: result.degraded,
+    request_id: requestId,
+  };
+}
+
 /**
  * `compress_command_output` — run a read-only command and return its
  * RTK-reduced output. The full raw output is never sent back (that is the
@@ -1177,6 +1292,56 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'leanctx_call',
+    description:
+      'Call any tool exposed by the LeanCTX MCP server (ctx_read, ctx_shell, ' +
+      'ctx_search, ctx_explore, ctx_callgraph, ctx_knowledge, ctx_gain, etc.) by ' +
+      'forwarding the request. Use leanctx_list_tools to see what LeanCTX exposes; ' +
+      'for a policy-driven file compile prefer optimize_context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool: {
+          type: 'string',
+          description:
+            'LeanCTX tool name, e.g. ctx_read, ctx_shell, ctx_search, ctx_explore, ctx_callgraph, ctx_gain.',
+        },
+        arguments: {
+          type: 'object',
+          description: 'Arguments forwarded verbatim to the LeanCTX tool.',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Project directory (defaults to the server cwd).',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
+        },
+      },
+      required: ['tool'],
+    },
+  },
+  {
+    name: 'leanctx_list_tools',
+    description:
+      'List the tools currently exposed by the LeanCTX MCP server (names + schemas) ' +
+      'so the agent can call any of them via leanctx_call without hardcoding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description: 'Project directory (defaults to the server cwd).',
+        },
+        request_id: {
+          type: 'string',
+          description: 'Optional shared id linking this call to a logical flow.',
+        },
+      },
+    },
+  },
+  {
     name: 'compress_command_output',
     description:
       'Run a read-only command and return its RTK-compressed output. Only helps on noisy/large ' +
@@ -1325,6 +1490,15 @@ export async function handleToolCall(
         break;
       case 'serena_list_tools':
         result = await serenaListToolsTool(args as unknown as SerenaListArgs, deps);
+        break;
+      case 'leanctx_call':
+        result = await leanctxCallTool(args as unknown as LeanCtxCallArgs, deps);
+        break;
+      case 'leanctx_list_tools':
+        result = await leanctxListToolsTool(
+          args as unknown as LeanCtxListArgs,
+          deps,
+        );
         break;
       case 'compress_command_output':
         result = await compressCommandOutputTool(

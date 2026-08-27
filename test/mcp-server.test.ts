@@ -11,6 +11,8 @@ import {
   compressCommandOutputTool,
   findRelevantSymbolsTool,
   handleToolCall,
+  leanctxCallTool,
+  leanctxListToolsTool,
   optimizeContextTool,
   serenaCallTool,
   serenaListToolsTool,
@@ -116,10 +118,26 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
     tools: [{ name: 'find_symbol' }, { name: 'rename_symbol' }],
     degraded: false,
   }));
+  const leanctxForward = vi.fn(async (req: { tool: string }) => ({
+    tool: req.tool,
+    result: {
+      content: [{ type: 'text', text: 'ctx_shell -> compressed shell output' }],
+    },
+    rawText: 'ctx_shell -> compressed shell output',
+    degraded: false,
+  }));
+  const leanctxList = vi.fn(async () => ({
+    tools: [{ name: 'ctx_read' }, { name: 'ctx_shell' }, { name: 'ctx_gain' }],
+    degraded: false,
+  }));
   const deps: McpDeps = {
     classify,
     getStrategy,
-    leanctx: { optimize: leanctxOptimize },
+    leanctx: {
+      optimize: leanctxOptimize,
+      callTool: leanctxForward,
+      listTools: leanctxList,
+    },
     rtk: { optimize: rtkOptimize },
     serena: { search: serenaSearch, callTool: serenaForward, listTools: serenaList },
     metricsPath,
@@ -134,6 +152,8 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
     serenaSearch,
     serenaForward,
     serenaList,
+    leanctxForward,
+    leanctxList,
   };
 }
 
@@ -469,6 +489,67 @@ describe('serena_list_tools', () => {
   it('degrades gracefully when the passthrough is unavailable', async () => {
     const { deps } = makeDeps({ serena: {} });
     const result = await serenaListToolsTool({ cwd: 'E:/proj' }, deps);
+    expect(result.tools).toEqual([]);
+    expect(result.degraded).toBe(true);
+  });
+});
+
+describe('leanctx_call', () => {
+  it('forwards any ctx_* tool and records a leanctx event', async () => {
+    const { deps, leanctxForward } = makeDeps();
+
+    const result = await leanctxCallTool(
+      {
+        tool: 'ctx_shell',
+        arguments: { command: 'git status', raw: true },
+        cwd: 'E:/proj',
+      },
+      deps,
+    );
+
+    expect(result.degraded).toBe(false);
+    expect(result.tool).toBe('ctx_shell');
+    expect(leanctxForward).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: 'ctx_shell',
+        arguments: { command: 'git status', raw: true },
+        cwd: 'E:/proj',
+      }),
+    );
+    expect(callsByTool(metricsPath).leanctx).toBe(1);
+    const row = firstRowForTool(metricsPath, 'leanctx');
+    expect(row.operation).toBe('ctx_shell');
+    expect(row.request_id).toBeTruthy();
+  });
+
+  it('rejects an empty tool', async () => {
+    const { deps } = makeDeps();
+    await expect(leanctxCallTool({ tool: '' }, deps)).rejects.toThrow('tool');
+  });
+
+  it('degrades gracefully when the passthrough is unavailable', async () => {
+    const { deps } = makeDeps({ leanctx: {} });
+    const result = await leanctxCallTool({ tool: 'ctx_read' }, deps);
+    expect(result.degraded).toBe(true);
+  });
+});
+
+describe('leanctx_list_tools', () => {
+  it('lists the tools LeanCTX currently exposes and records an event', async () => {
+    const { deps, leanctxList } = makeDeps();
+
+    const result = await leanctxListToolsTool({ cwd: 'E:/proj' }, deps);
+
+    expect(result.tools).toEqual(['ctx_read', 'ctx_shell', 'ctx_gain']);
+    expect(result.degraded).toBe(false);
+    expect(leanctxList).toHaveBeenCalled();
+    expect(callsByTool(metricsPath).leanctx).toBe(1);
+    expect(firstRowForTool(metricsPath, 'leanctx').operation).toBe('list_tools');
+  });
+
+  it('degrades gracefully when the passthrough is unavailable', async () => {
+    const { deps } = makeDeps({ leanctx: {} });
+    const result = await leanctxListToolsTool({ cwd: 'E:/proj' }, deps);
     expect(result.tools).toEqual([]);
     expect(result.degraded).toBe(true);
   });

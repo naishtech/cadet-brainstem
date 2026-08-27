@@ -73,6 +73,10 @@ tool_plan: recommend the context tools to use from: {{{tools}}}.
 Only recommend a tool when it clearly helps this request. Pair each tool in
 "use" with a "recommended_tools" entry { "name", "intent", "priority" }
 (1-based, cheapest-first).
+Shell/command output routing: when a task runs shell/CLI commands with noisy or
+large output, offer BOTH compress_command_output (RTK - fast, moderate) and
+leanctx_call with ctx_shell (LeanCTX - aggressive compression, slower, may
+drop detail) so the downstream agent can choose.
 
 response_policy: pick the directives the agent should follow when replying.
 Be aggressive: a simple single-action request (e.g. "merge the PR") needs only
