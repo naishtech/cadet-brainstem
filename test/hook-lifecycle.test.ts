@@ -172,7 +172,11 @@ describe('runHookUserPrompt', () => {
             precision: 'normal',
             entities: ['refactor', 'inventory'],
             guidance: 'prefer semantic search',
-            tool_plan: { recommended_tools: [{ name: 'find_relevant_symbols' }] },
+            tool_plan: {
+              recommended_tools: [
+                { name: 'find_relevant_symbols', intent: 'locate relevant symbols', priority: 1 },
+              ],
+            },
             response_policy: { directives: ['delta_only'] },
           },
           degraded: false,

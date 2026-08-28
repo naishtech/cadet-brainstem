@@ -8,7 +8,12 @@ import {
   resolveProjectRoot,
 } from '../../memory';
 import { DEFAULT_RECOMMENDED_TOOL } from './hooks';
-import { classifyWithFallback, isModelAvailable, synthesizePlans } from '../../classifier';
+import {
+  classifyWithFallback,
+  isModelAvailable,
+  synthesizePlans,
+  type Classification,
+} from '../../classifier';
 import { loadConfig } from '../../config';
 import { createFastClassifierCli } from '../../core/installers';
 import type { CliCommand } from '../types';
@@ -52,12 +57,7 @@ export interface HookLifecycleDeps {
   resolveProject?: (cwd: string) => string;
   /** Override the classifier (tests). Defaults to classifyWithFallback. */
   classify?: (text: string) => Promise<{
-    classification: {
-      task?: string;
-      guidance?: string;
-      tool_plan?: { recommended_tools?: Array<{ name: string }> };
-      response_policy?: { directives?: string[] };
-    };
+    classification: Classification;
     degraded: boolean;
   }>;
   /**

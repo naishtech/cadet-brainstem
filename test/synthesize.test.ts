@@ -30,14 +30,14 @@ describe('synthesizeToolPlan', () => {
     const plan = synthesizeToolPlan(
       makeClassification({ entities: ['checkout', 'error handler'] }),
     );
-    expect(plan.recommended_tools.map((t) => t.name)).toContain('find_relevant_symbols');
+    expect((plan.recommended_tools ?? []).map((t) => t.name)).toContain('find_relevant_symbols');
   });
 
   it('adds optimize_context for documentation/planning entities', () => {
     const plan = synthesizeToolPlan(
       makeClassification({ task: 'documentation', entities: ['blueprints', 'document'] }),
     );
-    expect(plan.recommended_tools.map((t) => t.name)).toEqual(
+    expect((plan.recommended_tools ?? []).map((t) => t.name)).toEqual(
       expect.arrayContaining(['find_relevant_symbols', 'optimize_context']),
     );
   });
@@ -46,12 +46,12 @@ describe('synthesizeToolPlan', () => {
     const plan = synthesizeToolPlan(
       makeClassification({ task: 'documentation', entities: ['CLI commands', 'README'] }),
     );
-    expect(plan.recommended_tools.map((t) => t.name)).not.toContain('compress_command_output');
+    expect((plan.recommended_tools ?? []).map((t) => t.name)).not.toContain('compress_command_output');
   });
 
   it('falls back to a baseline find_relevant_symbols when nothing matches', () => {
     const plan = synthesizeToolPlan(makeClassification({ entities: ['unknown-thing'] }));
-    expect(plan.recommended_tools.map((t) => t.name)).toEqual(['find_relevant_symbols']);
+    expect((plan.recommended_tools ?? []).map((t) => t.name)).toEqual(['find_relevant_symbols']);
   });
 });
 
@@ -84,11 +84,11 @@ describe('synthesizePlans', () => {
     });
     const full = synthesizePlans(lean);
     expect(full.entities).toEqual(['checkout', 'payment']);
-    expect(full.tool_plan.recommended_tools.length).toBeGreaterThan(0);
+    expect((full.tool_plan.recommended_tools ?? []).length).toBeGreaterThan(0);
     expect(full.evidence_plan).toBeDefined();
     // debug is exploratory -> preserve_evidence + progressive_disclosure
     expect(full.response_policy.directives).toContain('preserve_evidence');
     expect(full.response_policy.directives).toContain('follow_tool_plan');
-    expect(full.reminders.length).toBe(full.tool_plan.recommended_tools.length);
+    expect((full.reminders ?? []).length).toBe((full.tool_plan.recommended_tools ?? []).length);
   });
 });

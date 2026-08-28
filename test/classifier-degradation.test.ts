@@ -13,6 +13,7 @@ const okClassification: Classification = {
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
+  entities: [],
   tool_plan: {},
   response_policy: { directives: [] },
 };

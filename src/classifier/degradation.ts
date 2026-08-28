@@ -21,6 +21,7 @@ export const conservativeDefaultClassification: Classification = {
   risk: 'low',
   context_need: 'exhaustive',
   precision: 'normal',
+  entities: [],
   tool_plan: {},
   response_policy: {
     directives: ['preserve_evidence', 'progressive_disclosure', 'no_repetition'],

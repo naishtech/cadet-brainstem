@@ -28,6 +28,7 @@ const debugClassification: Classification = {
   risk: 'high',
   context_need: 'broad',
   precision: 'approximate',
+  entities: [],
   tool_plan: {},
   response_policy: { directives: [] },
 };
@@ -38,6 +39,7 @@ const questionClassification: Classification = {
   risk: 'low',
   context_need: 'minimal',
   precision: 'approximate',
+  entities: [],
   tool_plan: {},
   response_policy: { directives: [] },
 };

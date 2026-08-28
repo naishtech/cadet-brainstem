@@ -344,7 +344,7 @@ function recordClassifierCall(
 ): void {
   // tool_plan is now synthesized deterministically (the model only classifies
   // + extracts entities), so derive the recommended-tool metric from synthesis.
-  const recommended = synthesizeToolPlan(outcome.classification).recommended_tools.map(
+  const recommended = (synthesizeToolPlan(outcome.classification).recommended_tools ?? []).map(
     (tool) => tool.name,
   );
   record({

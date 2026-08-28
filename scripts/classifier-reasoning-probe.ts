@@ -120,7 +120,8 @@ function buildSchema(level: number): Record<string, unknown> {
   const fields = fieldsFor(level);
   const properties: Record<string, unknown> = {};
   for (const field of fields) {
-    const prop = (CLASSIFICATION_JSON_SCHEMA as any).properties?.[field];
+    const prop = (CLASSIFICATION_JSON_SCHEMA as { properties?: Record<string, unknown> })
+      .properties?.[field];
     if (prop !== undefined) {
       properties[field] = prop;
     }
@@ -233,8 +234,8 @@ async function main(): Promise<void> {
         : res.error ?? 'INVALID';
       console.log(`  ${String(res.latencyMs).padStart(6)}ms  ${status}`);
       if (res.valid && res.parsed) {
-        console.log(`  tool_plan: ${JSON.stringify((res.parsed as any).tool_plan ?? null)}`);
-        console.log(`  evidence_plan: ${JSON.stringify((res.parsed as any).evidence_plan ?? null)}`);
+        console.log(`  tool_plan: ${JSON.stringify(res.parsed.tool_plan ?? null)}`);
+        console.log(`  evidence_plan: ${JSON.stringify(res.parsed.evidence_plan ?? null)}`);
       }
     }
   } else {
