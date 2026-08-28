@@ -4,6 +4,17 @@ import type { CliCommand, CliCommandContext } from './types';
 import { configCommand } from './commands/config';
 import { dashboardCommand } from './commands/dashboard';
 import { doctorCommand } from './commands/doctor';
+import { hookRemindCommand } from './commands/hook-remind';
+import {
+  hookPostToolCommand,
+  hookPreCompactCommand,
+  hookSessionStartCommand,
+  hookStopCommand,
+  hookSubagentStartCommand,
+  hookSubagentStopCommand,
+  hookUserPromptCommand,
+} from './commands/hook-lifecycle';
+import { hooksCommand } from './commands/hooks';
 import { initCommand } from './commands/init';
 import { mcpCommand } from './commands/mcp';
 import { memoryCommand } from './commands/memory';
@@ -21,6 +32,15 @@ export const COMMANDS: readonly CliCommand[] = [
   dashboardCommand,
   configCommand,
   telemetryCommand,
+  hooksCommand,
+  hookRemindCommand,
+  hookSessionStartCommand,
+  hookUserPromptCommand,
+  hookPostToolCommand,
+  hookPreCompactCommand,
+  hookSubagentStartCommand,
+  hookSubagentStopCommand,
+  hookStopCommand,
   mcpCommand,
   wrapCommand,
 ];

@@ -76,6 +76,41 @@ cadet-token-saver wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
 > `--shell <name>` (e.g. `bash` for git-bash). Compression only helps on
 > large/noisy output (git status, build/test logs) — small output is pass-through.
 
+### 3b. Save tokens with lifecycle hooks
+
+Because the MCP server cannot force a tool call, you can install VS Code
+Copilot Chat Hooks that save tokens at every point in the agent session
+(mirrors Serena's hook setup, extended to all lifecycle events). One command
+installs everything into the global hooks dir VS Code auto-loads from:
+
+```bash
+cadet-token-saver hooks find_relevant_symbols   # writes ~/.copilot/hooks/cadet-token-saver.json
+```
+
+It registers all eight lifecycle events, each wired to a `cadet-token-saver
+hook-*` handler:
+
+| Event | Handler | What it saves |
+| --- | --- | --- |
+| `SessionStart` | `hook-session-start` | Primes the session with memory hints + the recommended tool |
+| `UserPromptSubmit` | `hook-user-prompt` | Classifies the prompt and injects the strategy deterministically |
+| `PreToolUse` | `hook-remind` | Nudges toward the recommended tool over raw grep/read |
+| `PostToolUse` | `hook-post-tool` | Records token-saving metrics per tool call |
+| `PreCompact` | `hook-pre-compact` | Exports important context to memory before truncation |
+| `SubagentStart` | `hook-subagent-start` | Classifies the subtask, injects a cheap-path primer |
+| `SubagentStop` | `hook-subagent-stop` | Records nested usage, cleans up state |
+| `Stop` | `hook-stop` | Persists a session summary, cleans up state |
+
+VS Code reads Copilot Chat Hooks from `~/.copilot/hooks/*.json`, so writing
+there makes all hooks live (reload the window to pick them up). Handlers read
+the hook payload from stdin and are best-effort — they never break the agent
+session.
+
+```bash
+# install with a different recommended tool / custom dir
+cadet-token-saver hooks --tool leanctx_call --out ~/.copilot/hooks
+```
+
 ### 4. See the results
 
 ```bash
@@ -144,4 +179,4 @@ The project is built incrementally from the task files in `tasks/`; see the desi
 
 ---
 
-**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, `compress_command_output`, and `chat_memory_store`.
+**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `hooks`, `hook-remind`, `hook-session-start`, `hook-user-prompt`, `hook-post-tool`, `hook-pre-compact`, `hook-subagent-start`, `hook-subagent-stop`, `hook-stop`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, `compress_command_output`, and `chat_memory_store`.
