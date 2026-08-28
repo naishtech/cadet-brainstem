@@ -298,6 +298,18 @@ function defaultRecorder(metricsPath: string): (event: OptimisationEvent) => voi
   };
 }
 
+/**
+ * Shared, process-lifetime adapter singletons. Each MCP tool call goes through
+ * `resolveDeps`, which previously constructed a fresh `new SerenaAdapter()` (and
+ * LeanCtx/RTK) on every call. Because `SerenaAdapter` holds its MCP session in an
+ * instance field, a fresh adapter meant a fresh `serena start-mcp-server` process
+ * (and dashboard popup) per call. These singletons make the connection persist
+ * across calls: first use starts the process, subsequent calls reuse it.
+ */
+const sharedSerena = new SerenaAdapter();
+const sharedLeanctx = new LeanCtxAdapter();
+const sharedRtk = new RtkAdapter();
+
 function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
   return {
@@ -306,9 +318,9 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
       deps.getStrategy ??
       ((classification) => new PolicyEngine().getStrategy(classification)),
     assess: deps.assess ?? assessWithFallback,
-    leanctx: deps.leanctx ?? new LeanCtxAdapter(),
-    rtk: deps.rtk ?? new RtkAdapter(),
-    serena: deps.serena ?? new SerenaAdapter(),
+    leanctx: deps.leanctx ?? sharedLeanctx,
+    rtk: deps.rtk ?? sharedRtk,
+    serena: deps.serena ?? sharedSerena,
     metricsPath,
     defaultProject: deps.defaultProject ?? resolveProjectId(process.cwd()),
     record: deps.record ?? defaultRecorder(metricsPath),

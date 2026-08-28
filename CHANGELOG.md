@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.27] - 2026-08-29
+
+### Fixed
+
+- **Serena instance reused instead of respawned per call** — `resolveDeps` in
+  the MCP server constructed a fresh `new SerenaAdapter()` on every tool call.
+  Because the adapter holds its MCP session in an instance field, each call
+  started a brand-new `serena start-mcp-server` process (and popped up the
+  Serena dashboard). The default adapters are now module-level shared singletons
+  (`sharedSerena`/`sharedLeanctx`/`sharedRtk`), so the first call spawns Serena
+  once and subsequent calls reuse the same connection. Added a test asserting
+  that two `find_relevant_symbols` calls spawn only a single Serena process.
+
 ## [0.1.26] - 2026-08-28
 
 ### Added
