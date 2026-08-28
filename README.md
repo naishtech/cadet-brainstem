@@ -81,13 +81,28 @@ cadet-token-saver wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
 Because the MCP server cannot force a tool call, you can install VS Code
 Copilot Chat Hooks that save tokens at every point in the agent session
 (mirrors Serena's hook setup, extended to all lifecycle events). One command
-installs everything into the global hooks dir VS Code auto-loads from:
+installs everything into the global hooks dir VS Code auto-loads from.
+
+#### Prerequisites
+
+- **cadet-token-saver on your `PATH`.** The hook config invokes
+  `cadet-token-saver hook-*` commands, so the binary must be resolvable from the
+  shell VS Code uses to run hooks. Verify with:
+  ```bash
+  cadet-token-saver --version
+  ```
+- **VS Code with agent hooks enabled.** Hooks are currently a preview feature.
+  If your organization disables them, this won't take effect. You can confirm
+  hooks are enabled by running the **Chat: Configure Hooks** command from the
+  Command Palette, or typing `/hooks` in the chat input.
+
+#### 1. Install all hooks (one command)
 
 ```bash
 cadet-token-saver hooks find_relevant_symbols   # writes ~/.copilot/hooks/cadet-token-saver.json
 ```
 
-It registers all eight lifecycle events, each wired to a `cadet-token-saver
+This registers all eight lifecycle events, each wired to a `cadet-token-saver
 hook-*` handler:
 
 | Event | Handler | What it saves |
@@ -101,15 +116,50 @@ hook-*` handler:
 | `SubagentStop` | `hook-subagent-stop` | Records nested usage, cleans up state |
 | `Stop` | `hook-stop` | Persists a session summary, cleans up state |
 
-VS Code reads Copilot Chat Hooks from `~/.copilot/hooks/*.json`, so writing
-there makes all hooks live (reload the window to pick them up). Handlers read
-the hook payload from stdin and are best-effort — they never break the agent
-session.
+The generated file lives at `~/.copilot/hooks/cadet-token-saver.json`. To use a
+different recommended tool or write somewhere else:
 
 ```bash
-# install with a different recommended tool / custom dir
 cadet-token-saver hooks --tool leanctx_call --out ~/.copilot/hooks
 ```
+
+#### 2. Load the hooks
+
+VS Code auto-loads Copilot Chat Hooks from `~/.copilot/hooks/*.json`, so the
+file is picked up automatically. **Reload the window** (or run **Developer:
+Reload Window**) for the hooks to become active.
+
+#### 3. Verify the hooks are active
+
+- Open the **Output** panel and select **GitHub Copilot Chat Hooks** from the
+  channel list. You should see the hooks loaded from
+  `~/.copilot/hooks/cadet-token-saver.json`.
+- Run **Developer: Show Agent Debug Logs** to inspect hook input/output per
+  event.
+- Run **View Logs** and look for a **"Load Hooks"** entry to confirm which
+  locations and files were loaded.
+
+#### How it behaves
+
+Handlers read the hook payload from stdin and are best-effort — they never
+break the agent session. The `PreToolUse` hook nudges the agent toward the
+recommended tool when it over-uses raw `grep`/`read`, and using a proxied
+serena/leanctx tool resets that guard. The `UserPromptSubmit` and `PreCompact`
+hooks do the heavy token-saving: classifying each prompt and exporting context
+to memory before truncation.
+
+#### Troubleshooting
+
+- **Hook not executing** — confirm the file is `~/.copilot/hooks/*.json`, has a
+  `.json` extension, and `type: "command"` is present on each entry.
+- **Permission denied / command not found** — ensure `cadet-token-saver` is on
+  your `PATH` (hooks run in a shell, not the VS Code terminal). Use the full
+  path to the binary if needed.
+- **Timeout** — hooks default to a 30s timeout; the cadet handlers are fast, so
+  a timeout usually means the binary isn't found. Increase the `timeout` field
+  in the generated JSON if necessary.
+- **Still not firing** — run **Chat: Configure Hooks** (or `/hooks`) to confirm
+  hooks are enabled, then reload the window.
 
 ### 4. See the results
 
