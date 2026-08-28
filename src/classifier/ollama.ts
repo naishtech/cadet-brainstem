@@ -315,9 +315,18 @@ export function isDerivedClassifierModel(model: string): boolean {
   return model === DERIVED_CLASSIFIER_MODEL || model.endsWith('-classifier');
 }
 
-/** Default log sink for the classifier's latency instrumentation. */
+/**
+ * Default log sink for the classifier's latency instrumentation.
+ *
+ * IMPORTANT: this must write to STDERR, not stdout. When the classifier runs
+ * inside a VS Code Copilot Chat hook, the hook's stdout is read by VS Code and
+ * parsed as a single JSON response. Any non-JSON line on stdout (e.g. this
+ * latency diagnostic) breaks that parse, so VS Code discards the whole hook
+ * output — including the injected `additionalContext` — and the classification
+ * never reaches the model. Diagnostics belong on stderr.
+ */
 function defaultLog(line: string): void {
-  console.log(line);
+  console.error(line);
 }
 
 /** Resolve the timeout — explicit override, else config, else the default. */

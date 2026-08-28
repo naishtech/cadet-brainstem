@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.23] - 2026-08-28
+
+### Fixed
+
+- **Hook stdout pollution breaks classification injection** — the classifier's
+  latency diagnostic (`[cadet-token-saver] classifier durations (ns) ...`) was
+  written to **stdout**, so when running inside a VS Code Copilot Chat hook it
+  landed before the JSON response. VS Code parses the hook's stdout as a single
+  JSON object, so the leading non-JSON line caused the parse to fail and the
+  whole hook output — including the injected `additionalContext` — was
+  discarded. The classification therefore never reached the model. Diagnostics
+  now go to **stderr** (`src/classifier/ollama.ts`), keeping stdout clean so the
+  hook's JSON response parses and the steering is injected.
+- **Hook timeout aborted classifier before injection** — `UserPromptSubmit` and
+  `SubagentStart` hooks call the local LLM classifier (~20-45s) but used VS
+  Code's 30s default hook timeout, so they were aborted before writing output.
+  These hooks now set an explicit `timeout: 90000` (`src/cli/commands/hooks.ts`).
+
 ## [0.1.22] - 2026-08-28
 
 ### Changed

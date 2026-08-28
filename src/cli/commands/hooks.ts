@@ -24,7 +24,16 @@ export type HookEvent = (typeof HOOK_EVENTS)[number];
 export interface HookCommand {
   type: 'command';
   command: string;
+  /**
+   * Max ms VS Code waits for the hook before aborting. VS Code's default is
+   * 30s, which is too short for hooks that run the local classifier (~20-45s),
+   * so the LLM-calling hooks set an explicit higher timeout.
+   */
+  timeout?: number;
 }
+
+/** Timeout (ms) for hooks that call the local LLM classifier. */
+export const CLASSIFY_HOOK_TIMEOUT_MS = 90_000;
 
 /** Shape of the generated VS Code Copilot Chat Hooks config file. */
 export interface CopilotHooksConfig {
@@ -121,7 +130,11 @@ export function buildHooksConfig(tool: string): CopilotHooksConfig {
         { type: 'command', command: 'cadet-token-saver hook-session-start' },
       ],
       UserPromptSubmit: [
-        { type: 'command', command: 'cadet-token-saver hook-user-prompt' },
+        {
+          type: 'command',
+          command: 'cadet-token-saver hook-user-prompt',
+          timeout: CLASSIFY_HOOK_TIMEOUT_MS,
+        },
       ],
       PreToolUse: [
         {
@@ -136,7 +149,11 @@ export function buildHooksConfig(tool: string): CopilotHooksConfig {
         { type: 'command', command: 'cadet-token-saver hook-pre-compact' },
       ],
       SubagentStart: [
-        { type: 'command', command: 'cadet-token-saver hook-subagent-start' },
+        {
+          type: 'command',
+          command: 'cadet-token-saver hook-subagent-start',
+          timeout: CLASSIFY_HOOK_TIMEOUT_MS,
+        },
       ],
       SubagentStop: [
         { type: 'command', command: 'cadet-token-saver hook-subagent-stop' },
