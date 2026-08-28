@@ -41,8 +41,22 @@ node -e "const fs=require('fs'); const pkgPath=process.argv[1]; const newVersion
 
 echo "Bumped package.json version: $current_version -> $new_version"
 
-if [[ -f "$root_dir/package-lock.json" ]]; then
-  echo "Note: package-lock.json was not updated by this script. Update it if needed."
+# Keep package-lock.json in sync (lockfile v2: top-level "version";
+# lockfile v3: top-level "version" + packages[""].version).
+lock_json="$root_dir/package-lock.json"
+if [[ -f "$lock_json" ]]; then
+  node -e "
+const fs=require('fs');
+const lockPath=process.argv[1];
+const newVersion=process.argv[2];
+const lock=JSON.parse(fs.readFileSync(lockPath,'utf8'));
+lock.version=newVersion;
+if (lock.packages && lock.packages['']) {
+  lock.packages[''].version=newVersion;
+}
+fs.writeFileSync(lockPath, JSON.stringify(lock,null,2)+'\n');
+" "$lock_json" "$new_version"
+  echo "Bumped package-lock.json version: $current_version -> $new_version"
 fi
 
 echo "Run 'npm publish' once you have committed the version bump."
