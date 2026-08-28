@@ -164,7 +164,14 @@ describe('runHookRedirect', () => {
     let out = '';
     await runHookRedirect(
       {},
-      { readStdin: async () => stdin, writeOut: (l) => (out = l), recordMetrics: vi.fn() },
+      // Fresh in-memory state so the deny counter is 0 (deterministic, and no
+      // writes to the real ~/.local/state filesystem).
+      {
+        readStdin: async () => stdin,
+        writeOut: (l) => (out = l),
+        recordMetrics: vi.fn(),
+        state: memState(),
+      },
     );
     const parsed = JSON.parse(out) as {
       hookSpecificOutput: { permissionDecision: string; additionalContext: string };
