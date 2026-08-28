@@ -338,6 +338,7 @@ export async function runHookUserPrompt(
   ctx += `- entities: ${entities || '(none)'}\n`;
   ctx += `- recommended tools: ${tools || '(none)'}\n`;
   ctx += `- response_policy directives: ${directives || '(none)'}\n`;
+  ctx += `- language_standard: ${synthesized.response_policy?.language_standard ?? '(none)'}\n`;
   if (classification.guidance) {
     ctx += `- guidance: ${classification.guidance}\n`;
   }

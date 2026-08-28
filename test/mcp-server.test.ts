@@ -225,6 +225,7 @@ describe('optimize_context', () => {
         progressive_disclosure: RESPONSE_POLICY_DIRECTIVES.progressive_disclosure,
         follow_tool_plan: RESPONSE_POLICY_DIRECTIVES.follow_tool_plan,
       },
+      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       recommended_tools: [
@@ -343,6 +344,7 @@ describe('classify', () => {
         progressive_disclosure: RESPONSE_POLICY_DIRECTIVES.progressive_disclosure,
         follow_tool_plan: RESPONSE_POLICY_DIRECTIVES.follow_tool_plan,
       },
+      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       recommended_tools: [

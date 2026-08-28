@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.26] - 2026-08-28
+
+### Added
+
+- **`language_standard` wired into the steering** — `synthesizeResponsePolicy`
+  now deterministically selects a documentation language standard and includes it
+  in the injected context and MCP `classify`/`optimize_context` output:
+  - `documentation` → `asd_ste100` (ASD-STE100 / Simplified Technical English)
+  - `architecture` / `planning` → `diataxis`
+  - everything else → `microsoft`
+  The UserPromptSubmit hook now emits a `- language_standard: <standard>` line so
+  the model writes to the recommended style guide. (`src/classifier/synthesize.ts`,
+  `src/cli/commands/hook-lifecycle.ts`)
+
 ## [0.1.25] - 2026-08-28
 
 ### Changed

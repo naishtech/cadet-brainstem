@@ -2,6 +2,7 @@ import {
   Classification,
   EvidencePlan,
   EvidenceQuery,
+  LanguageStandard,
   RecommendedTool,
   Reminder,
   RESPONSE_POLICY_KEYS,
@@ -140,6 +141,24 @@ export function synthesizeEvidencePlan(c: Classification): EvidencePlan | undefi
   return { prioritized_queries, scope: synthesizeScope(c) };
 }
 
+/**
+ * Deterministic documentation language standard from the task. STE
+ * (ASD-STE100, controlled language) is chosen for documentation/runbook-style
+ * work — maximum clarity, minimal ambiguity. Architecture/planning lean toward
+ * Diátaxis (reader-mode structure); everything else uses the house style.
+ */
+export function synthesizeLanguageStandard(c: Classification): LanguageStandard {
+  switch (c.task) {
+    case 'documentation':
+      return 'asd_ste100';
+    case 'architecture':
+    case 'planning':
+      return 'diataxis';
+    default:
+      return 'microsoft';
+  }
+}
+
 /** Synthesize response directives deterministically from task/context. */
 export function synthesizeResponsePolicy(c: Classification): ResponsePolicy {
   const directives: ResponsePolicyKey[] = [];
@@ -152,7 +171,10 @@ export function synthesizeResponsePolicy(c: Classification): ResponsePolicy {
   if ((c.tool_plan?.recommended_tools?.length ?? 0) > 0) {
     directives.push('follow_tool_plan');
   }
-  return { directives: [...new Set(directives)] };
+  return {
+    directives: [...new Set(directives)],
+    language_standard: synthesizeLanguageStandard(c),
+  };
 }
 
 /** Synthesize reminders from the recommended tools. */
