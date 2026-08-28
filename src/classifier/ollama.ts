@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { loadConfig } from '../config/index';
 import Mustache from 'mustache';
 import {
+  CLASSIFICATION_JSON_SCHEMA,
   Classification,
   ClassificationValidationError,
   LANGUAGE_STANDARD_DESCRIPTIONS,
@@ -21,6 +22,13 @@ export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000;
 /** How long the model is kept loaded between calls (Ollama keep_alive). */
 export const DEFAULT_KEEP_ALIVE = '30m';
 
+/** Modelfile-derived classifier model (built via `ollama create`). */
+export const DERIVED_CLASSIFIER_MODEL = 'fast-classifier';
+/** Max tokens to generate for a classification decision. */
+export const DEFAULT_NUM_PREDICT = 400;
+/** Context window sized to the actual prompt+schema length. */
+export const DEFAULT_NUM_CTX = 2048;
+
 /** Raised when Ollama is unreachable or returns a non-OK/invalid response. */
 export class ClassifierUnavailableError extends Error {
   constructor(message: string) {
@@ -35,6 +43,8 @@ export interface ClassifierOptions {
   /** Overrides `OLLAMA_HOST` / the default localhost host. */
   host?: string;
   timeoutMs?: number;
+  /** Latency/metrics log sink. Defaults to console.log. */
+  log?: (line: string) => void;
 }
 
 const CLASSIFICATION_SHAPE = `{
@@ -59,7 +69,6 @@ const DEFAULT_CLASSIFIER_PROMPT_TEMPLATE = `You are a task classifier for an AI 
 Classify the user request ONLY.
 Rules:
 - classify only; do not solve, answer, or explain the request
-- return JSON only, with no commentary and no markdown fences
 - do not invent information; base the classification solely on the request
 - when uncertain, prefer the conservative option (higher context_need, normal precision)
 
@@ -236,6 +245,7 @@ export class OllamaClassifier {
   readonly host: string;
   readonly timeoutMs: number;
   readonly keepAlive: string;
+  readonly log: (line: string) => void;
 
   constructor(options: ClassifierOptions = {}) {
     this.model = resolveModel(options.model);
@@ -245,6 +255,7 @@ export class OllamaClassifier {
         : (process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST);
     this.timeoutMs = options.timeoutMs ?? resolveTimeoutMs();
     this.keepAlive = resolveKeepAlive();
+    this.log = options.log ?? defaultLog;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -252,7 +263,13 @@ export class OllamaClassifier {
   }
 
   async classify(taskText: string): Promise<Classification> {
-    return parseClassification(await this.chatJson(buildPrompt(taskText)));
+    // The Modelfile-derived classifier carries the static instructions in its
+    // SYSTEM block, so the request prompt contains ONLY the user's text. The
+    // base model still needs the full prompt template with the field defs.
+    const prompt = isDerivedClassifierModel(this.model)
+      ? taskText
+      : buildPrompt(taskText);
+    return parseClassification(await this.chatJson(prompt, CLASSIFICATION_JSON_SCHEMA));
   }
 
   /** Decide whether the context gathered so far is sufficient (assess_context). */
@@ -266,7 +283,10 @@ export class OllamaClassifier {
   }
 
   /** One chat round-trip returning the model's JSON text content. */
-  private async chatJson(prompt: string): Promise<string> {
+  private async chatJson(
+    prompt: string,
+    format: unknown = 'json',
+  ): Promise<string> {
     let response: Response;
     try {
       response = await fetch(`${this.host}/api/chat`, {
@@ -276,14 +296,21 @@ export class OllamaClassifier {
           model: this.model,
           messages: [{ role: 'user', content: prompt }],
           stream: false,
-          format: 'json',
+          // Structured output for classify: pass the JSON Schema so the model
+          // emits valid JSON matching the classification shape. Assess keeps
+          // plain JSON mode (no schema).
+          format,
           // Disable qwen3 reasoning/thinking — we only need a short structured
           // decision, so thinking wastes tokens and latency.
           think: false,
           // Keep the model warm between calls so a cold reload (which can take
           // ~10s on CPU) doesn't blow the timeout.
           keep_alive: this.keepAlive,
-          options: { temperature: 0 },
+          options: {
+            temperature: 0,
+            num_predict: DEFAULT_NUM_PREDICT,
+            num_ctx: DEFAULT_NUM_CTX,
+          },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
@@ -312,6 +339,20 @@ export class OllamaClassifier {
       throw new ClassifierUnavailableError('Ollama returned no message content');
     }
 
+    // Latency instrumentation (nanoseconds) — lets us tell whether load,
+    // prefill (prompt_eval) or generation (eval) is the bottleneck.
+    const d = data as typeof data & {
+      total_duration?: number;
+      load_duration?: number;
+      prompt_eval_duration?: number;
+      eval_duration?: number;
+    };
+    this.log(
+      `[cadet-token-saver] classifier durations (ns) model=${this.model} ` +
+        `total=${d.total_duration ?? 'n/a'} load=${d.load_duration ?? 'n/a'} ` +
+        `prompt_eval=${d.prompt_eval_duration ?? 'n/a'} eval=${d.eval_duration ?? 'n/a'}`,
+    );
+
     return data.message.content;
   }
 }
@@ -321,7 +362,22 @@ function resolveModel(override?: string): string {
   if (override !== undefined && override.length > 0) {
     return override;
   }
-  return loadConfig().classifier.model;
+  const classifier = loadConfig().classifier;
+  // Prefer the Modelfile-derived model at runtime; fall back to the pulled
+  // base model when no derived model is configured.
+  return classifier.derived_model && classifier.derived_model.length > 0
+    ? classifier.derived_model
+    : classifier.model;
+}
+
+/** True when the model is a Modelfile-derived classifier (static SYSTEM block). */
+export function isDerivedClassifierModel(model: string): boolean {
+  return model === DERIVED_CLASSIFIER_MODEL || model.endsWith('-classifier');
+}
+
+/** Default log sink for the classifier's latency instrumentation. */
+function defaultLog(line: string): void {
+  console.log(line);
 }
 
 /** Resolve the timeout — explicit override, else config, else the default. */

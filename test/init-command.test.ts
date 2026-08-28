@@ -8,11 +8,13 @@ import { MetricsStore } from '../src/metrics';
 import { runInit } from '../src/cli/commands/init';
 
 const {
+  createFastClassifierMock,
   downloadAndExtractZipMock,
   isModelAvailableMock,
   pullOllamaModelMock,
   startOllamaDockerMock,
 } = vi.hoisted(() => ({
+  createFastClassifierMock: vi.fn(),
   downloadAndExtractZipMock: vi.fn(),
   isModelAvailableMock: vi.fn(),
   pullOllamaModelMock: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock('../src/core/installers', () => ({
   OLLAMA_MODEL: 'qwen3:1.7b',
   RTK_WINDOWS_URL: 'https://example.com/rtk.zip',
   LEANCTX_WINDOWS_URL: 'https://example.com/leanctx.zip',
+  createFastClassifier: createFastClassifierMock,
   downloadAndExtractZip: downloadAndExtractZipMock,
   pullOllamaModel: pullOllamaModelMock,
   startOllamaDocker: startOllamaDockerMock,
@@ -54,6 +57,7 @@ let dir: string;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cts-init-'));
+  createFastClassifierMock.mockReset();
   downloadAndExtractZipMock.mockReset();
   isModelAvailableMock.mockReset();
   isModelAvailableMock.mockResolvedValue(false); // model missing by default

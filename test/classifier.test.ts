@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
+  CLASSIFICATION_JSON_SCHEMA,
   ClassificationValidationError,
   ClassifierUnavailableError,
   OllamaClassifier,
@@ -334,8 +335,6 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('You are a fast, lightweight routing classifier');
     expect(prompt).toContain('Do NOT solve');
     expect(prompt).toContain('DO NOT invent repository facts');
-    expect(prompt).toContain('Output ONLY valid JSON');
-    expect(prompt).toContain('No markdown fences');
     expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
   });
 
@@ -425,16 +424,21 @@ describe('classify', () => {
     });
     const body = requestBodyOf(fetchMock);
     expect(body.model).toBe('custom-model');
-    expect(body.format).toBe('json');
+    expect(body.format).toEqual(CLASSIFICATION_JSON_SCHEMA);
     expect(body.stream).toBe(false);
     expect(body.think).toBe(false);
     expect(body.keep_alive).toBe('30m');
+    expect((body.options as { temperature?: number; num_predict?: number; num_ctx?: number }).temperature).toBe(0);
   });
 
   it('reads the model from config when not provided', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'to-class-'));
     const cfgFile = join(dir, 'config.yaml');
-    writeFileSync(cfgFile, 'classifier:\n  model: config-model\n', 'utf8');
+    writeFileSync(
+      cfgFile,
+      'classifier:\n  model: config-model\n  derived_model: derived-model\n',
+      'utf8',
+    );
     process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
@@ -442,7 +446,7 @@ describe('classify', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
       await classify('hello', { host: 'http://localhost:11434' });
-      expect(requestBodyOf(fetchMock).model).toBe('config-model');
+      expect(requestBodyOf(fetchMock).model).toBe('derived-model');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -453,7 +457,7 @@ describe('classify', () => {
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(
       cfgFile,
-      'classifier:\n  model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
+      'classifier:\n  model: config-model\n  derived_model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
       'utf8',
     );
     process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;

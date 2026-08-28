@@ -18,6 +18,10 @@ export class ConfigError extends Error {
 const classifierSchema = z.object({
   provider: z.enum(['ollama']),
   model: z.string().min(1, 'model must be a non-empty string'),
+  derived_model: z
+    .string()
+    .min(1, 'derived_model must be a non-empty string')
+    .optional(),
   timeout_ms: z
     .number()
     .int('timeout_ms must be an integer')
@@ -82,6 +86,9 @@ export const defaultConfig: Config = {
   classifier: {
     provider: 'ollama',
     model: 'qwen3:1.7b',
+    // Modelfile-derived classifier used at runtime (built via `ollama create
+    // fast-classifier -f Modelfile`). Falls back to `model` if not set.
+    derived_model: 'fast-classifier',
     timeout_ms: 60_000,
     keep_alive: '30m',
   },

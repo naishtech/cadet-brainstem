@@ -36,6 +36,7 @@ describe('default config', () => {
       classifier: {
         provider: 'ollama',
         model: 'qwen3:1.7b',
+        derived_model: 'fast-classifier',
         timeout_ms: 60000,
         keep_alive: '30m',
       },
@@ -68,6 +69,7 @@ describe('loadConfig', () => {
     expect(cfg.classifier).toEqual({
       provider: 'ollama',
       model: 'llama3',
+      derived_model: 'fast-classifier',
       timeout_ms: 60000,
       keep_alive: '30m',
     });
@@ -99,6 +101,7 @@ describe('saveConfig + round-trip', () => {
       classifier: {
         provider: 'ollama' as const,
         model: 'custom-model',
+        derived_model: 'custom-model',
         timeout_ms: 45000,
         keep_alive: '15m',
       },

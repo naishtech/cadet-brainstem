@@ -35,6 +35,21 @@ All notable changes to this project are documented in this file.
   `recommended_tools` (each entry has `name`, `intent`, `priority`). A legacy
   flat `use` array is still accepted and folded into `recommended_tools` for
   backward compatibility. Memory-policy detection now reads `recommended_tools`.
+- **Classifier latency optimization (structured output + Modelfile)** — the
+  local classifier now sends a JSON Schema via Ollama's `format` parameter
+  (`CLASSIFICATION_JSON_SCHEMA`) so the model emits valid structured JSON
+  directly (verified: Ollama v0.32.15 accepts `additionalProperties: false`).
+  Static routing instructions were moved into a Modelfile-derived model
+  (`fast-classifier`, built with `ollama create fast-classifier -f Modelfile`),
+  so each request sends only the user's text. Inference options are set per call
+  (`temperature 0`, `num_predict 400`, `num_ctx 2048`, `keep_alive 30m`) and
+  Ollama's `total_duration`/`load_duration`/`prompt_eval_duration`/
+  `eval_duration` (ns) are logged so load/prefill/generation can be triaged.
+- **Suppress the `node:sqlite` ExperimentalWarning** — the npm binary is now a
+  CJS launcher (`bin/cadet-token-saver.cjs`) that filters the "SQLite is an
+  experimental feature" warning before dynamically importing the ESM bundle
+  (the warning fires during bundle instantiation, so an in-bundle patch is too
+  late). Other warnings are untouched.
 
 ### Added
 
@@ -78,6 +93,13 @@ All notable changes to this project are documented in this file.
   - `memory_hints` — advisory `{ use: true | false | "if_necessary" }`, never instructs to skip memory.
 - Exported `RECOMMENDED_TOOL_INTENTS` and the `EvidencePlan`/`EvidenceQuery`/`RecommendedTool` types from the classifier.
 - Prompt (`classifier-prompt.mustache` + default template) now teaches `guidance`, `evidence_plan`, and `recommended_tools`, with updated JSON shape and examples.
+- **`classifier.derived_model` config + `CLASSIFICATION_JSON_SCHEMA`** — a new
+  optional `derived_model` (default `fast-classifier`) selects the Modelfile
+  classifier at runtime, falling back to the base `model`; `doctor` checks it
+  with a build hint and `init` offers to build it. `createFastClassifier()`
+  writes a temp Modelfile and runs `ollama create`. A committed `Modelfile` and
+  `src/core/modelfile.ts` keep the static SYSTEM instructions in sync with the
+  schema.
 
 ### Tests
 

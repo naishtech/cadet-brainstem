@@ -130,15 +130,15 @@ describe('runDoctor', () => {
     expect(out).toContain('lean-ctx-x86_64-pc-windows-msvc.zip');
   });
 
-  it('warns with an ollama pull hint when the model is not pulled', async () => {
+  it('warns with a build hint when the derived model is not present', async () => {
     const { configPath, metricsPath } = createHealthyState();
     const { exit, lines } = await run({ modelOk: false, configPath, metricsPath });
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
     expect(isModelAvailableMock).toHaveBeenCalled();
-    expect(out).toContain('"qwen3:1.7b" not pulled');
-    expect(out).toContain('ollama pull qwen3:1.7b');
+    expect(out).toContain('"fast-classifier" not pulled');
+    expect(out).toContain('ollama create fast-classifier -f Modelfile');
   });
 
   it('exits 1 when Node.js is unavailable (critical)', async () => {

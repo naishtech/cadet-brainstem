@@ -1,16 +1,22 @@
 export {
   DEFAULT_CLASSIFIER_TIMEOUT_MS,
+  DEFAULT_KEEP_ALIVE,
+  DEFAULT_NUM_CTX,
+  DEFAULT_NUM_PREDICT,
   DEFAULT_OLLAMA_HOST,
+  DERIVED_CLASSIFIER_MODEL,
   ClassifierUnavailableError,
   OllamaClassifier,
   assess,
   buildAssessPrompt,
   buildPrompt,
   classify,
+  isDerivedClassifierModel,
   isModelAvailable,
   isOllamaAvailable,
 } from './ollama';
 export {
+  CLASSIFICATION_JSON_SCHEMA,
   ClassificationValidationError,
   DEFAULT_RESPONSE_POLICY_KEYS,
   DEFAULT_TOOL_PLAN,

@@ -14,10 +14,12 @@ import { INIT_BANNER } from '../banner';
 import {
   LEANCTX_WINDOWS_URL,
   RTK_WINDOWS_URL,
+  createFastClassifier,
   downloadAndExtractZip,
   pullOllamaModel,
   startOllamaDocker,
 } from '../../core/installers';
+import { FAST_CLASSIFIER_MODEL } from '../../core/modelfile';
 import { getDefaultMetricsPath, MetricsStore } from '../../metrics';
 import type { CliCommand } from '../types';
 
@@ -105,6 +107,29 @@ async function offerInstallations(
         log(stdout || stderr);
       } catch (err) {
         log(`  failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  // Build the Modelfile-derived fast classifier once the base is present.
+  // Runtime calls use this derived model (config `derived_model`), whose static
+  // instructions live in the SYSTEM block — so each request sends only the
+  // user's text. Requires `ollama create`, only offered when Ollama is up.
+  if (report.ollama.available) {
+    const derivedOk = await isModelAvailable(FAST_CLASSIFIER_MODEL, host);
+    if (derivedOk) {
+      log(`Fast classifier ${FAST_CLASSIFIER_MODEL} already present.`);
+    } else if (
+      await ask(
+        `Build the fast classifier (${FAST_CLASSIFIER_MODEL}) from the Modelfile via Ollama?`,
+      )
+    ) {
+      try {
+        const { stdout, stderr } = await createFastClassifier();
+        log(stdout || stderr);
+      } catch (err) {
+        log(`  failed: ${(err as Error).message}`);
+        log('  You can build it later with: ollama create fast-classifier -f Modelfile');
       }
     }
   }

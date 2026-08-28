@@ -1,7 +1,12 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import {
+  FAST_CLASSIFIER_MODEL,
+  buildFastClassifierModelfile,
+} from './modelfile';
 
 const execFile = promisify(execFileCb);
 
@@ -32,6 +37,31 @@ export async function pullOllamaModel(
   model = OLLAMA_MODEL,
 ): Promise<CommandResult> {
   return run('ollama', ['pull', model]);
+}
+
+/**
+ * Build the Modelfile-derived fast classifier: `ollama create
+ * fast-classifier -f <Modelfile>`. Requires the base model to already be
+ * pulled. Writes the Modelfile to a temp file so it does not pollute the cwd.
+ */
+export async function createFastClassifier(
+  base = OLLAMA_MODEL,
+): Promise<CommandResult> {
+  const modelfilePath = join(
+    tmpdir(),
+    `fast-classifier-${Date.now()}.Modelfile`,
+  );
+  writeFileSync(modelfilePath, buildFastClassifierModelfile(base), 'utf8');
+  try {
+    return await run('ollama', [
+      'create',
+      FAST_CLASSIFIER_MODEL,
+      '-f',
+      modelfilePath,
+    ]);
+  } finally {
+    rmSync(modelfilePath, { force: true });
+  }
 }
 
 /** Consent-gated: start the documented Ollama Docker container (design doc §1). */
