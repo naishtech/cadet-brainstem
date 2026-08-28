@@ -22,6 +22,7 @@ const classifierSchema = z.object({
     .string()
     .min(1, 'derived_model must be a non-empty string')
     .optional(),
+  auto_build: z.boolean().optional(),
   timeout_ms: z
     .number()
     .int('timeout_ms must be an integer')
@@ -89,6 +90,9 @@ export const defaultConfig: Config = {
     // Modelfile-derived classifier used at runtime (built via `ollama create
     // fast-classifier -f Modelfile`). Falls back to `model` if not set.
     derived_model: 'fast-classifier',
+    // Build the derived model automatically (via HTTP) when missing, e.g. on
+    // SessionStart. Set false to require a manual `ollama create`.
+    auto_build: true,
     timeout_ms: 60_000,
     keep_alive: '30m',
   },

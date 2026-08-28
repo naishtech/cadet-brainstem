@@ -29,6 +29,8 @@ export interface OptimisationEvent {
   request_id?: string;
   /** Tool names the classifier recommended (adoption telemetry, classify events). */
   recommended_tools?: string[];
+  /** Origin of the recorded call: 'hook' (UserPromptSubmit/SubagentStart hook) or 'mcp' (classify tool). */
+  origin?: string;
 }
 
 export interface Totals {
@@ -104,7 +106,8 @@ CREATE TABLE IF NOT EXISTS optimisation_events (
   symbols_found INTEGER,
   files_found INTEGER,
   request_id TEXT,
-  recommended_tools TEXT
+  recommended_tools TEXT,
+  origin TEXT
 );
 `;
 
@@ -160,6 +163,7 @@ export class MetricsStore {
       ['files_found', 'ALTER TABLE optimisation_events ADD COLUMN files_found INTEGER'],
       ['request_id', 'ALTER TABLE optimisation_events ADD COLUMN request_id TEXT'],
       ['recommended_tools', 'ALTER TABLE optimisation_events ADD COLUMN recommended_tools TEXT'],
+      ['origin', 'ALTER TABLE optimisation_events ADD COLUMN origin TEXT'],
     ];
     for (const [column, ddl] of additions) {
       if (!columns.has(column)) {
@@ -216,6 +220,9 @@ export class MetricsStore {
     }
     if (event.recommended_tools !== undefined) {
       extra.push(['recommended_tools', JSON.stringify(event.recommended_tools)]);
+    }
+    if (event.origin !== undefined) {
+      extra.push(['origin', event.origin]);
     }
     const columns = [...baseColumns, ...extra.map((entry) => entry[0])];
     const values = [...baseValues, ...extra.map((entry) => entry[1])];
@@ -388,6 +395,32 @@ export class MetricsStore {
           : Number(row.files_found),
       degraded: Number(row.degraded) === 1,
       timestamp: String(row.timestamp),
+    }));
+  }
+
+  /**
+   * Classify-event breakdown by origin (hook vs mcp), with degraded counts.
+   * Classify events are recorded from two paths: the UserPromptSubmit hook
+   * (operation `user_prompt`, tool `classify`) and the MCP `classify` tool
+   * (operation `classify`, tool `ollama`). This lets you see which mechanism is
+   * doing the classification and whether it is succeeding or falling back.
+   */
+  getClassifyCallsByOrigin(): Array<{ origin: string; calls: number; degraded: number }> {
+    const rows = this.db
+      .prepare(
+        `SELECT COALESCE(origin, 'unknown') AS origin,
+                SUM(CASE WHEN degraded IS NULL OR degraded = 0 THEN 1 ELSE 0 END) AS calls,
+                SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded
+         FROM optimisation_events
+         WHERE operation IN ('classify', 'user_prompt')
+         GROUP BY origin
+         ORDER BY origin`,
+      )
+      .all() as { origin: string; calls: number; degraded: number }[];
+    return rows.map((row) => ({
+      origin: String(row.origin),
+      calls: Number(row.calls),
+      degraded: Number(row.degraded),
     }));
   }
 

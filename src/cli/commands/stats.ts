@@ -120,6 +120,20 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     }
 
     log('');
+    log('Classify calls by origin:');
+    const classifyByOrigin = store.getClassifyCallsByOrigin();
+    if (classifyByOrigin.length === 0) {
+      log('  (none yet — classify is not being invoked via hook or MCP)');
+    } else {
+      for (const row of classifyByOrigin) {
+        const degradedNote = row.degraded > 0 ? ` · ${row.degraded} degraded` : '';
+        log(
+          `  ${row.origin.padEnd(8)} ${row.calls} call(s)${degradedNote}`,
+        );
+      }
+    }
+
+    log('');
     log('Recommended vs invoked (adoption):');
     const recommended = store.getRecommendedByTool();
     const recMap = new Map(recommended.map((r) => [r.tool, r.calls]));

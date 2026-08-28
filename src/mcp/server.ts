@@ -348,6 +348,7 @@ function recordClassifierCall(
     risk: outcome.classification.risk,
     tool: 'ollama',
     operation: 'classify',
+    origin: 'mcp',
     estimated_input_tokens: Math.round(Buffer.byteLength(taskText) / 4) + 50,
     estimated_output_tokens: 25,
     estimated_tokens_saved: 0,

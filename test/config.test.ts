@@ -37,6 +37,7 @@ describe('default config', () => {
         provider: 'ollama',
         model: 'qwen3:1.7b',
         derived_model: 'fast-classifier',
+        auto_build: true,
         timeout_ms: 60000,
         keep_alive: '30m',
       },
@@ -70,6 +71,7 @@ describe('loadConfig', () => {
       provider: 'ollama',
       model: 'llama3',
       derived_model: 'fast-classifier',
+      auto_build: true,
       timeout_ms: 60000,
       keep_alive: '30m',
     });
@@ -102,6 +104,7 @@ describe('saveConfig + round-trip', () => {
         provider: 'ollama' as const,
         model: 'custom-model',
         derived_model: 'custom-model',
+        auto_build: true,
         timeout_ms: 45000,
         keep_alive: '15m',
       },

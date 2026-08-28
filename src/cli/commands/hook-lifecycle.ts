@@ -8,7 +8,9 @@ import {
   resolveProjectRoot,
 } from '../../memory';
 import { DEFAULT_RECOMMENDED_TOOL } from './hooks';
-import { classifyWithFallback } from '../../classifier';
+import { classifyWithFallback, isModelAvailable } from '../../classifier';
+import { loadConfig } from '../../config';
+import { createFastClassifierHttp } from '../../core/installers';
 import type { CliCommand } from '../types';
 
 /**
@@ -58,6 +60,16 @@ export interface HookLifecycleDeps {
     };
     degraded: boolean;
   }>;
+  /**
+   * Enable/disable the automatic derived-classifier build on SessionStart.
+   * Defaults to config `classifier.auto_build` (true). Set false in tests to
+   * skip the build (and the config read).
+   */
+  autoBuild?: boolean;
+  /** Override the Ollama model-presence check (tests). Defaults to isModelAvailable. */
+  classifierAvailable?: (model: string, host?: string) => Promise<boolean>;
+  /** Override the HTTP classifier build (tests). Defaults to createFastClassifierHttp. */
+  buildClassifier?: (base: string, host?: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /** The output envelope VS Code Copilot Chat Hooks accept on stdout. */
@@ -119,6 +131,8 @@ export function recordMetrics(
     estimatedInputTokens: number;
     estimatedOutputTokens: number;
     estimatedTokensSaved: number;
+    /** Origin of the recorded call; defaults to 'hook' (all hook-lifecycle events). */
+    origin?: string;
   },
 ): void {
   try {
@@ -131,6 +145,7 @@ export function recordMetrics(
       risk: 'low',
       tool: event.tool,
       operation: event.operation,
+      origin: event.origin ?? 'hook',
       estimated_input_tokens: event.estimatedInputTokens,
       estimated_output_tokens: event.estimatedOutputTokens,
       estimated_tokens_saved: event.estimatedTokensSaved,
@@ -209,8 +224,42 @@ export function cleanupSessionState(
 }
 
 /**
+ * Auto-build the Modelfile-derived classifier on SessionStart if it is missing
+ * and the base model is present. Best-effort and guarded: never throws, never
+ * prompts, and skips when the derived model already exists, the base model is
+ * absent, or `classifier.auto_build` is false. Uses the HTTP `/api/create` path
+ * so it does not depend on the `ollama` CLI being on PATH.
+ */
+export async function autoBuildClassifier(
+  deps: HookLifecycleDeps = {},
+): Promise<void> {
+  try {
+    const enabled = deps.autoBuild ?? loadConfig().classifier.auto_build;
+    if (!enabled) {
+      return;
+    }
+    const cfg = loadConfig().classifier;
+    const derived = cfg.derived_model ?? cfg.model;
+    const base = cfg.model;
+    const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
+    const isAvailable = deps.classifierAvailable ?? isModelAvailable;
+    if (await isAvailable(derived, host)) {
+      return; // already present
+    }
+    if (!(await isAvailable(base, host))) {
+      return; // cannot build without the base model
+    }
+    const build = deps.buildClassifier ?? createFastClassifierHttp;
+    await build(base, host);
+  } catch {
+    // best-effort — never break the session-start hook
+  }
+}
+
+/**
  * SessionStart handler: prime the session by injecting a compact primer with
  * memory hints + the recommended tool, so the agent doesn't re-discover state.
+ * Also auto-builds the derived classifier if missing (best-effort, ~seconds).
  */
 export async function runHookSessionStart(
   deps: HookLifecycleDeps = {},
@@ -224,6 +273,8 @@ export async function runHookSessionStart(
   const sessionId = payload.session_id ?? payload.sessionId ?? 'unknown';
   const project = projectFor(payload, deps);
   const hints = searchMemory(deps, project, 'session context', 5);
+
+  await autoBuildClassifier(deps);
 
   let primer = `Session start. Recommended tool: ${recommendedTool}. `;
   primer += `Prefer it over raw grep/read for code-centric exploration.`;

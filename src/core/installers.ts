@@ -32,6 +32,50 @@ async function run(bin: string, args: readonly string[]): Promise<CommandResult>
   return execFile(bin, [...args], { timeout: 300_000 });
 }
 
+export interface CreateFastClassifierResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Build the Modelfile-derived fast classifier over HTTP (Ollama `/api/create`).
+ * Unlike {@link createFastClassifier}, this needs no `ollama` CLI on PATH — only
+ * a reachable Ollama server — so it works from hooks and non-CLI contexts. The
+ * leading `FROM` line is split into the top-level `from` field because Ollama
+ * rejects a `from` directive inside the modelfile body. Returns `{ok}` and never
+ * throws, so callers (e.g. the SessionStart hook) can treat it as best-effort.
+ */
+export async function createFastClassifierHttp(
+  base = OLLAMA_MODEL,
+  host = process.env.OLLAMA_HOST ?? 'http://localhost:11434',
+): Promise<CreateFastClassifierResult> {
+  const modelfile = buildFastClassifierModelfile(base);
+  const body = modelfile
+    .split('\n')
+    .filter((line) => !/^FROM\s+/i.test(line))
+    .join('\n');
+  try {
+    const response = await fetch(`${host}/api/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: FAST_CLASSIFIER_MODEL,
+        from: base,
+        modelfile: body,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      return { ok: false, error: `Ollama create failed (HTTP ${response.status})` };
+    }
+    // Consume the NDJSON status stream (e.g. {"status":"success"}).
+    await response.text();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 /** Consent-gated: `ollama pull <model>` — safe and idempotent. */
 export async function pullOllamaModel(
   model = OLLAMA_MODEL,
