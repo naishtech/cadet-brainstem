@@ -16,6 +16,7 @@ function makeClassification(task: string): Classification {
     // 'exhaustive' never narrows, so the task maps straight to its raw policy.
     context_need: 'exhaustive',
     precision: 'normal',
+    entities: [],
     tool_plan: {},
     response_policy: { directives: [] },
   };
@@ -97,6 +98,12 @@ describe('PolicyEngine', () => {
     expect(refineStrategy({ ...defaultPolicies.review }, 'exhaustive')).toEqual(
       defaultPolicies.review,
     );
+  });
+
+  it('gives documentation a context-appropriate (non-minimal) default', () => {
+    expect(defaultPolicies.documentation.context_need).toBe('targeted');
+    expect(defaultPolicies.documentation.code_search).toBe('semantic');
+    expect(defaultPolicies.documentation.compression).toBe('normal');
   });
 
   it('covers all 13 task types', () => {

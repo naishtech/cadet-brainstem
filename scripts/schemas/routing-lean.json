@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "enum": [
+        "question", "coding_new", "coding_fix", "debug", "refactor", "test",
+        "review", "architecture", "documentation", "investigation", "planning",
+        "search", "configuration"
+      ]
+    },
+    "complexity": { "type": "string", "enum": ["low", "medium", "high"] },
+    "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+    "context_need": { "type": "string", "enum": ["minimal", "targeted", "broad", "exhaustive"] },
+    "tool_plan": {
+      "type": "object",
+      "properties": {
+        "recommended_tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "intent": { "type": "string" },
+              "priority": { "type": "integer" }
+            },
+            "required": ["name", "intent", "priority"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence_plan": {
+      "type": "object",
+      "properties": {
+        "prioritized_queries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "query": { "type": "string" },
+              "sources": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["id", "query", "sources"],
+            "additionalProperties": false
+          }
+        },
+        "scope": { "type": "string" }
+      },
+      "required": ["prioritized_queries"],
+      "additionalProperties": false
+    },
+    "response_policy": {
+      "type": "object",
+      "properties": {
+        "directives": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["directives"],
+      "additionalProperties": false
+    },
+    "confidence": { "type": "number" },
+    "needs_more_context": { "type": "boolean" }
+  },
+  "required": [
+    "task", "complexity", "risk", "context_need",
+    "tool_plan", "evidence_plan", "response_policy",
+    "confidence", "needs_more_context"
+  ],
+  "additionalProperties": false
+}

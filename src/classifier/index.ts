@@ -48,6 +48,13 @@ export {
   conservativeDefaultAssessment,
   conservativeDefaultClassification,
 } from './degradation';
+export {
+  synthesizeEvidencePlan,
+  synthesizePlans,
+  synthesizeReminders,
+  synthesizeResponsePolicy,
+  synthesizeToolPlan,
+} from './synthesize';
 export type { ClassifierOptions } from './ollama';
 export type {
   ClassificationOutcome,

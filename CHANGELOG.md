@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.22] - 2026-08-28
+
+### Changed
+
+- **Deterministic tool/evidence synthesis (classifier architecture)** — the
+  local classifier no longer asks the LLM to reason about `tool_plan` /
+  `evidence_plan`. The model now produces only the lean core classification
+  plus `entities` (simple noun/keyword extraction); `tool_plan`, `evidence_plan`,
+  `response_policy`, and `reminders` are synthesized deterministically in code
+  from a curated keyword → real-tool map (`src/classifier/synthesize.ts`).
+  Synthesis is ~1ms and yields specific plans (real tool names, real entities)
+  instead of the slow, generic model output observed in testing.
+- **Lean classification schema** — `CLASSIFICATION_JSON_SCHEMA` reduced to
+  `task/complexity/risk/context_need/entities/confidence/needs_more_context`.
+  Modelfile SYSTEM and prompt templates updated to teach classification +
+  entity extraction only (no tool/evidence reasoning).
+- **Robust classifier auto-build** — the SessionStart auto-build now uses the
+  `ollama create` CLI (with a `docker exec` fallback) and verifies the SYSTEM
+  block was actually baked, instead of the HTTP `/api/create` path that silently
+  dropped it (which produced a SYSTEM-less, broken classifier).
+
 ## [Unreleased]
 
 ### Changed

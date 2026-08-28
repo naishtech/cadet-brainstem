@@ -8,9 +8,9 @@ import {
   resolveProjectRoot,
 } from '../../memory';
 import { DEFAULT_RECOMMENDED_TOOL } from './hooks';
-import { classifyWithFallback, isModelAvailable } from '../../classifier';
+import { classifyWithFallback, isModelAvailable, synthesizePlans } from '../../classifier';
 import { loadConfig } from '../../config';
-import { createFastClassifierHttp } from '../../core/installers';
+import { createFastClassifierCli } from '../../core/installers';
 import type { CliCommand } from '../types';
 
 /**
@@ -68,7 +68,7 @@ export interface HookLifecycleDeps {
   autoBuild?: boolean;
   /** Override the Ollama model-presence check (tests). Defaults to isModelAvailable. */
   classifierAvailable?: (model: string, host?: string) => Promise<boolean>;
-  /** Override the HTTP classifier build (tests). Defaults to createFastClassifierHttp. */
+  /** Override the classifier build (tests). Defaults to createFastClassifierCli. */
   buildClassifier?: (base: string, host?: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -227,8 +227,9 @@ export function cleanupSessionState(
  * Auto-build the Modelfile-derived classifier on SessionStart if it is missing
  * and the base model is present. Best-effort and guarded: never throws, never
  * prompts, and skips when the derived model already exists, the base model is
- * absent, or `classifier.auto_build` is false. Uses the HTTP `/api/create` path
- * so it does not depend on the `ollama` CLI being on PATH.
+ * absent, or `classifier.auto_build` is false. Builds via `createFastClassifierCli`
+ * (the `ollama create` CLI / docker), which bakes the SYSTEM block and verifies
+ * it — never the broken HTTP `/api/create` path that silently drops SYSTEM.
  */
 export async function autoBuildClassifier(
   deps: HookLifecycleDeps = {},
@@ -249,7 +250,7 @@ export async function autoBuildClassifier(
     if (!(await isAvailable(base, host))) {
       return; // cannot build without the base model
     }
-    const build = deps.buildClassifier ?? createFastClassifierHttp;
+    const build = deps.buildClassifier ?? createFastClassifierCli;
     await build(base, host);
   } catch {
     // best-effort — never break the session-start hook
@@ -323,13 +324,18 @@ export async function runHookUserPrompt(
 
   const { classification, degraded } = await (deps.classify ??
     classifyWithFallback)(prompt);
-  const tools = (classification.tool_plan?.recommended_tools ?? [])
+  // The model only classifies + extracts entities; synthesize the steering
+  // fields (tool_plan / response_policy) in code for the injected context.
+  const synthesized = synthesizePlans(classification);
+  const tools = (synthesized.tool_plan?.recommended_tools ?? [])
     .map((t) => t.name)
     .join(', ');
-  const directives = (classification.response_policy?.directives ?? []).join(', ');
+  const directives = (synthesized.response_policy?.directives ?? []).join(', ');
+  const entities = (synthesized.entities ?? []).join(', ');
 
   let ctx = `Classified request. Follow the response_policy and tool plan.\n`;
-  ctx += `- task: ${classification.task ?? ''}\n`;
+  ctx += `- task: ${synthesized.task ?? ''}\n`;
+  ctx += `- entities: ${entities || '(none)'}\n`;
   ctx += `- recommended tools: ${tools || '(none)'}\n`;
   ctx += `- response_policy directives: ${directives || '(none)'}\n`;
   if (classification.guidance) {

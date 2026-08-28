@@ -7,7 +7,12 @@ import {
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
-import { classifyWithFallback, type ClassificationOutcome } from '../classifier';
+import {
+  classifyWithFallback,
+  synthesizePlans,
+  synthesizeToolPlan,
+  type ClassificationOutcome,
+} from '../classifier';
 import {
   RESPONSE_POLICY_DIRECTIVES,
   assessWithFallback,
@@ -337,7 +342,9 @@ function recordClassifierCall(
   requestId: string,
   latencyMs: number,
 ): void {
-  const recommended = (outcome.classification.tool_plan?.recommended_tools ?? []).map(
+  // tool_plan is now synthesized deterministically (the model only classifies
+  // + extracts entities), so derive the recommended-tool metric from synthesis.
+  const recommended = synthesizeToolPlan(outcome.classification).recommended_tools.map(
     (tool) => tool.name,
   );
   record({
@@ -413,22 +420,21 @@ export async function optimizeContextTool(
       ? 'no compression benefit from LeanCTX on this target'
       : undefined;
 
+  const classification = synthesizePlans(outcome.classification);
   return {
     // Token-saving steering fields first so the cloud LLM reads them first.
-    response_policy: compileResponsePolicy(outcome.classification.response_policy),
-    reminders: compileReminders(outcome.classification),
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
-    classification: coreClassification(outcome.classification),
+    response_policy: compileResponsePolicy(classification.response_policy),
+    reminders: compileReminders(classification),
+    tool_plan: compileToolPlan(classification.tool_plan),
+    classification: coreClassification(classification),
+    entities: classification.entities,
     strategy,
-    guidance: compileGuidance(outcome.classification, args.task),
-    ...(compileSubtasks(outcome.classification) !== undefined
-      ? { subtasks: compileSubtasks(outcome.classification) }
+    guidance: compileGuidance(classification, args.task),
+    ...(compileSubtasks(classification) !== undefined
+      ? { subtasks: compileSubtasks(classification) }
       : {}),
-    evidence_plan: compileEvidencePlan(
-      outcome.classification.evidence_plan,
-      outcome.classification.retrieval,
-    ),
-    retrieval: compileRetrieval(outcome.classification.retrieval),
+    evidence_plan: compileEvidencePlan(classification.evidence_plan, classification.retrieval),
+    retrieval: compileRetrieval(classification.retrieval),
     context: result.context,
     mode: result.mode,
     sourceSize: result.sourceSize,
@@ -436,10 +442,10 @@ export async function optimizeContextTool(
     estimatedTokensSaved: result.estimatedTokensSaved,
     degraded: result.degraded,
     request_id: requestId,
-    memory_hints: compileMemoryHints(outcome.classification),
+    memory_hints: compileMemoryHints(classification),
     memory_policy: memoryPolicyFor(
-      outcome.classification.memory?.use ??
-        toolPlanUses(outcome.classification.tool_plan, 'chat_memory_store'),
+      classification.memory?.use ??
+        toolPlanUses(classification.tool_plan, 'chat_memory_store'),
     ),
     ...(note !== undefined ? { note } : {}),
   };
@@ -503,28 +509,28 @@ export async function classifyTool(
   const classifyStart = performance.now();
   const outcome = await d.classify(args.task);
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
+  // The model only classifies + extracts entities; synthesize the token-saving
+  // fields (tool_plan / evidence_plan / response_policy / reminders) in code.
+  const classification = synthesizePlans(outcome.classification);
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
   return {
     // Token-saving steering fields first so the cloud LLM reads them first.
-    response_policy: compileResponsePolicy(outcome.classification.response_policy),
-    reminders: compileReminders(outcome.classification),
-    tool_plan: compileToolPlan(outcome.classification.tool_plan),
-    classification: coreClassification(outcome.classification),
+    response_policy: compileResponsePolicy(classification.response_policy),
+    reminders: compileReminders(classification),
+    tool_plan: compileToolPlan(classification.tool_plan),
+    classification: coreClassification(classification),
+    entities: classification.entities,
     strategy,
-    guidance: compileGuidance(outcome.classification, args.task),
-    ...(compileSubtasks(outcome.classification) !== undefined
-      ? { subtasks: compileSubtasks(outcome.classification) }
+    guidance: compileGuidance(classification, args.task),
+    ...(compileSubtasks(classification) !== undefined
+      ? { subtasks: compileSubtasks(classification) }
       : {}),
-    evidence_plan: compileEvidencePlan(
-      outcome.classification.evidence_plan,
-      outcome.classification.retrieval,
-    ),
-    retrieval: compileRetrieval(outcome.classification.retrieval),
-    memory_hints: compileMemoryHints(outcome.classification),
+    evidence_plan: compileEvidencePlan(classification.evidence_plan, classification.retrieval),
+    retrieval: compileRetrieval(classification.retrieval),
+    memory_hints: compileMemoryHints(classification),
     memory_policy: memoryPolicyFor(
-      outcome.classification.memory?.use ??
-        toolPlanUses(outcome.classification.tool_plan, 'chat_memory_store'),
+      classification.memory?.use ?? toolPlanUses(classification.tool_plan, 'chat_memory_store'),
     ),
     degraded: outcome.degraded,
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),

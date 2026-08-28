@@ -48,29 +48,18 @@ export interface ClassifierOptions {
 }
 
 const CLASSIFICATION_SHAPE = `{
-  // Token-saving fields first so the cloud LLM reads them first.
-  "response_policy": { "directives": ["<directive>", "<directive>"], "language_standard": "asd_ste100 | microsoft | google | diataxis | iso_24495 | ieee" },
-  "reminders": [{ "tool": "<tool-or-category>", "message": "<one short directive>" }],
-  "tool_plan": { "recommended_tools": [{ "name": "<tool>", "intent": "<why>", "priority": 1 }] },
-  "context_need": "minimal | targeted | broad | exhaustive",
   "task": "question | coding_new | coding_fix | debug | refactor | test | review | architecture | documentation | investigation | planning | search | configuration",
-  "subtasks": ["<task type>", "<task type>"],
-  "precision": "approximate | normal | exact",
-  "evidence_plan": { "prioritized_queries": [{ "id": "q1", "query": "<search term>", "sources": ["serena", "file_search"], "cost_estimate": "cheap" }], "scope": "<initial scope>" },
   "complexity": "low | medium | high",
   "risk": "low | medium | high",
-  "guidance": "<one advisory sentence>",
-  "memory": { "use": true },
+  "context_need": "minimal | targeted | broad | exhaustive",
+  "entities": ["<noun or keyword pulled directly from the request>", "<another>"],
   "confidence": 0.0,
   "needs_more_context": false
 }`;
 
 const DEFAULT_CLASSIFIER_PROMPT_TEMPLATE = `You are a task classifier for an AI coding agent context optimizer.
-Classify the user request ONLY.
-Rules:
-- classify only; do not solve, answer, or explain the request
-- do not invent information; base the classification solely on the request
-- when uncertain, prefer the conservative option (higher context_need, normal precision)
+Classify the user request ONLY — do NOT solve it, do NOT suggest tools or
+search queries (that is handled separately), do NOT invent information.
 
 Respond with exactly this JSON shape:
 {{{classificationShape}}}
@@ -80,51 +69,20 @@ Do not use "review" for design, planning, architecture, or exploratory requests.
 For requests that ask to design, plan, investigate, or explore an approach, prefer
 "investigation" or "planning" instead of "review".
 
+complexity: low=single file, obvious; medium=multiple files OR design decisions;
+high=cross-cutting, unclear requirements, many files.
+
+risk: low=reversible, no prod/data/security impact; medium=shared code/tests/
+user-facing; high=auth, payments, data migrations, prod config, or deletes data.
+
 context_need: size it to THIS request. A narrow question about one convention
 or area is "targeted"; reserve "broad"/"exhaustive" for tasks that genuinely
-need the whole repository.
+need the whole repository; "minimal" when no repo access is needed.
 
-tool_plan: recommend the context tools to use from: {{{tools}}}.
-Only recommend a tool when it clearly helps this request. List each tool in
-"recommended_tools" as { "name", "intent", "priority" } (1-based, cheapest-first).
-Shell/command output routing: when a task runs shell/CLI commands with noisy or
-large output, offer BOTH compress_command_output (RTK - fast, moderate) and
-leanctx_call with ctx_shell (LeanCTX - aggressive compression, slower, may
-drop detail) so the downstream agent can choose.
-
-response_policy: an object the CLOUD LLM must follow when composing its reply.
-Shape: { "directives": [<directive>, ...], "language_standard": "<one>|omit" }.
-"directives": pick the directives the agent should follow. Be aggressive: a
-simple single-action request (e.g. "merge the PR") needs only a minimal set
-(delta_only, no_filler, no_tool_narration). A research-heavy request should
-include preserve_evidence and progressive_disclosure. {{{directives}}}
-"language_standard": optional; pick ONE recommended documentation language
-standard for the request's expected output from:
-{{{languageStandards}}}
-Omit language_standard only if no standard clearly applies.
-
-guidance: ONE short advisory sentence describing how to approach the request
-(e.g. compare/search/summarize focus). Concise, actionable, non-authoritative.
-
-reminders: a short list of concrete, tool-anchored directives the cloud LLM
-should honor, e.g. { "tool": "rtk", "message": "Use RTK (compress_command_output) for git status/log/diff output." },
-{ "tool": "leanctx", "message": "Use LeanCTX to expand shell/command output before triage." },
-{ "tool": "find_relevant_symbols", "message": "Locate the relevant symbols first." }.
-Keep them generic and task-agnostic. (guidance may stay as a one-line summary.)
-
-subtasks: when the request spans MULTIPLE distinct task types (e.g. "check in +
-push + start next coding task"), list the additional task types beyond the
-primary "task" (deduplicated, valid task types only). Omit when single-task.
-
-evidence_plan: the prioritized, source-tagged retrieval plan. Shape:
-{ "prioritized_queries": [{ "id", "query", "sources", "cost_estimate", "fallback" }], "scope" }.
-List specific search terms (identifiers, file/dir names, config keys) cheapest-first.
-"sources" are hint labels (serena, rtk, file_search, leanctx) — the orchestrator
-executes each. Omit when no search is needed. "retrieval" {queries, scope} is a
-legacy alias still accepted.
-
-memory: OPTIONAL { "use": true | false | "if_necessary", "reason" }.
-"use" may never be "skip"; prefer recommending memory when it may help.
+entities: a list of the key NOUNS and keywords literally present (or clearly
+implied) in the request — e.g. "checkout page", "blueprint", "X300",
+"Docs/Components". Simple EXTRACTION, NOT reasoning: do not invent tools, do not
+reason about how to accomplish the task. 2-6 entries is typical.
 
 confidence: a number 0..1 for how sure you are of this classification.
 needs_more_context: true only when you cannot classify well without seeing
@@ -145,22 +103,9 @@ function loadClassifierPromptTemplate(): string {
 
 /** Build the classifier prompt. It instructs the model to classify ONLY. */
 export function buildPrompt(taskText: string, template?: string): string {
-  const tools = TOOL_NAMES.join(', ');
-  const directives = (
-    Object.keys(RESPONSE_POLICY_DIRECTIVES) as ResponsePolicyKey[]
-  )
-    .map((key) => `- ${key}: ${RESPONSE_POLICY_DIRECTIVES[key]}`)
-    .join('\n');
-  const languageStandards = (LANGUAGE_STANDARDS as readonly LanguageStandard[])
-    .map((key) => `- ${LANGUAGE_STANDARD_DESCRIPTIONS[key]}`)
-    .join('\n');
-
   const promptTemplate = template ?? loadClassifierPromptTemplate();
   return Mustache.render(promptTemplate, {
     classificationShape: CLASSIFICATION_SHAPE,
-    tools,
-    directives,
-    languageStandards,
     userRequest: taskText,
   });
 }

@@ -166,6 +166,11 @@ describe('runHookUserPrompt', () => {
         classify: async () => ({
           classification: {
             task: 'refactor',
+            context_need: 'targeted',
+            complexity: 'medium',
+            risk: 'medium',
+            precision: 'normal',
+            entities: ['refactor', 'inventory'],
             guidance: 'prefer semantic search',
             tool_plan: { recommended_tools: [{ name: 'find_relevant_symbols' }] },
             response_policy: { directives: ['delta_only'] },

@@ -140,11 +140,14 @@ export const defaultPolicies: Policies = {
     leanctx_mode: 'map',
   },
   documentation: {
-    context_need: 'minimal',
-    compression: 'aggressive',
-    code_search: 'none',
+    // Docs work usually needs repo + symbol access (and often project-specific
+    // MCP inspection), so 'minimal/aggressive/none' was far too low and forced
+    // an absurd 'strategy' for real documentation tasks.
+    context_need: 'targeted',
+    compression: 'normal',
+    code_search: 'semantic',
     terminal_output: 'normal',
-    leanctx_mode: 'reference',
+    leanctx_mode: 'map',
   },
   investigation: {
     context_need: 'broad',

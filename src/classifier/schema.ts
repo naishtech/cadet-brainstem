@@ -228,127 +228,44 @@ export interface ResponsePolicy {
 }
 
 /**
- * JSON Schema describing the classification output. Passed to Ollama via the
- * `format` parameter so the model emits valid structured JSON directly (no
- * prompt-text "return JSON only" hints needed). Mirrors `classificationSchema`
- * plus the sanitised nested structures; the downstream zod sanitizers remain
- * the source of truth for tolerance, this schema just keeps the model's
- * output structurally valid and enum-constrained.
+ * JSON Schema describing the lean LLM classification output. Passed to Ollama
+ * via the `format` parameter so the model emits valid structured JSON directly.
+ *
+ * The model only does classification + simple entity/keyword extraction. It
+ * does NOT reason about tools or retrieval here — `tool_plan` / `evidence_plan`
+ * (the fields that drive token savings) are synthesized deterministically in
+ * code from `entities` + `context_need` (see `src/classifier/synthesize.ts`).
+ * Keeping the model's job small makes it fast AND specific (entities are pulled
+ * verbatim from the request, not invented).
  *
  * Kept in sync with the Modelfile SYSTEM block. `additionalProperties: false`
- * enforces the shape; if a local Ollama build rejects the schema, remove the
- * `additionalProperties` lines (documented structured-output limitation).
+ * enforces the shape at every level.
  */
 export const CLASSIFICATION_JSON_SCHEMA = {
   type: 'object',
   properties: {
-    response_policy: {
-      type: 'object',
-      properties: {
-        directives: {
-          type: 'array',
-          items: { type: 'string', enum: [...RESPONSE_POLICY_KEYS] },
-        },
-        language_standard: {
-          type: 'string',
-          enum: [...LANGUAGE_STANDARDS],
-        },
-      },
-      required: ['directives'],
-      additionalProperties: false,
-    },
-    reminders: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          tool: { type: 'string' },
-          message: { type: 'string' },
-        },
-        required: ['tool', 'message'],
-        additionalProperties: false,
-      },
-    },
-    tool_plan: {
-      type: 'object',
-      properties: {
-        recommended_tools: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string', enum: [...TOOL_NAMES] },
-              intent: { type: 'string' },
-              priority: { type: 'integer' },
-              constraints: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['name', 'intent', 'priority'],
-            additionalProperties: false,
-          },
-        },
-        skip: {
-          type: 'array',
-          items: { type: 'string', enum: [...TOOL_NAMES] },
-        },
-      },
-      additionalProperties: false,
-    },
+    task: { type: 'string', enum: [...TASK_TYPES] },
+    complexity: { type: 'string', enum: ['low', 'medium', 'high'] },
+    risk: { type: 'string', enum: ['low', 'medium', 'high'] },
     context_need: {
       type: 'string',
       enum: ['minimal', 'targeted', 'broad', 'exhaustive'],
     },
-    task: { type: 'string', enum: [...TASK_TYPES] },
-    subtasks: {
-      type: 'array',
-      items: { type: 'string', enum: [...TASK_TYPES] },
-    },
-    precision: {
-      type: 'string',
-      enum: ['approximate', 'normal', 'exact'],
-    },
-    evidence_plan: {
-      type: 'object',
-      properties: {
-        prioritized_queries: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              query: { type: 'string' },
-              reason: { type: 'string' },
-              sources: { type: 'array', items: { type: 'string' } },
-              cost_estimate: { type: 'string' },
-              fallback: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['id', 'query', 'sources'],
-            additionalProperties: false,
-          },
-        },
-        scope: { type: 'string' },
-      },
-      required: ['prioritized_queries'],
-      additionalProperties: false,
-    },
-    complexity: { type: 'string', enum: ['low', 'medium', 'high'] },
-    risk: { type: 'string', enum: ['low', 'medium', 'high'] },
-    guidance: { type: 'string' },
-    memory: {
-      type: 'object',
-      properties: {
-        // `use` may be a boolean or the string "if_necessary"; an empty schema
-        // admits both without relying on `oneOf`/`anyOf` (not supported by
-        // Ollama structured outputs).
-        use: {},
-        reason: { type: 'string' },
-      },
-      required: ['use'],
-      additionalProperties: false,
-    },
+    // Simple noun/keyword extraction straight from the request (e.g. "blueprint",
+    // "X300", "Docs/Components"). NOT reasoning about which tools to use.
+    entities: { type: 'array', items: { type: 'string' } },
     confidence: { type: 'number' },
     needs_more_context: { type: 'boolean' },
   },
-  required: ['task', 'complexity', 'risk', 'context_need', 'precision'],
+  required: [
+    'task',
+    'complexity',
+    'risk',
+    'context_need',
+    'entities',
+    'confidence',
+    'needs_more_context',
+  ],
   additionalProperties: false,
 } as const;
 
@@ -364,8 +281,9 @@ export const classificationSchema = z.object({
   tool_plan: z.unknown().optional(),
   context_need: contextNeedSchema,
   task: taskTypeSchema,
+  entities: z.array(z.string()),
   subtasks: z.unknown().optional(),
-  precision: precisionSchema,
+  precision: precisionSchema.optional(),
   evidence_plan: z.unknown().optional(),
   retrieval: z.unknown().optional(),
   complexity: complexitySchema,
@@ -382,6 +300,8 @@ export interface Classification {
   risk: Risk;
   context_need: ContextNeed;
   precision: Precision;
+  /** Nouns/keywords pulled directly from the request (drives deterministic synthesis). */
+  entities: string[];
   tool_plan: ToolPlan;
   /** Response policy the cloud LLM should follow (directives + choices). */
   response_policy: ResponsePolicy;
@@ -520,7 +440,8 @@ function sanitizeResponsePolicy(raw: unknown): ResponsePolicy {
     const r = raw as { directives?: unknown; language_standard?: unknown };
     const keys = sanitizeStringList(r.directives, isResponsePolicyKey);
     if (keys.length > 0) {
-      result.directives = keys;
+      // Dedupe: the model sometimes repeats a directive (e.g. preserve_evidence x3).
+      result.directives = [...new Set(keys)];
     }
     const languageStandard = sanitizeLanguageStandard(r.language_standard);
     if (languageStandard !== undefined) {
@@ -531,7 +452,7 @@ function sanitizeResponsePolicy(raw: unknown): ResponsePolicy {
   // Legacy flat-array form — treat as the directive list.
   const keys = sanitizeStringList(raw, isResponsePolicyKey);
   if (keys.length > 0) {
-    result.directives = keys;
+    result.directives = [...new Set(keys)];
   }
   return result;
 }
@@ -794,7 +715,8 @@ export function parseClassification(raw: unknown): Classification {
     complexity: result.data.complexity,
     risk: result.data.risk,
     context_need: result.data.context_need,
-    precision: result.data.precision,
+    precision: result.data.precision ?? 'normal',
+    entities: result.data.entities,
     tool_plan: sanitizeToolPlan(result.data.tool_plan),
     response_policy: sanitizeResponsePolicy(result.data.response_policy),
     ...(confidence !== undefined ? { confidence } : {}),

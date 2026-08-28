@@ -19,6 +19,7 @@ const validClassification = {
   risk: 'medium',
   context_need: 'broad',
   precision: 'normal',
+  entities: ['checkout', 'payment'],
     tool_plan: {
     recommended_tools: [
       { name: 'find_relevant_symbols', intent: 'locate relevant symbols', priority: 1 },
@@ -71,6 +72,7 @@ describe('parseClassification', () => {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
+      entities: [],
     });
     expect(parsed.tool_plan).toEqual({});
     expect(parsed.response_policy).toEqual({
@@ -85,6 +87,7 @@ describe('parseClassification', () => {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
+      entities: [],
       tool_plan: {
         use: ['optimize_context', 'classify', 42, null],
       },
@@ -109,6 +112,24 @@ describe('parseClassification', () => {
       response_policy: ['compact', 'delta_only'],
     });
     expect(parsed.response_policy).toEqual({ directives: ['compact', 'delta_only'] });
+  });
+
+  it('dedupes repeated directives instead of preserving duplicates', () => {
+    const parsed = parseClassification({
+      ...validClassification,
+      response_policy: {
+        directives: [
+          'follow_tool_plan',
+          'preserve_evidence',
+          'preserve_evidence',
+          'preserve_evidence',
+        ],
+      },
+    });
+    expect(parsed.response_policy.directives).toEqual([
+      'follow_tool_plan',
+      'preserve_evidence',
+    ]);
   });
 
   it('captures confidence, needs_more_context, and retrieval when present', () => {
@@ -334,7 +355,7 @@ describe('buildPrompt', () => {
     const prompt = buildPrompt('fix the blueprint loader');
     expect(prompt).toContain('You are a fast, lightweight routing classifier');
     expect(prompt).toContain('Do NOT solve');
-    expect(prompt).toContain('DO NOT invent repository facts');
+    expect(prompt).toContain('do NOT invent repository facts');
     expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
   });
 
@@ -351,52 +372,31 @@ describe('buildPrompt', () => {
   });
 
   it('renders custom external templates through Mustache', () => {
-    const template = 'User request: {{{userRequest}}}\nTools: {{{tools}}}';
+    const template = 'User request: {{{userRequest}}}';
     const prompt = buildPrompt('Fix config loading', template);
     expect(prompt).toContain('User request: Fix config loading');
-    expect(prompt).toContain(
-      'Tools: optimize_context, find_relevant_symbols, compress_command_output, chat_memory_store, leanctx_call, leanctx_list_tools',
-    );
   });
 
-  it('recommends prioritizing MCP tools over raw grep/file search', () => {
-    const prompt = buildPrompt('Analyze a fresh trace with the toolchain.');
-    expect(prompt).toContain('Prefer MCP/semantic tools');
-    expect(prompt).toContain('Recommend the smallest set of tools sufficient for the task');
-    expect(prompt).toContain('follow_tool_plan');
+  it('teaches classification + entity extraction, NOT tool/evidence selection', () => {
+    const prompt = buildPrompt('document the blueprints and X300 code');
+    expect(prompt).toContain('entities');
+    expect(prompt).toContain('simple EXTRACTION, NOT reasoning');
+    expect(prompt).toContain('do NOT suggest tools');
+    // The model must NOT be asked to reason about tools or retrieval.
+    expect(prompt).not.toContain('recommended_tools');
+    expect(prompt).not.toContain('evidence_plan');
+    expect(prompt).not.toContain('tool_plan');
+    expect(prompt).not.toContain('response_policy');
   });
 
-  it('teaches the guidance, evidence_plan, and recommended_tools fields', () => {
-    const prompt = buildPrompt('Compare the overrides between A and B.');
-    expect(prompt).toContain('guidance');
-    expect(prompt).toContain('prioritized_queries');
-    expect(prompt).toContain('recommended_tools');
-    expect(prompt).toContain('cost_estimate');
-    expect(prompt).toContain('"sources"');
-  });
-
-  it('teaches offering both RTK and ctx_shell for shell-output compression', () => {
-    const prompt = buildPrompt('Check in, push, then start the next task.');
-    expect(prompt).toContain('compress_command_output');
-    expect(prompt).toContain('ctx_shell');
-    expect(prompt).toContain('aggressive compression');
-  });
-
-  it('teaches the recommended language-standard field', () => {
-    const prompt = buildPrompt('Write release notes for the auth change.');
-    expect(prompt).toContain('language_standard');
-    expect(prompt).toContain('ASD-STE100');
-    expect(prompt).toContain('Microsoft Style Guide');
-    expect(prompt).toContain('Diátaxis');
-    expect(prompt).toContain('ISO 24495');
-    expect(prompt).toContain('IEEE Style');
-  });
-
-  it('teaches reminders and subtasks for multi-task requests', () => {
-    const prompt = buildPrompt('Check in, push, then start the next task.');
-    expect(prompt).toContain('reminders');
-    expect(prompt).toContain('subtasks');
-    expect(prompt).toContain('tool-anchored');
+  it('defines the classification fields', () => {
+    const prompt = buildPrompt('Design a new workflow.');
+    expect(prompt).toContain('task (pick ONE)');
+    expect(prompt).toContain('complexity (pick ONE)');
+    expect(prompt).toContain('risk (pick ONE)');
+    expect(prompt).toContain('context_need (pick ONE)');
+    expect(prompt).toContain('confidence');
+    expect(prompt).toContain('needs_more_context');
   });
 });
 

@@ -41,6 +41,7 @@ describe('classifyTool memory auto-plan', () => {
           risk: 'low',
           context_need: 'targeted',
           precision: 'normal',
+          entities: ['loader'],
           tool_plan: {},
           response_policy: { directives: ['compact'] },
         },

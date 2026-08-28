@@ -1,6 +1,6 @@
 {
   "name": "cadet-token-saver",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Cadet Token Saver — an orchestration + measurement layer that reduces AI-agent context consumption.",
   "keywords": [
     "cli",

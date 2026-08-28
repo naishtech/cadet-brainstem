@@ -35,6 +35,7 @@ function makeClassification(): ClassificationOutcome {
       risk: 'medium',
       context_need: 'broad',
       precision: 'normal',
+      entities: ['loader', 'debug'],
       tool_plan: {
         recommended_tools: [
           { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
@@ -220,14 +221,14 @@ describe('optimize_context', () => {
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toEqual({
       directives: {
-        compact: RESPONSE_POLICY_DIRECTIVES.compact,
-        delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+        preserve_evidence: RESPONSE_POLICY_DIRECTIVES.preserve_evidence,
+        progressive_disclosure: RESPONSE_POLICY_DIRECTIVES.progressive_disclosure,
+        follow_tool_plan: RESPONSE_POLICY_DIRECTIVES.follow_tool_plan,
       },
-      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       recommended_tools: [
-        { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
+        { name: 'find_relevant_symbols', intent: 'locate the code/symbols involved in the issue', priority: 1 },
       ],
     });
     expect(result.guidance).toBe(
@@ -235,15 +236,18 @@ describe('optimize_context', () => {
     );
     expect(result.evidence_plan).toEqual({
       prioritized_queries: [
-        { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
+        { id: 'q1', query: 'loader', sources: ['file_search'] },
+        { id: 'q2', query: 'debug', sources: ['file_search'] },
       ],
-      scope: 'src/loader',
+      scope: 'debug: loader, debug',
     });
     expect(result.memory_hints).toEqual({
       use: 'if_necessary',
       reason: 'check prior loader notes',
     });
-    expect(result.reminders).toEqual([{ tool: 'rtk', message: 'Use RTK for git output' }]);
+    expect(result.reminders).toEqual([
+      { tool: 'find_relevant_symbols', message: 'locate the code/symbols involved in the issue; use find_relevant_symbols.' },
+    ]);
     expect(result.subtasks).toEqual(['coding_new']);
     expect(result.memory_policy).toBe(
       'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
@@ -335,14 +339,14 @@ describe('classify', () => {
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toEqual({
       directives: {
-        compact: RESPONSE_POLICY_DIRECTIVES.compact,
-        delta_only: RESPONSE_POLICY_DIRECTIVES.delta_only,
+        preserve_evidence: RESPONSE_POLICY_DIRECTIVES.preserve_evidence,
+        progressive_disclosure: RESPONSE_POLICY_DIRECTIVES.progressive_disclosure,
+        follow_tool_plan: RESPONSE_POLICY_DIRECTIVES.follow_tool_plan,
       },
-      language_standard: 'microsoft',
     });
     expect(result.tool_plan).toEqual({
       recommended_tools: [
-        { name: 'optimize_context', intent: 'extract debug context', priority: 1 },
+        { name: 'find_relevant_symbols', intent: 'locate the code/symbols involved in the issue', priority: 1 },
       ],
     });
     expect(result.guidance).toBe(
@@ -350,15 +354,18 @@ describe('classify', () => {
     );
     expect(result.evidence_plan).toEqual({
       prioritized_queries: [
-        { id: 'q1', query: 'loader', sources: ['serena'], cost_estimate: 'cheap' },
+        { id: 'q1', query: 'loader', sources: ['file_search'] },
+        { id: 'q2', query: 'debug', sources: ['file_search'] },
       ],
-      scope: 'src/loader',
+      scope: 'debug: loader, debug',
     });
     expect(result.memory_hints).toEqual({
       use: 'if_necessary',
       reason: 'check prior loader notes',
     });
-    expect(result.reminders).toEqual([{ tool: 'rtk', message: 'Use RTK for git output' }]);
+    expect(result.reminders).toEqual([
+      { tool: 'find_relevant_symbols', message: 'locate the code/symbols involved in the issue; use find_relevant_symbols.' },
+    ]);
     expect(result.subtasks).toEqual(['coding_new']);
     expect(result.memory_policy).toBe(
       'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.',
