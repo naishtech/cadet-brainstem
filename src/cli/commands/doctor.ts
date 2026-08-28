@@ -131,7 +131,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
         detail: missing
           ? 'not created — using defaults (run init)'
           : configPath,
-        hint: missing ? 'Run: cadet-token-saver init' : undefined,
+        hint: missing ? 'Run: cadet-brainstem init' : undefined,
       }),
     );
   } catch (err) {
@@ -142,7 +142,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
         ok: false,
         critical: true,
         detail: (err as Error).message,
-        hint: 'Fix the config file, or run: cadet-token-saver init',
+        hint: 'Fix the config file, or run: cadet-brainstem init',
       }),
     );
   }
@@ -240,13 +240,13 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
       ok: metricsOk,
       critical: metricsCritical,
       detail: metricsDetail,
-      hint: metricsOk ? undefined : 'Run: cadet-token-saver init',
+      hint: metricsOk ? undefined : 'Run: cadet-brainstem init',
     }),
   );
 
   // Report.
   log('');
-  log('Cadet Token Saver Doctor');
+  log('Cadet Brainstem Doctor');
   log('------------------------');
   for (const check of checks) {
     log(
@@ -264,7 +264,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
   log('');
   if (criticalFailures.length > 0) {
     log(
-      `✗ ${criticalFailures.length} critical check(s) failed — Cadet Token Saver cannot run properly (exit 1).`,
+      `✗ ${criticalFailures.length} critical check(s) failed — Cadet Brainstem cannot run properly (exit 1).`,
     );
     return 1;
   }
@@ -281,7 +281,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
 export const doctorCommand: CliCommand = {
   name: 'doctor',
   description: 'Check environment health',
-  usage: 'cadet-token-saver doctor',
+  usage: 'cadet-brainstem doctor',
   run(): Promise<number> {
     return runDoctor();
   },

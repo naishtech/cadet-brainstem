@@ -230,7 +230,7 @@ export async function runHookRemind(
   const writeOut = deps.writeOut ?? ((line: string) => process.stdout.write(line));
   const stateDir =
     options.stateDir ??
-    join(os.homedir(), '.local', 'state', 'cadet-token-saver', 'hooks');
+    join(os.homedir(), '.local', 'state', 'cadet-brainstem', 'hooks');
 
   const raw = (await readStdin()).trim();
   if (!raw) {
@@ -339,7 +339,7 @@ export function parseRemindArgs(args: readonly string[]): ParsedRemindArgs {
 export const hookRemindCommand: CliCommand = {
   name: 'hook-remind',
   description: 'PreToolUse hook handler that nudges toward the recommended tool',
-  usage: 'cadet-token-saver hook-remind [--tool <name>]',
+  usage: 'cadet-brainstem hook-remind [--tool <name>]',
   run(args: readonly string[]): Promise<number> {
     const { tool } = parseRemindArgs(args);
     return runHookRemind({ tool: tool ?? 'find_relevant_symbols' });

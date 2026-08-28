@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] - 2026-08-29
+
+### Changed
+
+- **Project renamed from Cadet Token Saver to Cadet Brainstem** — the npm
+  package, CLI binary (`cadet-brainstem`), config/data dirs
+  (`.cadet-brainstem`, `.cadet/brainstem/`), env vars (`CADET_BRAINSTEM_*`),
+  hook filename, MCP server key, and repo references now use the new name.
+
 ## [0.1.27] - 2026-08-29
 
 ### Fixed

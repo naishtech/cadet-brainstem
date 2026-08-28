@@ -72,7 +72,7 @@ export function resolveProjectRoot(cwd: string): string {
 
 /** Per-project memory db path (mirrors Serena's `.serena/` convention). */
 export function getProjectMemoryPath(projectRoot: string): string {
-  return join(projectRoot, '.cadet', 'token-saver', 'memory.db');
+  return join(projectRoot, '.cadet', 'brainstem', 'memory.db');
 }
 
 /** Resolve a project name or path to a project root (uses the config registry). */

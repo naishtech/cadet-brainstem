@@ -63,7 +63,7 @@ describe('command routing', () => {
     for (const name of ['dashboard', 'config']) {
       await expect(runCli([name])).resolves.toBe(0);
       expect(log).toHaveBeenCalledWith(
-        expect.stringContaining(`[cadet-token-saver] ${name}: not implemented yet`),
+        expect.stringContaining(`[cadet-brainstem] ${name}: not implemented yet`),
       );
       log.mockClear();
     }

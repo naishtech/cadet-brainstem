@@ -200,7 +200,7 @@ export function searchMemory(
 function stateDirFor(deps: HookLifecycleDeps): string {
   return (
     deps.stateDir ??
-    join(os.homedir(), '.local', 'state', 'cadet-token-saver', 'hooks')
+    join(os.homedir(), '.local', 'state', 'cadet-brainstem', 'hooks')
   );
 }
 

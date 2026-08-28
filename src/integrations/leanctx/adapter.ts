@@ -122,7 +122,7 @@ async function runLeanCtx(args: string[]): Promise<string> {
 
 /**
  * LeanCTX adapter (design doc §7). Treats LeanCTX as the context compiler:
- * Cadet Token Saver decides what context a task needs (mode from the policy);
+ * Cadet Brainstem decides what context a task needs (mode from the policy);
  * LeanCTX decides the representation. This adapter only passes mode/budget
  * through — it never reproduces LeanCTX's algorithms.
  */
@@ -200,9 +200,9 @@ export class LeanCtxAdapter implements ContextOptimizer {
       cwd,
       // Tag LeanCTX's persisted analytics (gain/cost/ledger/heatmap) as ours so
       // `ctx_gain agents` / `ctx_cost agent` attribute the usage to us.
-      env: { ...process.env, LEAN_CTX_AGENT_ID: 'cadet-token-saver' },
+      env: { ...process.env, LEAN_CTX_AGENT_ID: 'cadet-brainstem' },
     });
-    const client = new Client({ name: 'cadet-token-saver', version: '0.1.0' });
+    const client = new Client({ name: 'cadet-brainstem', version: '0.1.0' });
     await client.connect(transport);
     this.session = { client, transport, cwd };
     return this.session;
@@ -281,7 +281,7 @@ export class LeanCtxAdapter implements ContextOptimizer {
   async install(): Promise<void> {
     // Never auto-install — surface the documented command instead.
     console.log(
-      '[cadet-token-saver] leanctx not installed. See https://github.com/naishtech/cadet-token-saver/blob/main/docs/requirements.md — on Windows download ' +
+      '[cadet-brainstem] leanctx not installed. See https://github.com/naishtech/cadet-brainstem/blob/main/docs/requirements.md — on Windows download ' +
         'lean-ctx-x86_64-pc-windows-msvc.zip and add lean-ctx.exe to your PATH.',
     );
   }

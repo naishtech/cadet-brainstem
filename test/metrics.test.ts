@@ -37,12 +37,12 @@ function makeTempDir(): string {
 
 beforeEach(() => {
   // Guard against a leaked override from the environment (e.g. a prior
-  // `CADET_TOKEN_SAVER_METRICS=... cadet-token-saver init` in the same shell).
-  delete process.env.CADET_TOKEN_SAVER_METRICS;
+  // `CADET_BRAINSTEM_METRICS=... cadet-brainstem init` in the same shell).
+  delete process.env.CADET_BRAINSTEM_METRICS;
 });
 
 afterEach(() => {
-  delete process.env.CADET_TOKEN_SAVER_METRICS;
+  delete process.env.CADET_BRAINSTEM_METRICS;
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -50,11 +50,11 @@ afterEach(() => {
 
 describe('getDefaultMetricsPath', () => {
   it('returns a stable default path', () => {
-    expect(getDefaultMetricsPath()).toMatch(/\.cadet-token-saver[/\\]metrics\.db$/);
+    expect(getDefaultMetricsPath()).toMatch(/\.cadet-brainstem[/\\]metrics\.db$/);
   });
 
-  it('honours the CADET_TOKEN_SAVER_METRICS override', () => {
-    process.env.CADET_TOKEN_SAVER_METRICS = 'C:/custom/metrics.db';
+  it('honours the CADET_BRAINSTEM_METRICS override', () => {
+    process.env.CADET_BRAINSTEM_METRICS = 'C:/custom/metrics.db';
     expect(getDefaultMetricsPath()).toBe('C:/custom/metrics.db');
   });
 });

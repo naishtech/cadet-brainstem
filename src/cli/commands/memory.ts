@@ -58,7 +58,7 @@ export async function runMemoryStats(deps: MemoryDeps = {}): Promise<number> {
   const { memoryPath, projectLabel } = resolveTarget(deps);
 
   log('');
-  log('Cadet Token Saver Memory');
+  log('Cadet Brainstem Memory');
   log('------------------------');
   log(`Memory database: ${memoryPath}`);
   log(`Project: ${projectLabel}`);
@@ -102,7 +102,7 @@ export async function runMemoryClear(deps: MemoryDeps = {}): Promise<number> {
     store = new MemoryStore(memoryPath);
   } catch (err) {
     log(
-      `[cadet-token-saver] memory clear: could not open memory database at ${memoryPath}`,
+      `[cadet-brainstem] memory clear: could not open memory database at ${memoryPath}`,
     );
     log(`  ${(err as Error).message}`);
     return 1;
@@ -170,7 +170,7 @@ function parseMemoryArgs(args: readonly string[]): ParsedMemoryArgs | null {
 export const memoryCommand: CliCommand = {
   name: 'memory',
   description: 'Show/manage agent memories (clear to wipe them)',
-  usage: 'cadet-token-saver memory [clear] [--project <name>] [--global]',
+  usage: 'cadet-brainstem memory [clear] [--project <name>] [--global]',
   run(
     args: readonly string[],
     context: CliCommandContext,
@@ -178,7 +178,7 @@ export const memoryCommand: CliCommand = {
     const parsed = parseMemoryArgs(args);
     if (parsed === null) {
       console.error(
-        'Usage: cadet-token-saver memory [clear] [--project <name>] [--global]',
+        'Usage: cadet-brainstem memory [clear] [--project <name>] [--global]',
       );
       return 1;
     }

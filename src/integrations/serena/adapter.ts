@@ -169,7 +169,7 @@ export class SerenaAdapter implements ContextOptimizer {
       args: ['start-mcp-server'],
       cwd,
     });
-    const client = new Client({ name: 'cadet-token-saver', version: '0.1.0' });
+    const client = new Client({ name: 'cadet-brainstem', version: '0.1.0' });
     await client.connect(transport);
     await client.callTool({
       name: 'activate_project',
@@ -296,11 +296,11 @@ export class SerenaAdapter implements ContextOptimizer {
   async install(): Promise<void> {
     // Never auto-install — surface the documented command instead.
     console.log(
-      '[cadet-token-saver] serena not installed. Install per its own docs, then verify: serena --version.',
+      '[cadet-brainstem] serena not installed. Install per its own docs, then verify: serena --version.',
     );
   }
 
   async configure(): Promise<void> {
-    // Serena needs no Cadet Token Saver configuration.
+    // Serena needs no Cadet Brainstem configuration.
   }
 }

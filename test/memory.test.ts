@@ -19,11 +19,11 @@ function makeTempDir(): string {
 }
 
 beforeEach(() => {
-  delete process.env.CADET_TOKEN_SAVER_MEMORY;
+  delete process.env.CADET_BRAINSTEM_MEMORY;
 });
 
 afterEach(() => {
-  delete process.env.CADET_TOKEN_SAVER_MEMORY;
+  delete process.env.CADET_BRAINSTEM_MEMORY;
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -31,11 +31,11 @@ afterEach(() => {
 
 describe('getDefaultMemoryPath', () => {
   it('returns a stable default path', () => {
-    expect(getDefaultMemoryPath()).toMatch(/\.cadet-token-saver[/\\]memory\.db$/);
+    expect(getDefaultMemoryPath()).toMatch(/\.cadet-brainstem[/\\]memory\.db$/);
   });
 
-  it('honours the CADET_TOKEN_SAVER_MEMORY override', () => {
-    process.env.CADET_TOKEN_SAVER_MEMORY = 'C:/custom/memory.db';
+  it('honours the CADET_BRAINSTEM_MEMORY override', () => {
+    process.env.CADET_BRAINSTEM_MEMORY = 'C:/custom/memory.db';
     expect(getDefaultMemoryPath()).toBe('C:/custom/memory.db');
   });
 });
@@ -80,7 +80,7 @@ describe('resolveMemoryDbPath', () => {
   it('returns the per-project db for a project path', () => {
     const dir = makeTempDir();
     expect(resolveMemoryDbPath(process.cwd(), dir, undefined, undefined)).toBe(
-      join(dir, '.cadet', 'token-saver', 'memory.db'),
+      join(dir, '.cadet', 'brainstem', 'memory.db'),
     );
   });
 
@@ -88,7 +88,7 @@ describe('resolveMemoryDbPath', () => {
     const dir = makeTempDir();
     writeFileSync(join(dir, 'package.json'), '{"name":"x"}', 'utf8');
     expect(resolveMemoryDbPath(dir, undefined, undefined, undefined)).toBe(
-      join(dir, '.cadet', 'token-saver', 'memory.db'),
+      join(dir, '.cadet', 'brainstem', 'memory.db'),
     );
   });
 });
@@ -115,7 +115,7 @@ describe('MemoryStore (in-memory)', () => {
     const id = store.store({
       content: 'npm needs a shell on Windows',
       tags: ['windows', 'npm'],
-      project: 'cadet-token-saver',
+      project: 'cadet-brainstem',
     });
     expect(id).toBeTruthy();
 
@@ -123,7 +123,7 @@ describe('MemoryStore (in-memory)', () => {
     expect(stored).not.toBeNull();
     expect(stored!.content).toBe('npm needs a shell on Windows');
     expect(stored!.tags).toEqual(['windows', 'npm']);
-    expect(stored!.project).toBe('cadet-token-saver');
+    expect(stored!.project).toBe('cadet-brainstem');
     expect(stored!.hits).toBe(1);
     expect(stored!.lastAccessedAt).not.toBeNull();
 
@@ -229,10 +229,10 @@ describe('MemoryStore (file-backed)', () => {
     reopened.close();
   });
 
-  it('honours the CADET_TOKEN_SAVER_MEMORY override end to end', () => {
+  it('honours the CADET_BRAINSTEM_MEMORY override end to end', () => {
     const dir = makeTempDir();
     const dbPath = join(dir, 'memory.db');
-    process.env.CADET_TOKEN_SAVER_MEMORY = dbPath;
+    process.env.CADET_BRAINSTEM_MEMORY = dbPath;
     const store = new MemoryStore();
     store.store({ content: 'via-env' });
     store.close();
@@ -356,7 +356,7 @@ describe('runMemoryStats', () => {
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
-    expect(out).toContain('Cadet Token Saver Memory');
+    expect(out).toContain('Cadet Brainstem Memory');
     expect(out).toContain('Project: test-project');
     expect(out).toContain('Memories: 2');
     expect(out).toMatch(/Size:\s+\d+(\.\d+)? (B|KB|MB)/);

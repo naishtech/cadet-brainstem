@@ -288,7 +288,7 @@ export class OllamaClassifier {
       eval_duration?: number;
     };
     this.log(
-      `[cadet-token-saver] classifier durations (ns) model=${this.model} ` +
+      `[cadet-brainstem] classifier durations (ns) model=${this.model} ` +
         `total=${d.total_duration ?? 'n/a'} load=${d.load_duration ?? 'n/a'} ` +
         `prompt_eval=${d.prompt_eval_duration ?? 'n/a'} eval=${d.eval_duration ?? 'n/a'}`,
     );

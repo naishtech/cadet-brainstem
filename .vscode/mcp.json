@@ -1,8 +1,8 @@
 {
   "servers": {
-    "cadet-token-saver": {
+    "cadet-brainstem": {
       "type": "stdio",
-      "command": "cadet-token-saver",
+      "command": "cadet-brainstem",
       "args": ["mcp"],
       "autoApprove": [
         "classify",

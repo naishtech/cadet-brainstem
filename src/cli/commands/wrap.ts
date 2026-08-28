@@ -102,7 +102,7 @@ function recordWrapEvent(metricsPath: string, result: RtkResult): void {
   } catch (err) {
     // Metrics is best-effort — a failure never breaks the wrap.
     console.error(
-      `[cadet-token-saver] metrics record skipped: ${(err as Error).message}`,
+      `[cadet-brainstem] metrics record skipped: ${(err as Error).message}`,
     );
   }
 }
@@ -130,7 +130,7 @@ export async function runWrap(
   recordWrapEvent(metricsPath, result);
   if (result.estimatedTokensSaved === 0 && !result.degraded) {
     console.error(
-      '[cadet-token-saver] nothing to compress — output is small or already compact (0 tokens saved).',
+      '[cadet-brainstem] nothing to compress — output is small or already compact (0 tokens saved).',
     );
   }
   log(options.raw ? result.rawOutput : result.optimisedOutput);
@@ -140,12 +140,12 @@ export async function runWrap(
 export const wrapCommand: CliCommand = {
   name: 'wrap',
   description: 'Run a command and print its RTK-reduced output',
-  usage: 'cadet-token-saver wrap [--raw] [--shell <name>] -- <command>',
+  usage: 'cadet-brainstem wrap [--raw] [--shell <name>] -- <command>',
   run(args: readonly string[]): Promise<number> {
     const { command, raw, shell } = parseWrapArgs(args);
     if (command === undefined || command.length === 0) {
-      console.error('[cadet-token-saver] wrap: missing command.');
-      console.error('Usage: cadet-token-saver wrap [--raw] [--shell <name>] -- <command>');
+      console.error('[cadet-brainstem] wrap: missing command.');
+      console.error('Usage: cadet-brainstem wrap [--raw] [--shell <name>] -- <command>');
       return Promise.resolve(1);
     }
     return runWrap(command, {

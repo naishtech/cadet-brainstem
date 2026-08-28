@@ -643,7 +643,7 @@ describe('chat_memory_store', () => {
         action: 'store',
         content: 'node:sqlite crashes under non-TTY git-bash',
         tags: ['gotcha'],
-        project: 'cadet-token-saver',
+        project: 'cadet-brainstem',
       },
       deps,
     );

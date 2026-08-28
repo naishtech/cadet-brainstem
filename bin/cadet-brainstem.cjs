@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * Cadet Token Saver — binary entry.
+ * Cadet Brainstem — binary entry.
  *
  * The real implementation is the ESM bundle at ../dist/index.js. We wrap it in
  * a tiny CJS launcher for one reason: Node emits an ExperimentalWarning when the

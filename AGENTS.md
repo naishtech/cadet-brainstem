@@ -1,9 +1,9 @@
-# Cadet Token Saver — agent instructions
+# Cadet Brainstem — agent instructions
 
-Cadet Token Saver reduces the amount of context and tool output sent to the
-model. It is available as a **local MCP server** (`cadet-token-saver mcp`,
+Cadet Brainstem reduces the amount of context and tool output sent to the
+model. It is available as a **local MCP server** (`cadet-brainstem mcp`,
 registered in `.vscode/mcp.json`) and as a **command wrapper**
-(`cadet-token-saver wrap`). Use the cheap paths below whenever possible.
+(`cadet-brainstem wrap`). Use the cheap paths below whenever possible.
 
 ## Classify every user request
 
@@ -69,7 +69,7 @@ tool for every user request.
 - For noisy commands (git status, ls, test output), prefer running them through
   the wrapper:
   ```
-  cadet-token-saver wrap -- <command>
+  cadet-brainstem wrap -- <command>
   ```
   It prints the RTK-reduced output. Use `--raw` to see the original.
 

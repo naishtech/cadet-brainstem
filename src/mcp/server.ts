@@ -292,7 +292,7 @@ function defaultRecorder(metricsPath: string): (event: OptimisationEvent) => voi
       store.close();
     } catch (err) {
       console.error(
-        `[cadet-token-saver] metrics record skipped: ${(err as Error).message}`,
+        `[cadet-brainstem] metrics record skipped: ${(err as Error).message}`,
       );
     }
   };
@@ -1593,7 +1593,7 @@ export async function handleToolCall(
 /** Build the stdio MCP server exposing the engine as tools (design doc §16). */
 export function createMcpServer(deps: McpDeps = {}): Server {
   const server = new Server(
-    { name: 'cadet-token-saver', version: pkg.version },
+    { name: 'cadet-brainstem', version: pkg.version },
     { capabilities: { tools: {} } },
   );
 

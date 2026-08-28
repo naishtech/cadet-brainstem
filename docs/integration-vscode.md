@@ -1,19 +1,19 @@
 # VS Code integration
 
-How to use Cadet Token Saver from VS Code to reduce agent token usage.
+How to use Cadet Brainstem from VS Code to reduce agent token usage.
 
 ## Prerequisites
 
-1. Make `cadet-token-saver` available on your PATH:
+1. Make `cadet-brainstem` available on your PATH:
    - from this repo: `npm link` (creates the global command), or
-   - once published: `npm i -g cadet-token-saver`.
+   - once published: `npm i -g cadet-brainstem`.
 2. Install the integration tools — see `docs/requirements.md`
    (Ollama + model, RTK, LeanCTX, Serena).
 
 ## 1. Register the MCP server (Copilot Chat)
 
-`.vscode/mcp.json` registers `cadet-token-saver mcp`. Open the workspace and
-the **cadet-token-saver** MCP server appears in Copilot Chat's tools. The agent
+`.vscode/mcp.json` registers `cadet-brainstem mcp`. Open the workspace and
+the **cadet-brainstem** MCP server appears in Copilot Chat's tools. The agent
 can then call:
 
 - `classify` — classify the current user request with the local Ollama model
@@ -25,7 +25,7 @@ can then call:
 - `chat_memory_store` — persist / retrieve agent memories (local SQLite):
   check before starting work, store facts that are expensive to rediscover.
 
-Verify it works by running `cadet-token-saver mcp` in a terminal (it stays
+Verify it works by running `cadet-brainstem mcp` in a terminal (it stays
 running until the client disconnects).
 
 ## 2. Steer the agent
@@ -53,14 +53,14 @@ normal operation available when Ollama or MCP is unavailable.
 - `cadet: init` — first-run setup
 - `cadet: doctor` — environment health check
 - `cadet: stats` — metrics summary
-- `cadet: wrap (git status)` — `cadet-token-saver wrap -- git status`
+- `cadet: wrap (git status)` — `cadet-brainstem wrap -- git status`
 
 Or run manually in the integrated terminal:
 
 ```
-cadet-token-saver wrap -- git status
-cadet-token-saver wrap --raw -- git status
-cadet-token-saver wrap --shell bash -- grep -r foo
+cadet-brainstem wrap -- git status
+cadet-brainstem wrap --raw -- git status
+cadet-brainstem wrap --shell bash -- grep -r foo
 ```
 
 > Commands run in the platform shell (`cmd.exe` on Windows) unless you pass
@@ -71,4 +71,4 @@ cadet-token-saver wrap --shell bash -- grep -r foo
 ## Users of other repos
 
 Copy `.vscode/mcp.json` (and the relevant `AGENTS.md` section / task) into your
-own repo, and ensure `cadet-token-saver` is installed and on your PATH.
+own repo, and ensure `cadet-brainstem` is installed and on your PATH.

@@ -75,7 +75,7 @@ export const DEFAULT_RECOMMENDED_TOOL = 'find_relevant_symbols';
 export const DEFAULT_HOOKS_DIR = join(os.homedir(), '.copilot', 'hooks');
 
 /** File name written into the hooks directory. */
-export const DEFAULT_HOOKS_FILENAME = 'cadet-token-saver.json';
+export const DEFAULT_HOOKS_FILENAME = 'cadet-brainstem.json';
 
 /**
  * Parse `hooks` arguments. Accepts a positional recommended-tool name, plus
@@ -126,7 +126,7 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
 
 /**
  * Build the Copilot Chat Hooks config installing every lifecycle event. Each
- * event wires to a `cadet-token-saver hook-*` handler that saves tokens at that
+ * event wires to a `cadet-brainstem hook-*` handler that saves tokens at that
  * point in the agent session:
  *  - SessionStart: prime the session with memory hints + recommended tool.
  *  - UserPromptSubmit: classify the prompt and inject the strategy.
@@ -145,12 +145,12 @@ export function buildHooksConfig(
   return {
     hooks: {
       SessionStart: [
-        { type: 'command', command: 'cadet-token-saver hook-session-start' },
+        { type: 'command', command: 'cadet-brainstem hook-session-start' },
       ],
       UserPromptSubmit: [
         {
           type: 'command',
-          command: 'cadet-token-saver hook-user-prompt',
+          command: 'cadet-brainstem hook-user-prompt',
           timeout: CLASSIFY_HOOK_TIMEOUT_MS,
         },
       ],
@@ -162,37 +162,37 @@ export function buildHooksConfig(
                 // compressed tools — forces real adoption instead of
                 // recommendation-only steering.
                 type: 'command',
-                command: 'cadet-token-saver hook-redirect',
+                command: 'cadet-brainstem hook-redirect',
               },
               {
                 type: 'command',
-                command: `cadet-token-saver hook-remind --tool ${tool}`,
+                command: `cadet-brainstem hook-remind --tool ${tool}`,
               },
             ],
           }
         : {}),
       PostToolUse: [
-        { type: 'command', command: 'cadet-token-saver hook-post-tool' },
+        { type: 'command', command: 'cadet-brainstem hook-post-tool' },
       ],
       PreCompact: [
-        { type: 'command', command: 'cadet-token-saver hook-pre-compact' },
+        { type: 'command', command: 'cadet-brainstem hook-pre-compact' },
       ],
       SubagentStart: [
         {
           type: 'command',
-          command: 'cadet-token-saver hook-subagent-start',
+          command: 'cadet-brainstem hook-subagent-start',
           timeout: CLASSIFY_HOOK_TIMEOUT_MS,
         },
       ],
       SubagentStop: [
-        { type: 'command', command: 'cadet-token-saver hook-subagent-stop' },
+        { type: 'command', command: 'cadet-brainstem hook-subagent-stop' },
       ],
-      Stop: [{ type: 'command', command: 'cadet-token-saver hook-stop' }],
+      Stop: [{ type: 'command', command: 'cadet-brainstem hook-stop' }],
     },
   };
 }
 
-/** Resolve the output file: <outDir>/cadet-token-saver.json. */
+/** Resolve the output file: <outDir>/cadet-brainstem.json. */
 export function defaultHooksFilePath(outDir: string): string {
   return join(outDir, DEFAULT_HOOKS_FILENAME);
 }
@@ -215,7 +215,7 @@ export function runHooks(
   const outDir = options.outDir ?? DEFAULT_HOOKS_DIR;
 
   if (!tool.trim()) {
-    err('[cadet-token-saver] hooks: tool name must not be empty.');
+    err('[cadet-brainstem] hooks: tool name must not be empty.');
     return 1;
   }
 
@@ -231,13 +231,13 @@ export function runHooks(
     write(filePath, content);
   } catch (caught) {
     err(
-      `[cadet-token-saver] hooks: failed to write ${filePath}: ${(caught as Error).message}`,
+      `[cadet-brainstem] hooks: failed to write ${filePath}: ${(caught as Error).message}`,
     );
     return 1;
   }
 
   const installed = Object.keys(config.hooks).join(', ');
-  log(`[cadet-token-saver] hooks: wrote ${filePath}`);
+  log(`[cadet-brainstem] hooks: wrote ${filePath}`);
   log(`  Recommended tool: ${tool}`);
   log(`  Installed events: ${installed}`);
   log(
@@ -248,8 +248,8 @@ export function runHooks(
 
 export const hooksCommand: CliCommand = {
   name: 'hooks',
-  description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-token-saver.json; PreToolUse is opt-in via --pretool)',
-  usage: 'cadet-token-saver hooks [tool] [--tool <name>] [--out <dir>] [--pretool]',
+  description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-brainstem.json; PreToolUse is opt-in via --pretool)',
+  usage: 'cadet-brainstem hooks [tool] [--tool <name>] [--out <dir>] [--pretool]',
   run(args: readonly string[]): number {
     const { tool, outDir, pretool } = parseHooksArgs(args);
     return runHooks({

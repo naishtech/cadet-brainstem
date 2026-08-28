@@ -11,7 +11,7 @@
  *
  * Prereqs: Ollama installed + running (ollama serve), and a model pulled,
  * e.g. `ollama pull qwen3:1.7b`. The model is read from config
- * (~/.cadet-token-saver/config.yaml) unless CADET_TOKEN_SAVER_CONFIG points
+ * (~/.cadet-brainstem/config.yaml) unless CADET_BRAINSTEM_CONFIG points
  * elsewhere.
  */
 import { classify, isOllamaAvailable } from '../src/classifier/index';

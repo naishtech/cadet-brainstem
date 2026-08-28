@@ -111,14 +111,14 @@ CREATE TABLE IF NOT EXISTS optimisation_events (
 );
 `;
 
-export const DEFAULT_METRICS_DIR = '.cadet-token-saver';
+export const DEFAULT_METRICS_DIR = '.cadet-brainstem';
 
 /**
  * Stable local path for the metrics database.
- * Overridable via CADET_TOKEN_SAVER_METRICS (useful for tests / non-default setups).
+ * Overridable via CADET_BRAINSTEM_METRICS (useful for tests / non-default setups).
  */
 export function getDefaultMetricsPath(): string {
-  const env = process.env.CADET_TOKEN_SAVER_METRICS;
+  const env = process.env.CADET_BRAINSTEM_METRICS;
   if (env !== undefined && env.length > 0) {
     return env;
   }

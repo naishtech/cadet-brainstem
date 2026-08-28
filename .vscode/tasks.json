@@ -4,25 +4,25 @@
     {
       "label": "cadet: init",
       "type": "shell",
-      "command": "cadet-token-saver init",
+      "command": "cadet-brainstem init",
       "problemMatcher": []
     },
     {
       "label": "cadet: doctor",
       "type": "shell",
-      "command": "cadet-token-saver doctor",
+      "command": "cadet-brainstem doctor",
       "problemMatcher": []
     },
     {
       "label": "cadet: stats",
       "type": "shell",
-      "command": "cadet-token-saver stats",
+      "command": "cadet-brainstem stats",
       "problemMatcher": []
     },
     {
       "label": "cadet: wrap (git status)",
       "type": "shell",
-      "command": "cadet-token-saver wrap -- git status",
+      "command": "cadet-brainstem wrap -- git status",
       "problemMatcher": []
     }
   ]
