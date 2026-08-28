@@ -70,26 +70,36 @@ describe('parseHooksArgs', () => {
     });
   });
 
+  it('parses --pretool flag', () => {
+    expect(parseHooksArgs(['--pretool'])).toEqual({ pretool: true });
+    expect(parseHooksArgs(['--tool', 'x', '--pretool'])).toEqual({ tool: 'x', pretool: true });
+  });
+
   it('returns empty when nothing provided', () => {
     expect(parseHooksArgs([])).toEqual({});
   });
 });
 
 describe('buildHooksConfig', () => {
-  it('installs all lifecycle events with the recommended tool wired to PreToolUse', () => {
+  it('installs all default lifecycle events without PreToolUse', () => {
     const config = buildHooksConfig('find_relevant_symbols');
     expect(config.hooks.SessionStart?.[0]!.command).toContain('hook-session-start');
     expect(config.hooks.UserPromptSubmit?.[0]!.command).toContain('hook-user-prompt');
-    // PreToolUse first redirects expensive native tools, then reminds.
-    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-redirect');
-    expect(config.hooks.PreToolUse?.[1]!.command).toContain(
-      'hook-remind --tool find_relevant_symbols',
-    );
+    // PreToolUse is off by default (too intrusive for daily dev).
+    expect(config.hooks.PreToolUse).toBeUndefined();
     expect(config.hooks.PostToolUse?.[0]!.command).toContain('hook-post-tool');
     expect(config.hooks.PreCompact?.[0]!.command).toContain('hook-pre-compact');
     expect(config.hooks.SubagentStart?.[0]!.command).toContain('hook-subagent-start');
     expect(config.hooks.SubagentStop?.[0]!.command).toContain('hook-subagent-stop');
     expect(config.hooks.Stop?.[0]!.command).toContain('hook-stop');
+  });
+
+  it('installs PreToolUse redirect + remind only when pretool is true', () => {
+    const config = buildHooksConfig('find_relevant_symbols', { pretool: true });
+    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-redirect');
+    expect(config.hooks.PreToolUse?.[1]!.command).toContain(
+      'hook-remind --tool find_relevant_symbols',
+    );
   });
 });
 

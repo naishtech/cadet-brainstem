@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import os from 'node:os';
 import type { CliCommand } from '../types';
+import { recordMetrics } from './hook-lifecycle';
 
 /**
  * PreToolUse "redirect" hook — forces adoption of the cheap cadet tools by
@@ -42,21 +43,34 @@ const LIST_SHELL_COMMANDS = ['ls', 'find', 'tree', 'dir'];
 /** Shell commands that read file content (redirect → optimize_context). */
 const READ_SHELL_COMMANDS = ['cat', 'head', 'tail', 'sed', 'less', 'more', 'bat', 'get-content', 'gc'];
 
-/** First-token set for shell commands whose output is typically noisy (redirect → compress_command_output). */
-const NOISY_SHELL_TOKENS = new Set([
-  'build', 'make', 'cmake', 'ninja', 'tsc', 'vitest', 'jest', 'mocha', 'pytest',
-  'mvn', 'gradle', 'cargo', 'dotnet', 'git', 'docker', 'eslint', 'rtk', 'lint',
-  'npm', 'npx', 'yarn', 'pnpm', 'pip', 'gcc', 'clang', 'cl', 'cmake', 'sh',
-]);
-/** Substrings anywhere in a shell command that flag noisy/large output. */
-const NOISY_SHELL_KEYWORDS = [
-  'build', 'compile', 'test', 'install', 'deploy', 'lint', 'format',
-  'status', 'diff', 'log', 'list', ' audit', ' ls', ' tree',
-];
 /** Native tool names that execute shell commands (candidate for RTK redirect). */
 const SHELL_TOOL_NAMES = ['run_in_terminal', 'terminal', 'bash', 'powershell', 'shell', 'cmd', 'execute_command', 'run_command'];
 
-/** True when a native tool executes a shell command whose output is likely noisy. */
+/**
+ * True when a shell command is READ-ONLY and its output is likely large — the
+ * only case worth redirecting to compress_command_output (which runs a read-only
+ * command through RTK). State-changing commands (npm install, git commit/push,
+ * builds that produce artifacts) MUST NOT be redirected: they have to actually
+ * run, and compress_command_output is read-only.
+ */
+function isReadonlyNoisyShell(cmd: string): boolean {
+  const lower = cmd.trim().toLowerCase();
+  // read-only git subcommands with typically-large output
+  if (/^git\s+(status|diff|log|show|branch|remote|submodule|shortlog)/.test(lower)) {
+    return true;
+  }
+  // directory listing
+  if (/^(ls|ls\s|find|tree|dir|dir\s)/.test(lower)) {
+    return true;
+  }
+  // test runners (read-only; output is often large and repetitive)
+  if (/\b(vitest|jest|pytest|mocha|go test|cargo test|npm test|pnpm test|yarn test)\b/.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
+/** True when a native tool executes a read-only, likely-noisy shell command. */
 function isNoisyShellCall(
   toolName: string,
   toolInput: Record<string, unknown>,
@@ -74,23 +88,24 @@ function isNoisyShellCall(
   if (typeof cmd !== 'string' || cmd.trim().length === 0) {
     return undefined;
   }
-  const trimmed = cmd.trim();
-  const first = trimmed.split(/\s+/)[0]?.split(/[\\/]/).pop()?.toLowerCase();
-  if (first !== undefined && NOISY_SHELL_TOKENS.has(first)) {
-    return { cmd: trimmed };
-  }
-  const lower = trimmed.toLowerCase();
-  if (NOISY_SHELL_KEYWORDS.some((k) => lower.includes(k))) {
-    return { cmd: trimmed };
-  }
-  return undefined;
+  return isReadonlyNoisyShell(cmd) ? { cmd: cmd.trim() } : undefined;
 }
 
-/** Source-like suffixes where a native read should be redirected to optimize_context. */
-const CODE_FILE_EXTENSIONS = new Set([
+/** Suffixes where a native read should be redirected to optimize_context. Covers
+ * the text-like file types whose raw read tends to dump large amounts of tokens:
+ * source code, docs/markdown, config/data, and markup. Generic — no engine- or
+ * project-specific asset types (the hook is a general-purpose token saver). */
+const REDIRECT_READ_EXTENSIONS = new Set([
+  // source
   '.c', '.h', '.cpp', '.hpp', '.cc', '.cxx', '.cs', '.go', '.rs', '.java',
   '.js', '.jsx', '.ts', '.tsx', '.py', '.rb', '.php', '.swift', '.kt',
-  '.sh', '.ps1', '.sql', '.json', '.yaml', '.yml', '.toml', '.lua',
+  '.sh', '.ps1', '.sql', '.lua',
+  // config / data
+  '.json', '.yaml', '.yml', '.toml', '.csv', '.log',
+  // docs / markdown
+  '.md', '.markdown', '.rst', '.txt',
+  // markup
+  '.xml', '.html', '.htm',
 ]);
 
 /** Max denies per category within a window before the call passes through. */
@@ -115,15 +130,37 @@ export interface RedirectDeps {
     exists?: (path: string) => boolean;
     mkdir?: (path: string) => void;
   };
+  /**
+   * Override the metrics sink (tests). Defaults to the real `recordMetrics`, which
+   * writes a `pre_tool_use` event so `stats` shows the PreToolUse hook firing.
+   */
+  recordMetrics?: (event: RedirectMetricEvent) => void;
+}
+
+/** Shape of the metrics event the PreToolUse redirect hook records. */
+export interface RedirectMetricEvent {
+  sessionId: string;
+  tool: string;
+  operation: string;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedTokensSaved: number;
+  origin?: string;
 }
 
 interface ToolCallPayload {
   hookType?: string;
+  hook_event_name?: string;
   toolName?: string;
+  tool_name?: string;
   toolInput?: Record<string, unknown>;
+  tool_input?: Record<string, unknown>;
   sessionId?: string;
+  session_id?: string;
   modelId?: string;
+  model_id?: string;
   toolUseID?: string;
+  tool_use_id?: string;
 }
 
 /** The JSON envelope VS Code Copilot Chat Hooks expect on stdout. */
@@ -166,7 +203,7 @@ function isCodeFile(path: string | undefined): boolean {
     return false;
   }
   const suffix = path.toLowerCase();
-  return CODE_FILE_EXTENSIONS.has(suffix.slice(suffix.lastIndexOf('.')));
+  return REDIRECT_READ_EXTENSIONS.has(suffix.slice(suffix.lastIndexOf('.')));
 }
 
 /**
@@ -324,6 +361,12 @@ function allowOutput(additionalContext?: string): HookOutput {
   };
 }
 
+/** Soft-redirect nudge: allow the native tool but point to the cadet replacement. */
+function remindMessage(target: RedirectTarget): string {
+  const hint = target.inputHint !== undefined ? ` (target: ${target.inputHint})` : '';
+  return `Consider using ${target.cadetTool}${hint} instead — it returns the same information with far fewer tokens.`;
+}
+
 /**
  * Handle a single PreToolUse hook invocation: deny the expensive native search /
  * list / code-read tools and redirect to the cadet replacement. Reads the VS Code
@@ -358,9 +401,27 @@ export async function runHookRedirect(
     return 0;
   }
 
-  const toolName = payload.toolName ?? '';
-  const toolInput = payload.toolInput ?? {};
-  const sessionId = payload.sessionId ?? 'unknown';
+  const toolName = payload.tool_name ?? payload.toolName ?? '';
+  const toolInput = payload.tool_input ?? payload.toolInput ?? {};
+  const sessionId = payload.session_id ?? payload.sessionId ?? 'unknown';
+
+  // Record that the PreToolUse hook fired, so `stats` shows it active even when
+  // it allows (no deny). Best-effort, injected sink for tests.
+  const record =
+    deps.recordMetrics ?? ((e: RedirectMetricEvent) => recordMetrics({}, e));
+  try {
+    record({
+      sessionId,
+      tool: toolName || 'tool',
+      operation: 'pre_tool_use',
+      estimatedInputTokens: 0,
+      estimatedOutputTokens: 0,
+      estimatedTokensSaved: 0,
+      origin: 'hook',
+    });
+  } catch {
+    // best-effort — a metrics failure never breaks the hook
+  }
 
   const target = redirectForTool(toolName, toolInput);
   if (target === undefined) {
@@ -383,21 +444,23 @@ export async function runHookRedirect(
 
   const count = counter[target.category];
   if (count >= REDIRECT_DENY_THRESHOLD) {
-    // Safety valve: let the call through (the agent may genuinely need it), but
-    // keep steering via a reminder.
-    writeOut(
-      JSON.stringify(
-        allowOutput(
-          `Reminder: prefer ${target.cadetTool}${target.inputHint !== undefined ? ` (target: ${target.inputHint})` : ''} for this instead of the native tool.`,
-        ),
-      ),
-    );
+    // Safety valve: let the call through, but keep steering via a reminder.
+    writeOut(JSON.stringify(allowOutput(remindMessage(target))));
     return 0;
   }
-
   counter[target.category] = count + 1;
   saveRedirectCounter(stateFile, counter, deps);
-  writeOut(JSON.stringify(denyOutput(target)));
+  // Hard-deny ONLY search/list — they are cleanly replaceable by
+  // find_relevant_symbols (the model still gets the same search results).
+  // Reads and shell are SOFT-redirected (allow + remind): hard-denying them
+  // would block legitimate file reads needed for edits and state-changing /
+  // necessary shell commands (install/test/build), which compress_command_output
+  // (read-only) cannot replace.
+  if (target.category === 'search' || target.category === 'list') {
+    writeOut(JSON.stringify(denyOutput(target)));
+  } else {
+    writeOut(JSON.stringify(allowOutput(remindMessage(target))));
+  }
   return 0;
 }
 

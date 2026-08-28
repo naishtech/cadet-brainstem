@@ -58,11 +58,17 @@ export interface RemindDeps {
 
 interface ToolCallPayload {
   hookType?: string;
+  hook_event_name?: string;
   toolName?: string;
+  tool_name?: string;
   toolInput?: Record<string, unknown>;
+  tool_input?: Record<string, unknown>;
   sessionId?: string;
+  session_id?: string;
   modelId?: string;
+  model_id?: string;
   toolUseID?: string;
+  tool_use_id?: string;
 }
 
 /** The JSON envelope VS Code Copilot Chat Hooks expect on stdout. */
@@ -240,9 +246,9 @@ export async function runHookRemind(
     return 0;
   }
 
-  const toolName = payload.toolName ?? payload.toolName ?? '';
-  const toolInput = payload.toolInput ?? {};
-  const sessionId = payload.sessionId ?? 'unknown';
+  const toolName = payload.tool_name ?? payload.toolName ?? '';
+  const toolInput = payload.tool_input ?? payload.toolInput ?? {};
+  const sessionId = payload.session_id ?? payload.sessionId ?? 'unknown';
 
   const now = Date.now();
   const stateFile = join(stateDir, `${sessionId}.json`);

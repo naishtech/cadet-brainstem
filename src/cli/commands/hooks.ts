@@ -54,11 +54,18 @@ export interface HooksOptions {
   tool?: string;
   /** Directory to write the config into (defaults to ~/.copilot/hooks). */
   outDir?: string;
+  /**
+   * Include the PreToolUse redirect/remind hooks (default false). They intercept
+   * every tool call and were found too intrusive for daily dev work, so they are
+   * opt-in. Enable with `--pretool`.
+   */
+  pretool?: boolean;
 }
 
 export interface ParsedHooksArgs {
   tool?: string;
   outDir?: string;
+  pretool?: boolean;
 }
 
 /** Supported default recommended tool when none is provided. */
@@ -78,6 +85,7 @@ export const DEFAULT_HOOKS_FILENAME = 'cadet-token-saver.json';
 export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
   let tool: string | undefined;
   let outDir: string | undefined;
+  let pretool = false;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -100,6 +108,10 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
       }
       continue;
     }
+    if (arg === '--pretool') {
+      pretool = true;
+      continue;
+    }
     positional.push(arg);
   }
   if (tool === undefined && positional.length > 0) {
@@ -108,23 +120,28 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
   return {
     ...(tool !== undefined ? { tool } : {}),
     ...(outDir !== undefined ? { outDir } : {}),
+    ...(pretool ? { pretool: true } : {}),
   };
 }
 
 /**
- * Build the full Copilot Chat Hooks config installing every lifecycle event.
- * Each event wires to a `cadet-token-saver hook-*` handler that saves tokens at
- * that point in the agent session:
+ * Build the Copilot Chat Hooks config installing every lifecycle event. Each
+ * event wires to a `cadet-token-saver hook-*` handler that saves tokens at that
+ * point in the agent session:
  *  - SessionStart: prime the session with memory hints + recommended tool.
  *  - UserPromptSubmit: classify the prompt and inject the strategy.
- *  - PreToolUse: redirect expensive native search/list/read to cadet tools,
- *    then remind toward the recommended tool (raw grep/read guard).
+ *  - PreToolUse (OPT-IN via --pretool): redirect native search/list to cadet
+ *    tools, then remind toward the recommended tool. Off by default — it
+ *    intercepts every tool call and proved too intrusive for daily dev.
  *  - PostToolUse: record token-saving metrics per tool call.
  *  - PreCompact: export important context to memory before truncation.
  *  - SubagentStart/Stop: classify + track nested usage, aggregate + cleanup.
  *  - Stop: persist a session summary to memory and clean up hook state.
  */
-export function buildHooksConfig(tool: string): CopilotHooksConfig {
+export function buildHooksConfig(
+  tool: string,
+  opts: { pretool?: boolean } = {},
+): CopilotHooksConfig {
   return {
     hooks: {
       SessionStart: [
@@ -137,19 +154,23 @@ export function buildHooksConfig(tool: string): CopilotHooksConfig {
           timeout: CLASSIFY_HOOK_TIMEOUT_MS,
         },
       ],
-      PreToolUse: [
-        {
-          // Denies native code search / directory dumps / full-file reads and
-          // redirects to the cadet compressed tools — forces real adoption
-          // instead of recommendation-only steering.
-          type: 'command',
-          command: 'cadet-token-saver hook-redirect',
-        },
-        {
-          type: 'command',
-          command: `cadet-token-saver hook-remind --tool ${tool}`,
-        },
-      ],
+      ...(opts.pretool === true
+        ? {
+            PreToolUse: [
+              {
+                // Redirects native code search / directory dumps to the cadet
+                // compressed tools — forces real adoption instead of
+                // recommendation-only steering.
+                type: 'command',
+                command: 'cadet-token-saver hook-redirect',
+              },
+              {
+                type: 'command',
+                command: `cadet-token-saver hook-remind --tool ${tool}`,
+              },
+            ],
+          }
+        : {}),
       PostToolUse: [
         { type: 'command', command: 'cadet-token-saver hook-post-tool' },
       ],
@@ -198,7 +219,10 @@ export function runHooks(
     return 1;
   }
 
-  const config = buildHooksConfig(tool);
+  const config = buildHooksConfig(
+    tool,
+    options.pretool !== undefined ? { pretool: options.pretool } : {},
+  );
   const filePath = resolve(defaultHooksFilePath(outDir));
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
@@ -212,9 +236,10 @@ export function runHooks(
     return 1;
   }
 
+  const installed = Object.keys(config.hooks).join(', ');
   log(`[cadet-token-saver] hooks: wrote ${filePath}`);
   log(`  Recommended tool: ${tool}`);
-  log(`  Installed events: ${HOOK_EVENTS.join(', ')}`);
+  log(`  Installed events: ${installed}`);
   log(
     '  VS Code auto-loads Copilot Chat Hooks from ~/.copilot/hooks — reload the window for it to take effect.',
   );
@@ -223,13 +248,14 @@ export function runHooks(
 
 export const hooksCommand: CliCommand = {
   name: 'hooks',
-  description: 'Install all VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-token-saver.json)',
-  usage: 'cadet-token-saver hooks [tool] [--tool <name>] [--out <dir>]',
+  description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-token-saver.json; PreToolUse is opt-in via --pretool)',
+  usage: 'cadet-token-saver hooks [tool] [--tool <name>] [--out <dir>] [--pretool]',
   run(args: readonly string[]): number {
-    const { tool, outDir } = parseHooksArgs(args);
+    const { tool, outDir, pretool } = parseHooksArgs(args);
     return runHooks({
       ...(tool !== undefined ? { tool } : {}),
       ...(outDir !== undefined ? { outDir } : {}),
+      ...(pretool !== undefined ? { pretool } : {}),
     });
   },
 };

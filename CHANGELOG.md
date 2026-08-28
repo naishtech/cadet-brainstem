@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.25] - 2026-08-28
+
+### Changed
+
+- **`PreToolUse` hooks are now opt-in** — the `hook-redirect` + `hook-remind`
+  hooks intercept every tool call and proved too intrusive for daily dev (they
+  blocked legitimate commands like `npm install` and throttled the agent's own
+  reads). They are now omitted from the default hooks config and installed only
+  with `cadet-token-saver hooks --pretool`. The remaining hooks (SessionStart,
+  UserPromptSubmit classification injection, PostToolUse metrics, PreCompact,
+  Subagent*) are unaffected.
+- **Redirect hardening** — `hook-redirect` now hard-denies only native search /
+  directory dumps (→ `find_relevant_symbols`), and **soft-redirects** (allow +
+  remind, not deny) full-file reads (→ `optimize_context`) and read-only noisy
+  shell commands (→ `compress_command_output`). Shell matching only targets
+  read-only commands (`git status`/`diff`/`log`, `ls`, test runners) — never
+  state-changing ones (install/commit/build).
+- **Generic read-redirect** — `REDIRECT_READ_EXTENSIONS` covers source, config /
+  data, docs/markdown and markup; no engine-specific asset types.
+- **Fixed VS Code PreToolUse payload field names** — the hook reads both
+  snake_case (`tool_name`/`tool_input`/`session_id`) and camelCase so it actually
+  sees the real VS Code payload (was silently matching nothing → 0 denies).
+
+### Added
+
+- **PreToolUse activity probe** — `hook-redirect` records a `pre_tool_use`
+  metrics event on every invocation so `stats` proves whether the hook fires.
+- **Round-trip integration test** (`test/roundtrip.test.ts`) — calls every cadet
+  service (classify, optimize_context, find_relevant_symbols,
+  compress_command_output, chat_memory_store) through the real tool handlers and
+  the MCP dispatch, then asserts `stats` reports the tokens saved (94 total: 19
+  LeanCTX + 75 RTK).
+
 ## [0.1.24] - 2026-08-28
 
 ### Added

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 import {
   redirectForTool,
@@ -65,27 +65,51 @@ describe('redirectForTool', () => {
     });
   });
 
-  it('does not redirect non-code reads', () => {
-    expect(redirectForTool('read_file', { file_path: 'assets/logo.png' })).toBeUndefined();
-    expect(redirectForTool('read_file', { file_path: 'README.md' })).toBeUndefined();
+  it('redirects doc/markdown/markup reads to optimize_context (docs-heavy tasks)', () => {
+    expect(redirectForTool('read_file', { file_path: 'docs/skills/SKILL.md' })).toEqual({
+      cadetTool: 'optimize_context',
+      category: 'read',
+      inputHint: 'docs/skills/SKILL.md',
+    });
+    expect(redirectForTool('read_file', { file_path: 'README.md' })).toEqual({
+      cadetTool: 'optimize_context',
+      category: 'read',
+      inputHint: 'README.md',
+    });
+    expect(redirectForTool('read_file', { file_path: 'public/index.html' })).toEqual({
+      cadetTool: 'optimize_context',
+      category: 'read',
+      inputHint: 'public/index.html',
+    });
   });
 
-  it('redirects noisy shell commands to compress_command_output (RTK)', () => {
+  it('does not redirect non-code reads', () => {
+    expect(redirectForTool('read_file', { file_path: 'assets/logo.png' })).toBeUndefined();
+    expect(redirectForTool('read_file', { file_path: 'assets/font.woff2' })).toBeUndefined();
+  });
+
+  it('redirects read-only noisy shell commands to compress_command_output (RTK)', () => {
     expect(redirectForTool('run_in_terminal', { cmd: 'git status' })).toEqual({
       cadetTool: 'compress_command_output',
       category: 'shell',
       inputHint: 'git status',
     });
-    expect(redirectForTool('terminal', { command: './build_editor.sh' })).toEqual({
+    expect(redirectForTool('terminal', { command: 'git diff' })).toEqual({
       cadetTool: 'compress_command_output',
       category: 'shell',
-      inputHint: './build_editor.sh',
+      inputHint: 'git diff',
     });
     expect(redirectForTool('run_in_terminal', { cmd: 'vitest run' })).toEqual({
       cadetTool: 'compress_command_output',
       category: 'shell',
       inputHint: 'vitest run',
     });
+  });
+
+  it('does not redirect state-changing shell commands (install/commit/build)', () => {
+    expect(redirectForTool('run_in_terminal', { cmd: 'npm install -g .' })).toBeUndefined();
+    expect(redirectForTool('run_in_terminal', { cmd: 'git commit -m x' })).toBeUndefined();
+    expect(redirectForTool('run_in_terminal', { cmd: './build_editor.sh' })).toBeUndefined();
   });
 
   it('does not redirect quiet shell commands', () => {
@@ -102,10 +126,11 @@ describe('redirectForTool', () => {
 describe('runHookRedirect', () => {
   it('denies a native search on first hit and redirects to find_relevant_symbols', async () => {
     const state = memState();
+    const record = vi.fn();
     let out = '';
     const exit = await runHookRedirect(
       {},
-      { readStdin: async () => payload('grep_search', { query: 'foo' }), writeOut: (l) => (out = l), state },
+      { readStdin: async () => payload('grep_search', { query: 'foo' }), writeOut: (l) => (out = l), state, recordMetrics: record },
     );
     expect(exit).toBe(0);
     const parsed = JSON.parse(out) as {
@@ -113,6 +138,66 @@ describe('runHookRedirect', () => {
     };
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(parsed.hookSpecificOutput.additionalContext).toContain('find_relevant_symbols');
+  });
+
+  it('records a pre_tool_use metrics event on every invocation (activity probe)', async () => {
+    const record = vi.fn();
+    await runHookRedirect(
+      {},
+      { readStdin: async () => payload('grep_search', { query: 'foo' }), writeOut: () => undefined, recordMetrics: record },
+    );
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'pre_tool_use', tool: 'grep_search', origin: 'hook' }),
+    );
+  });
+
+  it('reads snake_case VS Code payload fields (tool_name/tool_input/session_id)', async () => {
+    // VS Code sends snake_case on stdin for PreToolUse hooks.
+    const stdin = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'grep_search',
+      tool_input: { query: 'foo' },
+      session_id: 'snake1',
+      tool_use_id: 'abc',
+    });
+    let out = '';
+    await runHookRedirect(
+      {},
+      { readStdin: async () => stdin, writeOut: (l) => (out = l), recordMetrics: vi.fn() },
+    );
+    const parsed = JSON.parse(out) as {
+      hookSpecificOutput: { permissionDecision: string; additionalContext: string };
+    };
+    // search/list are hard-denied
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('find_relevant_symbols');
+  });
+
+  it('soft-redirects reads (allow + remind, not deny) so edits still work', async () => {
+    let out = '';
+    await runHookRedirect(
+      {},
+      { readStdin: async () => payload('read_file', { file_path: 'src/foo.ts' }), writeOut: (l) => (out = l), recordMetrics: vi.fn() },
+    );
+    const parsed = JSON.parse(out) as {
+      hookSpecificOutput: { permissionDecision: string; additionalContext?: string };
+    };
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('optimize_context');
+  });
+
+  it('soft-redirects shell commands (allow + remind, not deny)', async () => {
+    let out = '';
+    await runHookRedirect(
+      {},
+      { readStdin: async () => payload('run_in_terminal', { cmd: 'git status' }), writeOut: (l) => (out = l), recordMetrics: vi.fn() },
+    );
+    const parsed = JSON.parse(out) as {
+      hookSpecificOutput: { permissionDecision: string; additionalContext?: string };
+    };
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('compress_command_output');
   });
 
   it('allows through after the deny threshold (safety valve)', async () => {
@@ -129,7 +214,7 @@ describe('runHookRedirect', () => {
     let out = '';
     const exit = await runHookRedirect(
       { stateDir },
-      { readStdin: async () => payload('grep_search', { query: 'foo' }), writeOut: (l) => (out = l), state },
+      { readStdin: async () => payload('grep_search', { query: 'foo' }), writeOut: (l) => (out = l), state, recordMetrics: vi.fn() },
     );
     expect(exit).toBe(0);
     const parsed = JSON.parse(out) as {
@@ -143,7 +228,7 @@ describe('runHookRedirect', () => {
     let out = '';
     const exit = await runHookRedirect(
       {},
-      { readStdin: async () => payload('edit_file', { path: 'src/a.ts' }), writeOut: (l) => (out = l) },
+      { readStdin: async () => payload('edit_file', { path: 'src/a.ts' }), writeOut: (l) => (out = l), recordMetrics: vi.fn() },
     );
     expect(exit).toBe(0);
     const parsed = JSON.parse(out) as {
@@ -153,13 +238,15 @@ describe('runHookRedirect', () => {
     expect(parsed.hookSpecificOutput.additionalContext).toBeUndefined();
   });
 
-  it('no-ops on empty stdin', async () => {
+  it('no-ops on empty stdin without recording metrics', async () => {
+    const record = vi.fn();
     let out = 'sentinel';
     const exit = await runHookRedirect(
       {},
-      { readStdin: async () => '', writeOut: (l) => (out = l) },
+      { readStdin: async () => '', writeOut: (l) => (out = l), recordMetrics: record },
     );
     expect(exit).toBe(0);
     expect(out).toBe('sentinel');
+    expect(record).not.toHaveBeenCalled();
   });
 });

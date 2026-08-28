@@ -109,7 +109,7 @@ hook-*` handler:
 | --- | --- | --- |
 | `SessionStart` | `hook-session-start` | Primes the session with memory hints + the recommended tool |
 | `UserPromptSubmit` | `hook-user-prompt` | Classifies the prompt and injects the strategy deterministically |
-| `PreToolUse` | `hook-redirect` + `hook-remind` | Denies expensive native search/list/read/noisy-shell, redirects to cadet MCP tools; reminds after |
+| `PreToolUse` | `hook-redirect` + `hook-remind` | Redirects native search/list (hard-deny) and read/shell (soft-nudge) to cadet MCP tools; reminds after |
 | `PostToolUse` | `hook-post-tool` | Records token-saving metrics per tool call |
 | `PreCompact` | `hook-pre-compact` | Exports important context to memory before truncation |
 | `SubagentStart` | `hook-subagent-start` | Classifies the subtask, injects a cheap-path primer |
@@ -142,15 +142,17 @@ Reload Window**) for the hooks to become active.
 #### How it behaves
 
 Handlers read the hook payload from stdin and are best-effort — they never
-break the agent session. The `PreToolUse` hooks force adoption of the cheap
-cadet MCP tools (everything flows through the token-saver MCP): `hook-redirect`
-denies raw code search / directory dumps / full-file reads / noisy shell
-commands and redirects the model to `find_relevant_symbols` (Serena),
-`optimize_context` (LeanCTX), and `compress_command_output` (RTK) — with a
-bounded safety valve so the agent is never stuck — and `hook-remind` nudges
-toward the recommended tool when it still over-uses raw `grep`/`read`. The
-`UserPromptSubmit` and `PreCompact` hooks do the heavy token-saving: classifying
-each prompt and exporting context to memory before truncation.
+break the agent session. The `PreToolUse` hooks steer toward the cheap cadet
+MCP tools (everything flows through the token-saver MCP): `hook-redirect`
+**hard-denies** raw code search and directory dumps (redirecting to
+`find_relevant_symbols`), and **soft-redirects** full-file reads and noisy
+shell commands (allow + a reminder to use `optimize_context` /
+`compress_command_output` instead — so the agent is never blocked from
+reading a file it needs to edit or running a necessary command). `hook-remind`
+nudges toward the recommended tool when the agent still over-uses raw
+`grep`/`read`. The `UserPromptSubmit` and `PreCompact` hooks do the heavy
+token-saving: classifying each prompt and exporting context to memory before
+truncation.
 
 #### Troubleshooting
 
