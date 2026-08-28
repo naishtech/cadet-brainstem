@@ -44,6 +44,7 @@ describe('command routing', () => {
       'telemetry',
       'hooks',
       'hook-remind',
+      'hook-redirect',
       'hook-session-start',
       'hook-user-prompt',
       'hook-post-tool',

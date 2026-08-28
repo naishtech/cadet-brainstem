@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.24] - 2026-08-28
+
+### Added
+
+- **PreToolUse redirect hook (`hook-redirect`)** — forces adoption of the cheap
+  cadet MCP tools instead of relying on recommendation-only steering (which had
+  ~0 adoption). On every PreToolUse event it denies the expensive native tools
+  and redirects to the compressed cadet replacement, so all traffic flows through
+  the token-saver MCP:
+  - raw code search / directory dumps → `find_relevant_symbols` (Serena)
+  - full-file code reads → `optimize_context` (LeanCTX)
+  - noisy shell commands (build/test/git/etc.) → `compress_command_output` (RTK)
+  A bounded per-category safety valve lets calls through after a threshold so the
+  agent is never stuck. Wired as the first `PreToolUse` entry in the generated
+  hooks config (`src/cli/commands/hooks.ts`), ahead of `hook-remind`.
+- **Auto-approve cadet MCP tools** in `.vscode/mcp.json` (`classify`,
+  `find_relevant_symbols`, `optimize_context`, `compress_command_output`) so the
+  model's auto-mode does not gate/skip them and fall back to native reads.
+
 ## [0.1.23] - 2026-08-28
 
 ### Fixed

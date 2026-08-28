@@ -3,7 +3,13 @@
     "cadet-token-saver": {
       "type": "stdio",
       "command": "cadet-token-saver",
-      "args": ["mcp"]
+      "args": ["mcp"],
+      "autoApprove": [
+        "classify",
+        "find_relevant_symbols",
+        "optimize_context",
+        "compress_command_output"
+      ]
     }
   }
 }

@@ -80,7 +80,9 @@ describe('buildHooksConfig', () => {
     const config = buildHooksConfig('find_relevant_symbols');
     expect(config.hooks.SessionStart?.[0]!.command).toContain('hook-session-start');
     expect(config.hooks.UserPromptSubmit?.[0]!.command).toContain('hook-user-prompt');
-    expect(config.hooks.PreToolUse?.[0]!.command).toContain(
+    // PreToolUse first redirects expensive native tools, then reminds.
+    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-redirect');
+    expect(config.hooks.PreToolUse?.[1]!.command).toContain(
       'hook-remind --tool find_relevant_symbols',
     );
     expect(config.hooks.PostToolUse?.[0]!.command).toContain('hook-post-tool');

@@ -117,7 +117,8 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
  * that point in the agent session:
  *  - SessionStart: prime the session with memory hints + recommended tool.
  *  - UserPromptSubmit: classify the prompt and inject the strategy.
- *  - PreToolUse: remind toward the recommended tool (raw grep/read guard).
+ *  - PreToolUse: redirect expensive native search/list/read to cadet tools,
+ *    then remind toward the recommended tool (raw grep/read guard).
  *  - PostToolUse: record token-saving metrics per tool call.
  *  - PreCompact: export important context to memory before truncation.
  *  - SubagentStart/Stop: classify + track nested usage, aggregate + cleanup.
@@ -137,6 +138,13 @@ export function buildHooksConfig(tool: string): CopilotHooksConfig {
         },
       ],
       PreToolUse: [
+        {
+          // Denies native code search / directory dumps / full-file reads and
+          // redirects to the cadet compressed tools — forces real adoption
+          // instead of recommendation-only steering.
+          type: 'command',
+          command: 'cadet-token-saver hook-redirect',
+        },
         {
           type: 'command',
           command: `cadet-token-saver hook-remind --tool ${tool}`,
