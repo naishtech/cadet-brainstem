@@ -63,6 +63,23 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
   recorded); write step with `--yes` invoked the tool. Path args are normalized
   to repo-relative; `defaultFillArgs` prompts with per-tool param hints.
 
+## MCP `procedure_apply` tool (DONE)
+
+- New MCP tool `procedure_apply {procedure_id, repo, approved, args?}` — the
+  in-agent approval: refuses unless `approved: true` (this tool IS the review
+  gate), then runs the procedure's steps via `executeProcedure` against the
+  real repo and records the outcome. Supports per-tool `args` overrides.
+- Registered in `TOOL_DEFS` + `handleToolCall`; exported from `src/mcp`;
+  injectable adapters/fillArgs via `McpDeps` for tests.
+- In-agent flow complete: `classify` → `procedure_review` (see diff) →
+  user approves → `procedure_apply` (applies + records).
+
+## Still to do (next)
+
+- An automated diff-check on the apply side (verify the applied result matches
+  the reviewed diff), and surfacing the review prompt in the actual agent loop
+  (a hook that pauses for user approval).
+
 ## MCP `procedure_review` tool (DONE)
 
 - New MCP tool `procedure_review {procedure_id, repo, step_index?}` — loads the

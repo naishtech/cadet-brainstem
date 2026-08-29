@@ -51,9 +51,11 @@ import {
 import {
   buildWriteDiff,
   defaultFillArgs,
+  executeProcedure,
   isWriteStep,
   ProcedureStore,
   type Procedure,
+  type ProcedureStep,
 } from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
@@ -272,6 +274,11 @@ export interface McpDeps {
   defaultProject?: string;
   /** Injectable procedure store; defaults to a live ProcedureStore when omitted. */
   procedureStore?: ProcedureStore;
+  /** Injectable arg-filler for procedure_apply (tests); defaults to the local LLM. */
+  procedureFillArgs?: (step: ProcedureStep, repo: string) => Promise<Record<string, unknown>>;
+  /** Injectable adapters for procedure_apply (tests); defaults to real ones. */
+  procedureSerena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
+  procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
 }
@@ -483,6 +490,15 @@ export interface ProcedureReviewArgs {
   step_index?: number;
 }
 
+export interface ProcedureApplyArgs {
+  procedure_id: string;
+  repo: string;
+  /** Must be true to apply write steps — this IS the review-gate approval. */
+  approved: boolean;
+  /** Optional per-tool arg overrides, e.g. { "create_text_file": {...} }. */
+  args?: Record<string, Record<string, unknown>>;
+}
+
 /**
  * `procedure_review` — build a concrete, reviewable diff for the write step(s)
  * of a matched procedure against a real repo, WITHOUT applying anything. The
@@ -527,6 +543,72 @@ export async function procedureReviewTool(
       }
     }
     return { procedure_id: args.procedure_id, repo: args.repo, reviews };
+  } finally {
+    if (deps.procedureStore === undefined) {
+      try {
+        store.close();
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+}
+
+/**
+ * `procedure_apply` — approve + apply a reviewed write procedure in-agent. This
+ * tool IS the review-gate approval: it refuses unless `approved: true` is
+ * passed explicitly. Runs the procedure's steps against the real repo via the
+ * execution bridge and records the outcome.
+ */
+export async function procedureApplyTool(
+  args: ProcedureApplyArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.procedure_id !== 'string' || typeof args.repo !== 'string') {
+    throw new Error('procedure_apply requires string "procedure_id" and "repo"');
+  }
+  if (args.approved !== true) {
+    return {
+      procedure_id: args.procedure_id,
+      ok: false,
+      error: 'approved must be true to apply writes (review gate)',
+    };
+  }
+  const store = deps.procedureStore ?? new ProcedureStore();
+  try {
+    const procedure = store.get(args.procedure_id);
+    if (procedure === null) {
+      return { procedure_id: args.procedure_id, ok: false, error: `no procedure with id "${args.procedure_id}"` };
+    }
+    const fillArgs =
+      deps.procedureFillArgs ??
+      (args.args !== undefined
+        ? async (step: ProcedureStep, repo: string) =>
+            args.args![step.tool] !== undefined ? args.args![step.tool]! : defaultFillArgs(step, repo)
+        : undefined);
+    const result = await executeProcedure(procedure, {
+      repoPath: args.repo,
+      store,
+      approve: async () => true, // this tool IS the explicit approval
+      ...(fillArgs !== undefined ? { fillArgs } : {}),
+      ...(deps.procedureSerena !== undefined ? { serena: deps.procedureSerena } : {}),
+      ...(deps.procedureLeanctx !== undefined ? { leanctx: deps.procedureLeanctx } : {}),
+    });
+    return {
+      procedure_id: args.procedure_id,
+      ok: result.ok,
+      allExecuted: result.allExecuted,
+      results: result.results.map((r) => ({
+        service: r.service,
+        tool: r.tool,
+        write: r.write,
+        verdict: r.verdict,
+        executed: r.executed,
+        approved: r.approved,
+        output: r.output,
+        error: r.error,
+      })),
+    };
   } finally {
     if (deps.procedureStore === undefined) {
       try {
@@ -1359,6 +1441,22 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'procedure_apply',
+    description:
+      'Approve + apply a reviewed write procedure in-agent. Requires approved:true (this tool is the review gate). ' +
+      'Runs the procedure steps against the real repo and records the outcome.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        procedure_id: { type: 'string', description: 'The procedure id to apply.' },
+        repo: { type: 'string', description: 'Absolute repo path to apply against.' },
+        approved: { type: 'boolean', description: 'Must be true to apply write steps.' },
+        args: { type: 'object', description: 'Optional per-tool arg overrides, e.g. { "create_text_file": {...} }.' },
+      },
+      required: ['procedure_id', 'repo', 'approved'],
+    },
+  },
+  {
     name: 'optimize_context',
     description:
       'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
@@ -1659,6 +1757,9 @@ export async function handleToolCall(
           args as unknown as ProcedureReviewArgs,
           deps,
         );
+        break;
+      case 'procedure_apply':
+        result = await procedureApplyTool(args as unknown as ProcedureApplyArgs, deps);
         break;
       case 'optimize_context':
         result = await optimizeContextTool(

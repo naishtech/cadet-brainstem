@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { classifyTool, procedureReviewTool } from '../src/mcp';
+import { classifyTool, procedureApplyTool, procedureReviewTool } from '../src/mcp';
 import { ProcedureStore } from '../src/procedure';
 
 const tempDirs: string[] = [];
@@ -149,6 +149,49 @@ describe('procedure matcher (repeatable)', () => {
       { procedureStore: store },
     )) as any;
     expect(result.error).toContain('does-not-exist');
+    store.close();
+  });
+
+  it('procedure_apply refuses to apply when approved !== true (review gate)', async () => {
+    const store = seededStore();
+    const p = store.list()[0]!;
+    const result = (await procedureApplyTool(
+      { procedure_id: p.id, repo: process.cwd(), approved: false },
+      { procedureStore: store },
+    )) as any;
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('approved must be true');
+    store.close();
+  });
+
+  it('procedure_apply returns an error for an unknown procedure', async () => {
+    const store = seededStore();
+    const result = (await procedureApplyTool(
+      { procedure_id: 'nope', repo: process.cwd(), approved: true },
+      { procedureStore: store },
+    )) as any;
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('nope');
+    store.close();
+  });
+
+  it('procedure_apply executes a procedure when approved, using injected adapters', async () => {
+    const store = seededStore();
+    const p = store.list()[0]!; // read-only ctx_read (leanctx)
+    const serena = { callTool: async () => ({ rawText: 'ok' }) };
+    const leanctx = { callTool: async () => ({ rawText: 'ctx ok' }) };
+    const result = (await procedureApplyTool(
+      { procedure_id: p.id, repo: process.cwd(), approved: true },
+      {
+        procedureStore: store,
+        procedureFillArgs: async () => ({ path: 'src/procedure/store.ts' }),
+        procedureSerena: serena,
+        procedureLeanctx: leanctx,
+      },
+    )) as any;
+    expect(result.ok).toBe(true);
+    expect(result.allExecuted).toBe(true);
+    expect(result.results[0]!.executed).toBe(true);
     store.close();
   });
 });
