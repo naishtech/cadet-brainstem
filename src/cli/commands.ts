@@ -5,6 +5,7 @@ import { configCommand } from './commands/config';
 import { dashboardCommand } from './commands/dashboard';
 import { doctorCommand } from './commands/doctor';
 import { hookRemindCommand } from './commands/hook-remind';
+import { hookProcedureReviewCommand } from './commands/hook-procedure-review';
 import { hookRedirectCommand } from './commands/hook-redirect';
 import {
   hookPostToolCommand,
@@ -39,6 +40,7 @@ export const COMMANDS: readonly CliCommand[] = [
   telemetryCommand,
   hooksCommand,
   hookRemindCommand,
+  hookProcedureReviewCommand,
   hookRedirectCommand,
   hookSessionStartCommand,
   hookUserPromptCommand,

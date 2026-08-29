@@ -74,6 +74,23 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
 - In-agent flow complete: `classify` → `procedure_review` (see diff) →
   user approves → `procedure_apply` (applies + records).
 
+## Agent-loop review hook (DONE) — `hook-procedure-review`
+
+- PreToolUse hook: when the agent calls `procedure_apply` without `approved:true`,
+  it DENIES and returns the concrete reviewable diff(s) for the write steps
+  (built via `buildReviewText`), so the change is surfaced to the user before
+  anything is applied. With `approved:true` (user confirmed), it ALLOWS. Safe
+  no-op (allow) for every other tool.
+- Registered as `cadet-brainstem hook-procedure-review`; tested
+  (`test/hook-procedure-review.test.ts`): allow for other tools, allow with
+  approval, deny with diff, deny unknown procedure.
+
+## Still to do (next)
+
+- Wire the hook into the actual VS Code hooks config (`.vscode/hooks.json` /
+  mcp config) so it runs automatically in the agent loop; an automated end-to-end
+  agent-loop test.
+
 ## Apply-side diff-check (DONE)
 
 - `executeProcedure` now captures the expected post-apply content (from
@@ -83,11 +100,6 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
   "applied content differs from reviewed diff" / "verification unsupported").
 - Best-effort: a diff-computation failure never blocks the write itself.
 - Tests: applied match → verified true; applied differs → verified false.
-
-## Still to do (next)
-
-- Surfacing the review prompt in the actual agent loop (a hook that pauses for
-  user approval before `procedure_apply`).
 
 ## MCP `procedure_review` tool (DONE)
 
@@ -99,12 +111,6 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
 - So the in-agent flow is: `classify` → matched write procedure flagged in
   `procedures_review` → cloud LLM calls `procedure_review` to get the concrete
   diff → user approves → apply (CLI `procedure run --yes` or review-gated run).
-
-## Still to do (next)
-
-- A dedicated `procedure_apply` MCP tool (approve + apply a reviewed write
-  in-agent), and an automated diff-check on the apply side. Currently applying
-  a reviewed change is via the CLI `procedure run` (y/n or `--yes`).
 
 ## Review-diff tool (DONE) — `src/procedure/review.ts`
 
