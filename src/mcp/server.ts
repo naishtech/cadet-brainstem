@@ -48,7 +48,7 @@ import {
   resolveProjectRootFor,
   type Memory,
 } from '../memory';
-import { ProcedureStore, type Procedure } from '../procedure';
+import { isWriteStep, ProcedureStore, type Procedure } from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -471,6 +471,23 @@ export interface ClassifyArgs {
   request_id?: string;
 }
 
+/**
+ * Review guidance for matched procedures that mutate the repo (task 49). The
+ * cloud LLM must not auto-execute these — it should present the change for
+ * approval via the review gate.
+ */
+function compileProcedureReviews(
+  procedures: Procedure[],
+): Array<{ triggerPattern: string; steps: Procedure['steps']; note: string }> {
+  return procedures
+    .filter((p) => p.riskTier === 'requires_review' || p.steps.some((s) => isWriteStep(s)))
+    .map((p) => ({
+      triggerPattern: p.triggerPattern,
+      steps: p.steps,
+      note: 'Mutates the repo. Do NOT auto-execute — present the proposed change for user approval before running (review gate).',
+    }));
+}
+
 /** `classify` — classify a task with the local LLM, pick the strategy. */
 export async function classifyTool(
   args: ClassifyArgs,
@@ -572,6 +589,7 @@ export async function classifyTool(
     degraded: outcome.degraded,
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
     ...(procedures !== undefined ? { procedures } : {}),
+    ...(procedures !== undefined ? { procedures_review: compileProcedureReviews(procedures) } : {}),
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };

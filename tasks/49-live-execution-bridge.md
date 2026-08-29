@@ -65,9 +65,19 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
 
 ## Still to do (next)
 
-- **Hook/agent integration**: surface the review gate to the cloud LLM so
-  matched write procedures present a change for approval in the agent loop.
-  (The CLI command is done; an in-agent review flow is the remaining piece.)
+- Wire a dedicated review MCP tool / agent flow that, for an approved write,
+  returns the concrete diff/proposal and applies it — currently `classify`
+  flags write procedures (below); applying a reviewed change is manual via
+  `procedure run --yes`.
+
+## Agent-level review integration (DONE)
+
+- `classify` now returns a `procedures_review` field alongside `procedures`:
+  for every matched procedure that is `requires_review` or contains a write
+  step, it lists `{ triggerPattern, steps, note }` with
+  "Mutates the repo. Do NOT auto-execute — present the proposed change for
+  user approval before running." This tells the cloud LLM to use the review
+  gate rather than auto-running writes.
 
 ## Acceptance
 

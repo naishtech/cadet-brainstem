@@ -108,4 +108,25 @@ describe('procedure matcher (repeatable)', () => {
     expect(result.procedures).toEqual([]);
     store.close();
   });
+
+  it('classifyTool includes review guidance for write procedures (review gate)', async () => {
+    const store = seededStore();
+    store.seedProcedure({
+      triggerPattern: 'Replace content in a file',
+      keywords: ['replace', 'content', 'edit', 'write'],
+      steps: [{ service: 'serena', tool: 'replace_content', args: {} }],
+      riskTier: 'requires_review',
+    });
+    const result = (await classifyTool(
+      { task: 'replace content in a file' },
+      { classify: stubClassify(['replace', 'content', 'edit']) as any, procedureStore: store },
+    )) as any;
+
+    expect(Array.isArray(result.procedures_review)).toBe(true);
+    expect(result.procedures_review.map((r: any) => r.triggerPattern)).toContain(
+      'Replace content in a file',
+    );
+    expect(result.procedures_review[0]!.note).toContain('Do NOT auto-execute');
+    store.close();
+  });
 });
