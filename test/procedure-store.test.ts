@@ -71,6 +71,26 @@ describe('ProcedureStore', () => {
     store.close();
   });
 
+  it('persists handoffShape when seeded and omits it when absent (task 47)', () => {
+    const { store } = openStore();
+    const withShape = store.seedProcedure({
+      triggerPattern: 'create a file',
+      keywords: ['create', 'file'],
+      steps: [{ service: 'serena', tool: 'create_text_file' }],
+      riskTier: 'requires_review',
+      handoffShape: 'To create a file, ask create_text_file {relative_path, content}.',
+    });
+    const withoutShape = store.seedProcedure({
+      triggerPattern: 'find a symbol',
+      keywords: ['find', 'symbol'],
+      steps: [{ service: 'serena', tool: 'find_symbol' }],
+      riskTier: 'auto_execute',
+    });
+    expect(store.get(withShape)!.handoffShape).toContain('create_text_file');
+    expect(store.get(withoutShape)!.handoffShape).toBeUndefined();
+    store.close();
+  });
+
   it('recordOutcome updates counters and last outcome', () => {
     const { store } = openStore();
     const id = store.seedProcedure({

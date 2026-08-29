@@ -41,6 +41,8 @@ export interface Procedure {
   keywords: string[];
   steps: ProcedureStep[];
   riskTier: RiskTier;
+  /** Optional tested instruction telling the cloud LLM how to ask the local LLM (task 47). */
+  handoffShape?: string;
   successCount: number;
   failureCount: number;
   lastUsedAt: string | null;
@@ -55,6 +57,8 @@ export interface ProcedureInput {
   triggerPattern: string;
   keywords: string[];
   steps: ProcedureStep[];
+  /** Optional tested handoff instruction to pass to the cloud LLM (task 47). */
+  handoffShape?: string;
 }
 
 /** Input for a manually-seeded procedure: risk tier is explicit. */
@@ -74,6 +78,7 @@ CREATE TABLE IF NOT EXISTS procedures (
   keywords TEXT NOT NULL,
   steps TEXT NOT NULL,
   risk_tier TEXT NOT NULL,
+  handoff_shape TEXT,
   success_count INTEGER NOT NULL DEFAULT 0,
   failure_count INTEGER NOT NULL DEFAULT 0,
   last_used_at TEXT,
@@ -85,7 +90,7 @@ CREATE TABLE IF NOT EXISTS procedures (
 `;
 
 export const PROCEDURES_COLUMNS =
-  'id, trigger_pattern, keywords, steps, risk_tier, success_count, failure_count, last_used_at, last_outcome, source, created_at, updated_at';
+  'id, trigger_pattern, keywords, steps, risk_tier, handoff_shape, success_count, failure_count, last_used_at, last_outcome, source, created_at, updated_at';
 
 /** Parse a JSON-encoded TEXT column back into an array (never throws). */
 export function parseJsonArray(value: unknown): string[] {

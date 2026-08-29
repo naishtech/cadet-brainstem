@@ -31,12 +31,17 @@ export function getDefaultProcedurePath(): string {
 }
 
 function mapRow(row: Record<string, unknown>): Procedure {
+  const handoffShape =
+    row.handoff_shape === null || row.handoff_shape === undefined
+      ? undefined
+      : String(row.handoff_shape);
   return {
     id: String(row.id),
     triggerPattern: String(row.trigger_pattern),
     keywords: parseJsonArray(row.keywords),
     steps: parseSteps(row.steps),
     riskTier: String(row.risk_tier) as Procedure['riskTier'],
+    ...(handoffShape !== undefined ? { handoffShape } : {}),
     successCount: Number(row.success_count),
     failureCount: Number(row.failure_count),
     lastUsedAt:
@@ -85,6 +90,7 @@ export class ProcedureStore {
       ).map((column) => column.name),
     );
     const additions: Array<[string, string]> = [
+      ['handoff_shape', 'ALTER TABLE procedures ADD COLUMN handoff_shape TEXT'],
       // Future column additions go here, e.g.
       // ['last_outcome', 'ALTER TABLE procedures ADD COLUMN last_outcome TEXT'],
     ];
@@ -102,6 +108,7 @@ export class ProcedureStore {
       keywords: input.keywords,
       steps: input.steps,
       riskTier: input.riskTier,
+      ...(input.handoffShape !== undefined ? { handoffShape: input.handoffShape } : {}),
       source: 'manually_seeded',
     });
   }
@@ -118,6 +125,7 @@ export class ProcedureStore {
       keywords: input.keywords,
       steps: input.steps,
       riskTier: 'requires_review',
+      ...(input.handoffShape !== undefined ? { handoffShape: input.handoffShape } : {}),
       source: 'learned_from_usage',
     });
   }
@@ -127,6 +135,7 @@ export class ProcedureStore {
     keywords: string[];
     steps: ProcedureStep[];
     riskTier: Procedure['riskTier'];
+    handoffShape?: string;
     source: Procedure['source'];
   }): string {
     const id = randomUUID();
@@ -134,8 +143,8 @@ export class ProcedureStore {
     this.db
       .prepare(
         `INSERT INTO procedures
-           (id, trigger_pattern, keywords, steps, risk_tier, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, trigger_pattern, keywords, steps, risk_tier, handoff_shape, source, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -143,6 +152,7 @@ export class ProcedureStore {
         JSON.stringify(input.keywords),
         JSON.stringify(input.steps),
         input.riskTier,
+        input.handoffShape ?? null,
         input.source,
         now,
         now,
