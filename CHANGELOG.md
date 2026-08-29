@@ -11,6 +11,18 @@ All notable changes to this project are documented in this file.
   (`.cadet-brainstem`, `.cadet/brainstem/`), env vars (`CADET_BRAINSTEM_*`),
   hook filename, MCP server key, and repo references now use the new name.
 
+### Fixed
+
+- **`stats` "Recommended vs invoked (adoption)" now matches MCP-prefixed tool
+  names** — the MCP client records server-exposed tool calls as
+  `mcp_<server>_<tool>` (e.g. `mcp_cadet-token-s_find_relevant_symbols`), while
+  the classifier's `recommended_tools` stores the bare canonical name
+  (`find_relevant_symbols`). Because the two vocabularies never joined, the
+  adoption view always showed `recommended N · invoked 0` and `recommended 0 ·
+  invoked M` on separate rows. `getCallStatsByTool()` now normalises away the
+  `mcp_<server>_` prefix, so recommended and invoked counts line up on the same
+  row (e.g. `find_relevant_symbols recommended 48 · invoked 45`).
+
 ## [0.1.27] - 2026-08-29
 
 ### Fixed

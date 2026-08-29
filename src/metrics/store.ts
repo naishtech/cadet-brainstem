@@ -126,6 +126,28 @@ export function getDefaultMetricsPath(): string {
 }
 
 /**
+ * Normalize a tool name recorded by the MCP client back to the canonical
+ * cadet tool name so adoption telemetry can be compared.
+ *
+ * The VS Code Copilot Chat MCP client records tools exposed by an MCP server
+ * with a `<server>_` prefix (`mcp_cadet-token-s_find_relevant_symbols`), while
+ * the classifier's `recommended_tools` stores the bare canonical name
+ * (`find_relevant_symbols`). Stripping the `mcp_<server>_` prefix lets the
+ * "Recommended vs invoked" view join the two vocabularies on the same row.
+ * The server name may be either cadet-token-s or cadet-brainstem, so the strip
+ * is agnostic to it.
+ */
+export function normalizeToolName(tool: string): string {
+  if (tool.startsWith('mcp_')) {
+    const secondUnderscore = tool.indexOf('_', 'mcp_'.length);
+    if (secondUnderscore !== -1) {
+      return tool.slice(secondUnderscore + 1);
+    }
+  }
+  return tool;
+}
+
+/**
  * Local SQLite metrics store (design doc §8).
  *
  * Works completely offline. Records optimisation events ONLY — by design it has
@@ -345,7 +367,8 @@ export class MetricsStore {
         `SELECT tool,
                 SUM(CASE WHEN degraded IS NULL OR degraded = 0 THEN 1 ELSE 0 END) AS calls,
                 SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded,
-                AVG(CASE WHEN degraded IS NULL OR degraded = 0 THEN latency_ms END) AS avgLatencyMs
+                SUM(CASE WHEN (degraded IS NULL OR degraded = 0) AND latency_ms IS NOT NULL THEN latency_ms END) AS latencySum,
+                SUM(CASE WHEN (degraded IS NULL OR degraded = 0) AND latency_ms IS NOT NULL THEN 1 ELSE 0 END) AS latencyCount
          FROM optimisation_events
          GROUP BY tool
          ORDER BY tool`,
@@ -354,15 +377,32 @@ export class MetricsStore {
       tool: string;
       calls: number;
       degraded: number;
-      avgLatencyMs: number | null;
+      latencySum: number | null;
+      latencyCount: number;
     }[];
-    return rows.map((row) => ({
-      tool: String(row.tool),
-      calls: Number(row.calls),
-      degraded: Number(row.degraded),
-      avgLatencyMs:
-        row.avgLatencyMs === null ? null : Math.round(Number(row.avgLatencyMs)),
-    }));
+    // Merge rows whose MCP-prefixed names normalise to the same canonical tool,
+    // recomputing average latency from the per-row latency sum/count.
+    const merged = new Map<
+      string,
+      { calls: number; degraded: number; latencySum: number; latencyCount: number }
+    >();
+    for (const row of rows) {
+      const tool = normalizeToolName(String(row.tool));
+      const cur = merged.get(tool) ?? { calls: 0, degraded: 0, latencySum: 0, latencyCount: 0 };
+      cur.calls += Number(row.calls);
+      cur.degraded += Number(row.degraded);
+      cur.latencySum += row.latencySum ?? 0;
+      cur.latencyCount += Number(row.latencyCount);
+      merged.set(tool, cur);
+    }
+    return [...merged.entries()]
+      .map(([tool, v]) => ({
+        tool,
+        calls: v.calls,
+        degraded: v.degraded,
+        avgLatencyMs: v.latencyCount > 0 ? Math.round(v.latencySum / v.latencyCount) : null,
+      }))
+      .sort((a, b) => a.tool.localeCompare(b.tool));
   }
 
   close(): void {
