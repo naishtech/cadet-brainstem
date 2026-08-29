@@ -276,8 +276,12 @@ export async function executeProcedure(
           base.verified = false;
           base.verifyNote = 'file missing after apply';
         } else {
+          // Normalize line endings (CRLF vs LF) — Serena writes per the
+          // project config, which on Windows is CRLF; the reviewed content
+          // uses \n. Compare the normalized text.
+          const normalize = (s: string): string => s.replace(/\r\n/g, '\n');
           const actual = readFileSync(file, 'utf8');
-          base.verified = actual === expectedAfter;
+          base.verified = normalize(actual) === normalize(expectedAfter);
           base.verifyNote = base.verified
             ? 'applied matches reviewed diff'
             : 'applied content differs from reviewed diff';

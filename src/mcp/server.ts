@@ -607,6 +607,8 @@ export async function procedureApplyTool(
         approved: r.approved,
         output: r.output,
         error: r.error,
+        ...(r.verified !== undefined ? { verified: r.verified } : {}),
+        ...(r.verifyNote !== undefined ? { verifyNote: r.verifyNote } : {}),
       })),
     };
   } finally {
