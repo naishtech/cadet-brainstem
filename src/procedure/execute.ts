@@ -127,6 +127,7 @@ export interface ExecuteProcedureOptions {
 export async function defaultFillArgs(
   step: ProcedureStep,
   repoPath: string,
+  handoffShape?: string,
 ): Promise<Record<string, unknown>> {
   const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
   // Lazily import to avoid a hard classifier dependency at module load.
@@ -143,6 +144,7 @@ export async function defaultFillArgs(
           content: [
             `You must call the ${step.service} tool "${step.tool}" on the project at ${repoPath}.`,
             hints.length > 0 ? `The tool expects these parameters: ${hints.join(', ')}.` : '',
+            handoffShape !== undefined ? `Handoff shape (the tested format to follow): ${handoffShape}` : '',
             step.args && Object.keys(step.args).length > 0
               ? `The intended parameter values are: ${JSON.stringify(step.args)}. Use them exactly.`
               : '',
@@ -198,7 +200,11 @@ export async function executeProcedure(
   options: ExecuteProcedureOptions,
 ): Promise<ExecuteProcedureResult> {
   const repoPath = options.repoPath;
-  const fillArgs = options.fillArgs ?? defaultFillArgs;
+  // Default arg-filler threads the procedure's stored handoffShape so the local
+  // LLM fills args using the tested format (task 47 wiring).
+  const fillArgs =
+    options.fillArgs ??
+    ((step: ProcedureStep, repoPath: string) => defaultFillArgs(step, repoPath, procedure.handoffShape));
   const approve = options.approve ?? (() => false); // default: deny writes
   const recordOutcome = options.recordOutcome ?? true;
   const store = options.store ?? new ProcedureStore();
