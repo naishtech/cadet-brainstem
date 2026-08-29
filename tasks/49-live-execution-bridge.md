@@ -65,10 +65,25 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
 
 ## Still to do (next)
 
-- Wire a dedicated review MCP tool / agent flow that, for an approved write,
-  returns the concrete diff/proposal and applies it — currently `classify`
-  flags write procedures (below); applying a reviewed change is manual via
-  `procedure run --yes`.
+- Expose `buildWriteDiff` as an **MCP tool** (`procedure_review`) so the cloud LLM
+  can fetch a concrete diff for a write before approval, in-agent. Currently the
+  diff is available via the CLI (`procedure review`) and the module.
+
+## Review-diff tool (DONE) — `src/procedure/review.ts`
+
+- `buildWriteDiff(step, args, repoPath)` returns a concrete, reviewable proposal
+  `{ path, kind: create|edit, before, after, diff, unsupported }` for a write
+  step — WITHOUT applying. Supports `replace_content` (literal) and
+  `create_text_file`; other write tools are `unsupported` (apply directly under
+  review).
+- Simple unified-ish diff (common prefix/suffix as context, changed middle as
+  `-`/`+`).
+- CLI: `cadet-brainstem procedure review <id> --repo <path>` prints the diff(s)
+  for a procedure's write steps.
+- Tests: `test/procedure-review.test.ts` (create diff, replace diff, unsupported).
+- Note: with a generic (empty-args) procedure, the local LLM fills placeholder
+  args, so the caller must supply concrete target args (handoff shape) for the
+  diff to resolve to a real file.
 
 ## Agent-level review integration (DONE)
 

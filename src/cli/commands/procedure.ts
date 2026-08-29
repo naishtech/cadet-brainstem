@@ -10,7 +10,14 @@
  * gated behind a y/n review prompt (unless `--yes` auto-approves them).
  */
 import { createInterface } from 'node:readline';
-import { ProcedureStore, executeProcedure, getDefaultProcedurePath } from '../../procedure';
+import {
+  buildWriteDiff,
+  defaultFillArgs,
+  executeProcedure,
+  getDefaultProcedurePath,
+  isWriteStep,
+  ProcedureStore,
+} from '../../procedure';
 import type { CliCommand } from '../types';
 
 function openStore(): ProcedureStore {
@@ -43,6 +50,47 @@ function promptApprove(label: string): Promise<boolean> {
       resolve(/^y(es)?$/i.test(answer.trim()));
     });
   });
+}
+
+async function reviewProcedure(id: string, repo: string): Promise<number> {
+  const store = openStore();
+  const procedure = store.get(id);
+  if (procedure === null) {
+    console.error(`No procedure with id "${id}".`);
+    store.close();
+    return 1;
+  }
+  const writeSteps = procedure.steps.filter((s) => isWriteStep(s));
+  console.log(`Procedure: ${procedure.triggerPattern} [${procedure.riskTier}]`);
+  console.log(`Repo:      ${repo}`);
+  if (writeSteps.length === 0) {
+    console.log('No write steps — nothing to review.');
+    store.close();
+    return 0;
+  }
+  console.log(`Write steps to review: ${writeSteps.length}\n`);
+  let ok = true;
+  for (const step of writeSteps) {
+    console.log(`===== ${step.service}:${step.tool} =====`);
+    try {
+      const args = await defaultFillArgs(step, repo);
+      console.log(`args: ${JSON.stringify(args)}`);
+      const proposal = buildWriteDiff(step, args, repo);
+      if (proposal.unsupported) {
+        console.log('(no diff available for this tool — review the args above)');
+      } else {
+        console.log(`path: ${proposal.path}  kind: ${proposal.kind}`);
+        console.log('--- diff ---');
+        console.log(proposal.diff);
+      }
+    } catch (err) {
+      ok = false;
+      console.log(`failed to build diff: ${(err as Error).message}`);
+    }
+    console.log('');
+  }
+  store.close();
+  return ok ? 0 : 1;
 }
 
 async function runProcedure(id: string, repo: string, yes: boolean): Promise<number> {
@@ -85,15 +133,15 @@ async function runProcedure(id: string, repo: string, yes: boolean): Promise<num
 export const procedureCommand: CliCommand = {
   name: 'procedure',
   description:
-    'List procedures and run one against a real repo via the execution bridge (list|run)',
+    'List procedures and run/review one against a real repo via the execution bridge (list|run|review)',
   usage:
-    'cadet-brainstem procedure <list|run <id> --repo <path> [--yes]>',
+    'cadet-brainstem procedure <list|run <id> --repo <path> [--yes]|review <id> --repo <path>>',
   run(args: readonly string[]): Promise<number> | number {
     const sub = args[0];
     if (sub === 'list') {
       return listProcedures();
     }
-    if (sub === 'run') {
+    if (sub === 'run' || sub === 'review') {
       const rest = args.slice(1);
       let id: string | undefined;
       let repo: string | undefined;
@@ -106,12 +154,15 @@ export const procedureCommand: CliCommand = {
         else if (id === undefined && current !== undefined && !current.startsWith('--')) id = current;
       }
       if (id === undefined || repo === undefined) {
-        console.error('Usage: cadet-brainstem procedure run <id> --repo <path> [--yes]');
+        console.error(`Usage: cadet-brainstem procedure ${sub} <id> --repo <path>${sub === 'run' ? ' [--yes]' : ''}`);
         return 1;
+      }
+      if (sub === 'review') {
+        return reviewProcedure(id, repo);
       }
       return runProcedure(id, repo, yes);
     }
-    console.error('Usage: cadet-brainstem procedure <list|run <id> --repo <path> [--yes]>');
+    console.error('Usage: cadet-brainstem procedure <list|run <id> --repo <path> [--yes]|review <id> --repo <path>>');
     return 1;
   },
 };
