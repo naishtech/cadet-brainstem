@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -145,6 +146,61 @@ describe('executeProcedure (review gate)', () => {
     expect(result.results[0]!.error).toContain('Error executing tool');
     const stored = store.get(procedure.id);
     expect(stored!.failureCount).toBe(1);
+    store.close();
+  });
+
+  it('verifies applied write matches the reviewed diff (apply-side diff-check)', async () => {
+    const store = new ProcedureStore(dbPath);
+    const procedure = seed(store, {
+      steps: [{ service: 'serena', tool: 'replace_content', args: { relative_path: 'a.ts', needle: 'x', repl: 'y', mode: 'literal' } }],
+    });
+    writeFileSync(join(dir, 'a.ts'), 'const x = 1;\n', 'utf8');
+    const serena = {
+      callTool: vi.fn(async ({ arguments: a }: any) => {
+        const p = join(dir, a.relative_path);
+        const content = readFileSync(p, 'utf8').split(a.needle).join(a.repl);
+        writeFileSync(p, content, 'utf8');
+        return { rawText: 'OK' };
+      }),
+    };
+    const result = await executeProcedure(procedure, {
+      repoPath: dir,
+      serena,
+      approve: async () => true,
+      fillArgs: async () => ({ relative_path: 'a.ts', needle: 'x', repl: 'y', mode: 'literal' }),
+      store,
+    });
+    expect(result.results[0]!.executed).toBe(true);
+    expect(result.results[0]!.verified).toBe(true);
+    expect(result.results[0]!.verifyNote).toContain('matches');
+    expect(readFileSync(join(dir, 'a.ts'), 'utf8')).toBe('const y = 1;\n');
+    store.close();
+  });
+
+  it('reports verified:false when applied content differs from the reviewed diff', async () => {
+    const store = new ProcedureStore(dbPath);
+    const procedure = seed(store, {
+      steps: [{ service: 'serena', tool: 'replace_content', args: { relative_path: 'a.ts', needle: 'x', repl: 'y', mode: 'literal' } }],
+    });
+    writeFileSync(join(dir, 'a.ts'), 'const x = 1;\n', 'utf8');
+    const serena = {
+      // Simulate the tool writing something DIFFERENT than reviewed.
+      callTool: vi.fn(async ({ arguments: a }: any) => {
+        const p = join(dir, a.relative_path);
+        writeFileSync(p, 'const z = 9;\n', 'utf8');
+        return { rawText: 'OK' };
+      }),
+    };
+    const result = await executeProcedure(procedure, {
+      repoPath: dir,
+      serena,
+      approve: async () => true,
+      fillArgs: async () => ({ relative_path: 'a.ts', needle: 'x', repl: 'y', mode: 'literal' }),
+      store,
+    });
+    expect(result.results[0]!.executed).toBe(true);
+    expect(result.results[0]!.verified).toBe(false);
+    expect(result.results[0]!.verifyNote).toContain('differs');
     store.close();
   });
 });

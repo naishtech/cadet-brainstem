@@ -13,7 +13,10 @@
  * Outcomes are recorded in the `ProcedureStore` track record so `findMatches`
  * can rank proven procedures higher.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ProcedureStore, type Procedure, type ProcedureStep } from './index';
+import { buildWriteDiff } from './review';
 
 /** Serena/LeanCTX tools that mutate files (or shell) — these need review. */
 const WRITE_TOOLS = new Set([
@@ -85,6 +88,9 @@ export interface ExecuteStepResult {
   approved?: boolean;
   output?: string;
   error?: string;
+  /** Apply-side diff check: true when the applied file matches the reviewed diff. */
+  verified?: boolean;
+  verifyNote?: string;
 }
 
 export interface ExecuteProcedureResult {
@@ -225,6 +231,8 @@ export async function executeProcedure(
 
     try {
       const args = await fillArgs(step, repoPath);
+      let expectedAfter: string | null = null;
+      let verifyPath = '';
       if (write) {
         base.verdict = 'review';
         base.approved = Boolean(await approve(step, args));
@@ -234,6 +242,16 @@ export async function executeProcedure(
           pendingReview.push(base);
           options.onStep?.(base);
           continue;
+        }
+        // Capture the expected post-apply content from the reviewed diff BEFORE
+        // mutating. Best-effort: a diff-computation failure must not block the write.
+        try {
+          const proposal = buildWriteDiff(step, args, repoPath);
+          expectedAfter = proposal.after;
+          verifyPath = proposal.path;
+        } catch {
+          expectedAfter = null;
+          verifyPath = '';
         }
       }
       const adapter = step.service === 'serena' ? localSerena : step.service === 'leanctx' ? localLean : undefined;
@@ -248,6 +266,22 @@ export async function executeProcedure(
       base.output = output;
       if (/Error executing tool/.test(output)) {
         base.error = output;
+      } else if (write) {
+        // Apply-side diff check: does the applied file match what was reviewed?
+        const file = join(repoPath, verifyPath);
+        if (expectedAfter === null) {
+          base.verified = false;
+          base.verifyNote = 'verification unsupported';
+        } else if (!existsSync(file)) {
+          base.verified = false;
+          base.verifyNote = 'file missing after apply';
+        } else {
+          const actual = readFileSync(file, 'utf8');
+          base.verified = actual === expectedAfter;
+          base.verifyNote = base.verified
+            ? 'applied matches reviewed diff'
+            : 'applied content differs from reviewed diff';
+        }
       }
     } catch (err) {
       base.error = (err as Error).message;
