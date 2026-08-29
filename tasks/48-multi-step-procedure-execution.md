@@ -74,6 +74,19 @@ goal/context/constraints as intent, and the final state is checked by `pass_fail
 Still to try (option 2): one prompt with the whole task list and let the local
 LLM plan/order the calls itself (harder — measures planning, not just execution).
 
+**Option 2 — CONFIRMED too.** Added `plan_task_list` mode to the harness: the
+model gets the whole task in one prompt plus the available tools and emits an
+ordered JSON plan (`[{service, tool, arguments}]`); the harness executes it.
+- **032** `create_text_file → replace_content` self-planned — PASS. The model
+  planned the correct order (create then edit). It over-specified paths when
+  planning independently, so the harness applies sandbox-relative path
+  normalization (same as option 3) — with that, the planned sequence works.
+
+**Bottom line:** the local LLM (qwen3:4b) can both **follow** an explicit task
+list (option 3, 028–031) and **plan** a small sequence from a task description
+(option 2, 032), given path normalization for its over-specified paths. This is
+enough to feed real multi-step procedures (task 44) for execution.
+
 ## Sourcing the candidates
 
 - Re-open the mined conversation archive (`src/mine/`, `scripts/mine-*.ts`).

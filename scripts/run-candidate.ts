@@ -48,6 +48,8 @@ interface Candidate {
   fixture?: string;
   pass_fail?: PassFail;
   tool_template?: { service?: string; tool?: string; syntax?: string };
+  /** Task-48 option 2: give the LLM the whole task list and let it plan the sequence. */
+  plan_task_list?: boolean;
 }
 
 /** Objective check spec — evaluated in Node (cross-platform, no shell). */
@@ -200,6 +202,80 @@ async function runLeanToolStep(
   if (!plan.arguments) return '(no arguments proposed)';
   const result = await adapter.callTool({ tool, arguments: plan.arguments, cwd });
   return `${result.rawText}\nDEGRADED: ${result.degraded}`.slice(0, 1200);
+}
+
+/**
+ * Task-48 option 2: give the local LLM the WHOLE task list in one prompt and
+ * let it plan the ordered sequence of tool calls itself. The model outputs a
+ * JSON plan (array of {service, tool, arguments}); the harness executes each
+ * call in order via the adapters. End-state pass/fail validates the result.
+ */
+async function runPlanTaskList(
+  candidate: Candidate,
+  sandbox: string,
+  serenaAdapter: SerenaAdapter | null,
+  leanAdapter: LeanCtxAdapter | null,
+): Promise<{ ok: boolean; executed: Array<{ service: string; tool: string; output: string }> }> {
+  const tools = candidate.steps
+    .map((s) => `${s.service}:${s.tool} — ${s.tool_template?.syntax ?? `{ <args for ${s.tool}> }`}`)
+    .join('\n');
+  const plan = (await llmJson(
+    [
+      `Task: ${candidate.goal ?? candidate.trigger_pattern}`,
+      candidate.context ? `Context: ${candidate.context}` : '',
+      candidate.constraints?.length ? `Constraints:\n${candidate.constraints.map((c) => `- ${c}`).join('\n')}` : '',
+      `You must accomplish the task by issuing an ordered SEQUENCE of tool calls. Decide the order yourself.`,
+      `Available tools (service:tool — syntax):\n${tools}`,
+      `The project working directory is: ${sandbox}`,
+      `Respond with JSON: {"plan": [{"service": "<serena|leanctx>", "tool": "<tool>", "arguments": {...}}, ...]}. Use ONLY the available tools; give each tool its correct arguments.`,
+    ].join('\n'),
+    { type: 'object', properties: { plan: { type: 'array', items: { type: 'object' } } }, required: ['plan'] },
+  )) as { plan?: Array<{ service?: string; tool?: string; arguments?: Record<string, unknown> }> };
+  if (!plan.plan || plan.plan.length === 0) return { ok: false, executed: [] };
+
+  const executed: Array<{ service: string; tool: string; output: string }> = [];
+  for (const call of plan.plan) {
+    if (!call.tool) continue;
+    const entry = { service: call.service ?? '?', tool: call.tool, output: '' };
+    // Normalize path-like args to be sandbox-relative (the 4b model over-specifies
+    // paths when planning independently, e.g. prefixes the sandbox dir).
+    const args = { ...(call.arguments ?? {}) };
+    for (const [k, v] of Object.entries(args)) {
+      if (typeof v === 'string' && (k === 'file' || k === 'path' || k === 'relative_path' || k === 'file_name')) {
+        args[k] = reduceToSandboxRelative(v, sandbox);
+      }
+    }
+    try {
+      if (call.service === 'serena' && serenaAdapter) {
+        const r = await serenaAdapter.callTool({ tool: call.tool, arguments: args, cwd: sandbox });
+        entry.output = r.rawText.slice(0, 500);
+        if (/Error executing tool/.test(r.rawText) || r.degraded) { executed.push(entry); return { ok: false, executed }; }
+      } else if (call.service === 'leanctx' && leanAdapter) {
+        const r = await leanAdapter.callTool({ tool: call.tool, arguments: args, cwd: sandbox });
+        entry.output = r.rawText.slice(0, 500);
+        if (r.degraded) { executed.push(entry); return { ok: false, executed }; }
+      } else {
+        entry.output = `(no adapter for service '${call.service ?? '?'}')`;
+        executed.push(entry);
+        return { ok: false, executed };
+      }
+    } catch (err) {
+      entry.output = `error: ${(err as Error).message}`;
+      executed.push(entry);
+      return { ok: false, executed };
+    }
+    executed.push(entry);
+  }
+  return { ok: true, executed };
+}
+
+/** Reduce a path-like arg to a sandbox-relative path (strip drive + sandbox prefix). */
+function reduceToSandboxRelative(value: string, sandbox: string): string {
+  let v = String(value).replace(/^[A-Za-z]:[\\/]/, '').replace(/[\\/]+/g, '/');
+  const relSandbox = sandbox.replace(/^[A-Za-z]:[\\/]/, '').replace(/[\\/]+/g, '/').replace(/\/+$/, '');
+  if (v.startsWith(relSandbox + '/')) v = v.slice(relSandbox.length + 1);
+  v = v.replace(/^[\\/]+/, '');
+  return v;
 }
 
 /**
@@ -382,6 +458,16 @@ async function main(): Promise<void> {
     : null;
 
   let stepFailed = false;
+  if (candidate.plan_task_list) {
+    // Task-48 option 2: one prompt with the whole task list; the model plans
+    // the ordered sequence of tool calls itself.
+    const res = await runPlanTaskList(candidate, sandbox, serenaAdapter, leanAdapter);
+    for (const e of res.executed) {
+      process.stdout.write(`\n-- planned ${e.service}:${e.tool} --\n`);
+      console.log('output:', e.output.slice(0, 500));
+    }
+    stepFailed = !res.ok;
+  } else {
   for (const step of candidate.steps) {
     process.stdout.write(`\n-- step ${step.service}:${step.tool} --\n`);
     const template = step.tool_template ?? candidate.tool_template;
@@ -421,6 +507,7 @@ async function main(): Promise<void> {
       stepFailed = true;
       console.log(`step failed: ${(err as Error).message}`);
     }
+  }
   }
 
   // Objective pass/fail from the candidate's check — NOT the LLM's self-report.
