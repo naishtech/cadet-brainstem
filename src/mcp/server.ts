@@ -48,6 +48,7 @@ import {
   resolveProjectRootFor,
   type Memory,
 } from '../memory';
+import { ProcedureStore, type Procedure } from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -263,6 +264,8 @@ export interface McpDeps {
   memory?: MemoryStore;
   /** Default project scope for memory operations (defaults to cwd-derived). */
   defaultProject?: string;
+  /** Injectable procedure store; defaults to a live ProcedureStore when omitted. */
+  procedureStore?: ProcedureStore;
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
 }
@@ -526,6 +529,28 @@ export async function classifyTool(
   const classification = synthesizePlans(outcome.classification);
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  // Procedure handoff: match routine, read-only tasks against the local LLM's
+  // procedures so the cloud LLM can hand off execution instead of doing it
+  // itself. Best-effort — never breaks classification if the store is missing.
+  let procedures: Procedure[] | undefined;
+  try {
+    const store =
+      deps.procedureStore ??
+      new ProcedureStore();
+    try {
+      procedures = store.findMatches(classification.entities, args.task);
+    } finally {
+      if (deps.procedureStore === undefined) {
+        try {
+          store.close();
+        } catch (e) {
+          void e;
+        }
+      }
+    }
+  } catch (err) {
+    d.log(`procedure lookup skipped: ${(err as Error).message}`);
+  }
   return {
     // Token-saving steering fields first so the cloud LLM reads them first.
     response_policy: compileResponsePolicy(classification.response_policy),
@@ -546,6 +571,7 @@ export async function classifyTool(
     ),
     degraded: outcome.degraded,
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
+    ...(procedures !== undefined ? { procedures } : {}),
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };

@@ -1,14 +1,42 @@
-# 46 — `procedures` table + local-LLM procedure matcher
+# 44 — `procedures` table + local-LLM procedure matcher
 
-**Status:** Planned (not yet implemented)
+**Status:** Implemented (read-only scope; pending review/commit)
 **Source:** Real historical coding-conversation archive / new capability — local-LLM procedure matcher.
 
 ## Goal
 
-Add a new capability: a local-LLM-driven **procedure matcher** that recognizes
-routine, previously-seen tasks (e.g. "stage changes, commit, open PR") and
-either executes them autonomously (low-risk only) or hands off to the cloud
-LLM/human with a suggested procedure attached.
+Add a capability where the **local LLM executes routine tasks on behalf of the
+cloud LLM**. The `classify` response returns a **list of matched procedures**
+that the local LLM can execute; the cloud LLM hands off to those procedures
+instead of doing the work itself. Procedures match the **local services the
+local LLM has** (LeanCTX, Serena, RTK). Scope is **read-only** for now.
+
+## Architecture (revised)
+
+1. Cloud LLM calls `classify(request)`.
+2. The classifier extracts `entities` and runs the procedure matcher
+   (`ProcedureStore.findMatches`).
+3. The `classify` response includes a **`procedures`** field — matched
+   procedures the local LLM can execute.
+4. The cloud LLM **hands off** to the local LLM, which executes the procedures.
+5. Each `Procedure.step` maps to a **local service/capability** invocation, not
+   a generic shell command.
+
+Capability model — each step references one of the local services:
+
+```ts
+interface ProcedureStep {
+  service: 'leanctx' | 'serena' | 'rtk';
+  tool: string;   // e.g. ctx_read, find_symbol, compress_command_output
+  args?: Record<string, unknown>; // resolved at execution time
+}
+```
+
+All local services are read-only / context-reduction:
+
+- `leanctx` → `leanctx_call` (LeanCTX): read/compile/compress context.
+- `serena` → `serena_call` (Serena): symbol search / referencing / rename.
+- `rtk` → `compress_command_output` (RTK): compress noisy command output.
 
 ## Naming rule (critical)
 
@@ -49,9 +77,9 @@ EXISTS` + `migrate()` pattern (same as `src/memory/store.ts`). Columns:
 | --- | --- | --- |
 | `id` | TEXT PRIMARY KEY | generated, e.g. UUID |
 | `trigger_pattern` | TEXT NOT NULL | short human-readable description, e.g. "stage all changes, commit, open PR" |
-| `keywords` | TEXT NOT NULL | JSON array of match terms, e.g. `["commit","pr","push","stage"]` |
-| `steps` | TEXT NOT NULL | JSON ordered list of commands/actions; support simple templating for variables (e.g. commit messages) |
-| `risk_tier` | TEXT NOT NULL | enum `auto_execute` \| `requires_review` \| `never_auto` |
+| `keywords` | TEXT NOT NULL | JSON array of match terms, e.g. `["compress","context","ctx"]` |
+| `steps` | TEXT NOT NULL | JSON ordered list of `ProcedureStep` capability invocations (`{service, tool, args?}`); no arbitrary shell commands |
+| `risk_tier` | TEXT NOT NULL | enum `auto_execute` \| `requires_review` \| `never_auto` — read-only tasks default to `auto_execute` |
 | `success_count` | INTEGER NOT NULL DEFAULT 0 | |
 | `failure_count` | INTEGER NOT NULL DEFAULT 0 | |
 | `last_used_at` | TEXT | nullable timestamp |
@@ -86,29 +114,37 @@ for "Memory"), same DB connection pattern. Methods:
 Export from `src/procedure/index.ts`. Do **not** export through the memory
 module.
 
-### 3. Seed script — `scripts/seed-procedures.ts`
+### 3. Wire procedures into the `classify` response — `src/mcp/server.ts`
 
-3–5 starting procedures at conservative risk tiers, using **real tool names
-registered in this system** (verified registered MCP tools: `classify`,
-`optimize_context`, `find_relevant_symbols`, `serena_call`, `serena_list_tools`,
-`leanctx_call`, `leanctx_list_tools`, `compress_command_output`,
-`chat_memory_store`, `activate_project`, `assess_context`; git is available via
-the terminal). Do not invent tool names. Suggested seed set:
+In the `classify` handler, after classification, run
+`ProcedureStore.findMatches(classification.entities, task)` and include the
+matched procedures in the response as a `procedures` field (alongside
+`tool_plan` / `entities` / `strategy`). This is the handoff list the cloud LLM
+returns to the local LLM for execution.
 
-- Read-only: "check git status/diff" → `risk_tier: auto_execute`.
-- Read-only: "run test suite and report results" → `risk_tier: auto_execute`.
-- Reversible local: "run formatter" → `risk_tier: requires_review` (promote
-  later once the track record justifies it).
-- Requires review: "stage, commit, open PR" → `risk_tier: requires_review`
-  (likely should stay non-auto because PR creation leaves the local machine —
-  **flag this tier for the user to confirm rather than deciding**).
+### 4. Seed script — `scripts/seed-procedures.ts`
+
+3–5 **read-only** starting procedures at conservative risk tiers, using **real
+local services** (LeanCTX `leanctx_call`, Serena `serena_call`, RTK
+`compress_command_output`). Do not invent tool names. Suggested seed set (all
+read-only, `risk_tier: auto_execute` unless noted):
+
+- "Gather and compress relevant context" → `[leanctx_call(ctx_read)]`
+- "Find symbols for a change" → `[serena_call(find_symbol)]`
+- "Compress a command's output" → `[compress_command_output(...)]`
+- "Summarize project structure" → `[leanctx_call(ctx_explore)]`
+
+No git commit / PR / formatter entries — those are write actions the local
+read-only services cannot execute. `risk_tier` for all read-only steps is
+`auto_execute`; anything later discovered that touches state defaults to
+`requires_review`.
 
 ## Review checkpoints (do not skip)
 
 - **Step 1 report:** confirm DB reuse finding with the user before building.
-- **Seed risk_tier confirmation:** do **not** finalize/write seed data until the
-  user confirms the `risk_tier` assignments, especially anything marked
-  `requires_review`.
+- **Seed risk_tier confirmation:** read-only seed entries default to
+  `auto_execute`; do **not** add any non-read-only (write/state-changing) step
+  without the user confirming its `risk_tier`.
 
 ## Acceptance
 
@@ -118,6 +154,8 @@ the terminal). Do not invent tool names. Suggested seed set:
 - `ProcedureStore` implements `findMatches`, `recordOutcome`, `seedProcedure`,
   `logObservedUsage` with correct semantics (unproven procedures still returned,
   `logObservedUsage` forced to `requires_review`).
-- Seed script uses only real registered tool names and starts conservative.
-- No "memory" naming leak into the procedures module; seed data not written
-  until risk tiers are user-confirmed.
+- `Procedure.steps` use only real local services (`leanctx`, `serena`, `rtk`);
+  no arbitrary shell-command or write-action steps.
+- The `classify` response includes a `procedures` handoff list.
+- Seed script is read-only and starts conservative; no "memory" naming leak;
+  no non-read-only seed data without user confirmation.
