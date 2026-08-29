@@ -68,6 +68,26 @@ cadet-brainstem wrap --shell bash -- grep -r foo
 > large/noisy output — small output is pass-through (0 tokens saved). The
 > command is passed through as-is (it is not validated).
 
+## 4. Hooks (Copilot Chat PreToolUse)
+
+`.vscode/copilot-hooks.json` registers PreToolUse hooks that run in the agent
+loop (this file is local/untracked — copy it into your repo):
+
+- **`remind`** — when the agent makes many consecutive raw code-search/read
+  calls (`Bash`, `grep_search`, `read_file`), deny with a nudge to use
+  `leanctx_call` instead:
+  `cadet-brainstem hook-remind --tool leanctx_call`
+- **`procedure-review`** — when the agent calls `procedure_apply` (applies a
+  write procedure) **without** `approved: true`, deny and return the concrete
+  reviewable diff so the change is surfaced for user approval. With
+  `approved: true` it allows. Other tools pass through:
+  `cadet-brainstem hook-procedure-review`
+
+The write-review flow is: `classify` flags a write procedure →
+`procedure_review` shows the diff → user approves →
+`procedure_apply {approved: true}` applies (and `executeProcedure` verifies the
+applied file matches the reviewed diff).
+
 ## Users of other repos
 
 Copy `.vscode/mcp.json` (and the relevant `AGENTS.md` section / task) into your
