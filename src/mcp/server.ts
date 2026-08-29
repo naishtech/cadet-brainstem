@@ -48,7 +48,13 @@ import {
   resolveProjectRootFor,
   type Memory,
 } from '../memory';
-import { isWriteStep, ProcedureStore, type Procedure } from '../procedure';
+import {
+  buildWriteDiff,
+  defaultFillArgs,
+  isWriteStep,
+  ProcedureStore,
+  type Procedure,
+} from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -469,6 +475,67 @@ export async function optimizeContextTool(
 export interface ClassifyArgs {
   task: string;
   request_id?: string;
+}
+
+export interface ProcedureReviewArgs {
+  procedure_id: string;
+  repo: string;
+  step_index?: number;
+}
+
+/**
+ * `procedure_review` — build a concrete, reviewable diff for the write step(s)
+ * of a matched procedure against a real repo, WITHOUT applying anything. The
+ * cloud LLM reviews this before approving a write (task 49).
+ */
+export async function procedureReviewTool(
+  args: ProcedureReviewArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.procedure_id !== 'string' || typeof args.repo !== 'string') {
+    throw new Error('procedure_review requires string "procedure_id" and "repo"');
+  }
+  const store = deps.procedureStore ?? new ProcedureStore();
+  try {
+    const procedure = store.get(args.procedure_id);
+    if (procedure === null) {
+      return { procedure_id: args.procedure_id, error: `no procedure with id "${args.procedure_id}"` };
+    }
+    const writeSteps = procedure.steps
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => isWriteStep(s));
+    const targets =
+      args.step_index !== undefined
+        ? writeSteps.filter(({ i }) => i === args.step_index)
+        : writeSteps;
+    const reviews: Array<Record<string, unknown>> = [];
+    for (const { s } of targets) {
+      try {
+        const filled = await defaultFillArgs(s, args.repo);
+        const proposal = buildWriteDiff(s, filled, args.repo);
+        reviews.push({
+          service: s.service,
+          tool: s.tool,
+          args: filled,
+          path: proposal.path,
+          kind: proposal.kind,
+          unsupported: proposal.unsupported,
+          ...(proposal.unsupported ? {} : { diff: proposal.diff, before: proposal.before, after: proposal.after }),
+        });
+      } catch (err) {
+        reviews.push({ service: s.service, tool: s.tool, error: (err as Error).message });
+      }
+    }
+    return { procedure_id: args.procedure_id, repo: args.repo, reviews };
+  } finally {
+    if (deps.procedureStore === undefined) {
+      try {
+        store.close();
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
 }
 
 /**
@@ -1277,6 +1344,21 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'procedure_review',
+    description:
+      'Build a concrete, reviewable diff for the write step(s) of a matched procedure against a real repo, WITHOUT applying anything. ' +
+      'Use before approving a write procedure so the user sees exactly what will change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        procedure_id: { type: 'string', description: 'The procedure id to review.' },
+        repo: { type: 'string', description: 'Absolute repo path to review against.' },
+        step_index: { type: 'number', description: 'Optional 0-based write-step index; omit to review all write steps.' },
+      },
+      required: ['procedure_id', 'repo'],
+    },
+  },
+  {
     name: 'optimize_context',
     description:
       'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
@@ -1571,6 +1653,12 @@ export async function handleToolCall(
     switch (name) {
       case 'classify':
         result = await classifyTool(args as unknown as ClassifyArgs, deps);
+        break;
+      case 'procedure_review':
+        result = await procedureReviewTool(
+          args as unknown as ProcedureReviewArgs,
+          deps,
+        );
         break;
       case 'optimize_context':
         result = await optimizeContextTool(

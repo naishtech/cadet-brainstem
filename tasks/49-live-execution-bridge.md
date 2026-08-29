@@ -63,11 +63,22 @@ Injected fake adapters + `fillArgs` (no Ollama). Covers:
   recorded); write step with `--yes` invoked the tool. Path args are normalized
   to repo-relative; `defaultFillArgs` prompts with per-tool param hints.
 
+## MCP `procedure_review` tool (DONE)
+
+- New MCP tool `procedure_review {procedure_id, repo, step_index?}` — loads the
+  procedure, fills each write step's args, builds its diff via `buildWriteDiff`,
+  and returns `{ reviews: [{service, tool, args, path, kind, unsupported, diff, before, after}] }`
+  WITHOUT applying. Registered in `TOOL_DEFS` + `handleToolCall`; exported from
+  `src/mcp`.
+- So the in-agent flow is: `classify` → matched write procedure flagged in
+  `procedures_review` → cloud LLM calls `procedure_review` to get the concrete
+  diff → user approves → apply (CLI `procedure run --yes` or review-gated run).
+
 ## Still to do (next)
 
-- Expose `buildWriteDiff` as an **MCP tool** (`procedure_review`) so the cloud LLM
-  can fetch a concrete diff for a write before approval, in-agent. Currently the
-  diff is available via the CLI (`procedure review`) and the module.
+- A dedicated `procedure_apply` MCP tool (approve + apply a reviewed write
+  in-agent), and an automated diff-check on the apply side. Currently applying
+  a reviewed change is via the CLI `procedure run` (y/n or `--yes`).
 
 ## Review-diff tool (DONE) — `src/procedure/review.ts`
 

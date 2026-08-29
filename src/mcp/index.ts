@@ -12,6 +12,7 @@ export {
   leanctxCallTool,
   leanctxListToolsTool,
   optimizeContextTool,
+  procedureReviewTool,
   runMcpServer,
   serenaCallTool,
   serenaListToolsTool,

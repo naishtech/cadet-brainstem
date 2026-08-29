@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { classifyTool } from '../src/mcp';
+import { classifyTool, procedureReviewTool } from '../src/mcp';
 import { ProcedureStore } from '../src/procedure';
 
 const tempDirs: string[] = [];
@@ -127,6 +127,28 @@ describe('procedure matcher (repeatable)', () => {
       'Replace content in a file',
     );
     expect(result.procedures_review[0]!.note).toContain('Do NOT auto-execute');
+    store.close();
+  });
+
+  it('procedure_review returns no reviews for a read-only procedure (no Ollama call)', async () => {
+    const store = seededStore();
+    const p = store.list()[0]!;
+    const result = (await procedureReviewTool(
+      { procedure_id: p.id, repo: process.cwd() },
+      { procedureStore: store },
+    )) as any;
+    expect(Array.isArray(result.reviews)).toBe(true);
+    expect(result.reviews).toEqual([]);
+    store.close();
+  });
+
+  it('procedure_review returns an error for an unknown procedure', async () => {
+    const store = seededStore();
+    const result = (await procedureReviewTool(
+      { procedure_id: 'does-not-exist', repo: process.cwd() },
+      { procedureStore: store },
+    )) as any;
+    expect(result.error).toContain('does-not-exist');
     store.close();
   });
 });
