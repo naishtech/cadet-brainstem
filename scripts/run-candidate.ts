@@ -166,6 +166,41 @@ async function runLeanStep(step: CandidateStep): Promise<string> {
 }
 
 /**
+ * Execute a real LeanCTX tool call with parameters filled by the local LLM,
+ * mirroring the Serena template-driven path. LeanCTX paths are absolute or
+ * resolved relative to the session cwd, so args are passed through verbatim
+ * (no basename normalization).
+ */
+async function runLeanToolStep(
+  step: CandidateStep,
+  cwd: string,
+  adapter: LeanCtxAdapter,
+  template?: { tool?: string; syntax?: string },
+  intent?: { goal?: string; context?: string; constraints?: string[]; args?: Record<string, unknown> },
+): Promise<string> {
+  const tool = template?.tool ?? step.tool;
+  const syntax = template?.syntax ?? `{ <parameters for ${tool}> }`;
+  const intended = intent?.args && Object.keys(intent.args).length > 0 ? JSON.stringify(intent.args) : '';
+  const plan = (await llmJson(
+    [
+      `Task: ${intent?.goal ?? step.tool}`,
+      intent?.context ? `Context: ${intent.context}` : '',
+      intent?.constraints?.length ? `Constraints:\n${intent.constraints.map((c) => `- ${c}`).join('\n')}` : '',
+      intended ? `The intended parameter values are: ${intended}. Fill the tool's parameters using exactly these values.` : '',
+      `You must call the LeanCTX tool "${tool}".`,
+      `LeanCTX ${tool} syntax: ${syntax}`,
+      `The project working directory is: ${cwd}`,
+      `Return ONLY the fields named in the syntax — no extra fields.`,
+      `Fill in the parameters. Respond with JSON: {"arguments": {<parameters>}}.`,
+    ].filter(Boolean).join('\n'),
+    { type: 'object', properties: { arguments: { type: 'object' } }, required: ['arguments'] },
+  )) as { arguments?: Record<string, unknown> };
+  if (!plan.arguments) return '(no arguments proposed)';
+  const result = await adapter.callTool({ tool, arguments: plan.arguments, cwd });
+  return `${result.rawText}\nDEGRADED: ${result.degraded}`.slice(0, 1200);
+}
+
+/**
  * Execute a Serena write step inside the sandbox (safe — the sandbox is a
  * scratch dir, cleaned after the run). The LLM supplies the file path + content.
  */
@@ -339,6 +374,8 @@ async function main(): Promise<void> {
       console.log('serena activate_project failed:', (err as Error).message);
     }
   }
+  // Shared LeanCtxAdapter for template-driven leanctx steps (reuse one MCP session).
+  const leanAdapter = candidate.tool_template?.service === 'leanctx' ? new LeanCtxAdapter() : null;
 
   let stepFailed = false;
   for (const step of candidate.steps) {
@@ -347,6 +384,16 @@ async function main(): Promise<void> {
       if (step.service === 'rtk') {
         const out = await runRtkStep(step, sandbox);
         console.log('output:', out.slice(0, 500));
+      } else if (step.service === 'leanctx' && leanAdapter && candidate.tool_template?.tool) {
+        // Template-driven: real LeanCTX tool call with LLM-filled parameters.
+        const out = await runLeanToolStep(step, sandbox, leanAdapter, candidate.tool_template, {
+          ...(candidate.goal !== undefined ? { goal: candidate.goal } : {}),
+          ...(candidate.context !== undefined ? { context: candidate.context } : {}),
+          ...(candidate.constraints !== undefined ? { constraints: candidate.constraints } : {}),
+          ...(step.args !== undefined && Object.keys(step.args).length > 0 ? { args: step.args } : {}),
+        });
+        console.log('output:', out.slice(0, 600));
+        if (/Error executing tool|DEGRADED: true/.test(out)) stepFailed = true;
       } else if (step.service === 'leanctx') {
         const out = await runLeanStep(step);
         console.log('output:', out.slice(0, 300));
@@ -383,6 +430,11 @@ async function main(): Promise<void> {
   // Close the Serena session so the server exits and releases file locks.
   try {
     await serenaAdapter?.close();
+  } catch {
+    /* best-effort */
+  }
+  try {
+    await leanAdapter?.close();
   } catch {
     /* best-effort */
   }

@@ -1,0 +1,27 @@
+{
+  "id": "cand-020",
+  "trigger_pattern": "Get the project tree via LeanCTX",
+  "keywords": ["tree", "structure", "project", "leanctx", "explore"],
+  "goal": "Use the LeanCTX ctx_tree tool to list the project's directory tree",
+  "context": "The sandbox is the project root for the LeanCTX session; the local LLM has the LeanCTX ctx_tree tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_tree tool",
+    "Provide the exact parameters: {path}",
+    "path = '.' (the project root)"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_tree",
+    "syntax": "{ \"path\": \"<dir>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_tree", "args": { "path": "." } }
+  ],
+  "source_conversation_id": "manual-leanctx-tree",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_tree tool executed without error and returned the tree"
+  }
+}

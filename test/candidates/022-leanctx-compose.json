@@ -1,0 +1,27 @@
+{
+  "id": "cand-022",
+  "trigger_pattern": "Compose context for a task via LeanCTX",
+  "keywords": ["compose", "context", "task", "gather", "leanctx"],
+  "goal": "Use the LeanCTX ctx_compose tool to gather relevant context for the task 'summarize the functions in this project'",
+  "context": "The sandbox is the project root for the LeanCTX session; the local LLM has the LeanCTX ctx_compose tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_compose tool",
+    "Provide the exact parameters: {task, path}",
+    "task = 'summarize the functions in this project', path = '.'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_compose",
+    "syntax": "{ \"task\": \"<task>\", \"path\": \"<dir>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_compose", "args": { "task": "summarize the functions in this project", "path": "." } }
+  ],
+  "source_conversation_id": "manual-leanctx-compose",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_compose tool executed without error"
+  }
+}

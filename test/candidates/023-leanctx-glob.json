@@ -1,0 +1,27 @@
+{
+  "id": "cand-023",
+  "trigger_pattern": "Glob files via LeanCTX",
+  "keywords": ["glob", "files", "pattern", "leanctx", "find"],
+  "goal": "Use the LeanCTX ctx_glob tool to find all .cpp files in the project",
+  "context": "The sandbox is the project root for the LeanCTX session; it contains src/main.cpp; the local LLM has the LeanCTX ctx_glob tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_glob tool",
+    "Provide the exact parameters: {pattern, path}",
+    "pattern = '**/*.cpp', path = '.'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_glob",
+    "syntax": "{ \"pattern\": \"<glob>\", \"path\": \"<dir>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_glob", "args": { "pattern": "**/*.cpp", "path": "." } }
+  ],
+  "source_conversation_id": "manual-leanctx-glob",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_glob tool executed without error and returned matching files"
+  }
+}

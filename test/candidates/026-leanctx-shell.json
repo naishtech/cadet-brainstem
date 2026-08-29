@@ -1,0 +1,27 @@
+{
+  "id": "cand-026",
+  "trigger_pattern": "Run a shell command via LeanCTX",
+  "keywords": ["shell", "command", "git", "leanctx", "run"],
+  "goal": "Use the LeanCTX ctx_shell tool to run the command 'git status' in the project",
+  "context": "The sandbox is the project root for the LeanCTX session (a fresh git repo with fixture files); the local LLM has the LeanCTX ctx_shell tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_shell tool",
+    "Provide the exact parameters: {command, cwd}",
+    "command = 'git status', cwd = '.'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_shell",
+    "syntax": "{ \"command\": \"<shell command>\", \"cwd\": \"<dir>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_shell", "args": { "command": "git status", "cwd": "." } }
+  ],
+  "source_conversation_id": "manual-leanctx-shell",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_shell tool executed the command without error"
+  }
+}

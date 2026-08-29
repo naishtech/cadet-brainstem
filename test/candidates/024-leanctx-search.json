@@ -1,0 +1,27 @@
+{
+  "id": "cand-024",
+  "trigger_pattern": "Search for a pattern via LeanCTX",
+  "keywords": ["search", "pattern", "regex", "leanctx", "find"],
+  "goal": "Use the LeanCTX ctx_search tool with a regex action to search for the pattern 'add' in the project",
+  "context": "The sandbox is the project root for the LeanCTX session; the local LLM has the LeanCTX ctx_search tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_search tool",
+    "Provide the exact parameters: {action, pattern, path}",
+    "action = 'regex', pattern = 'add', path = '.'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_search",
+    "syntax": "{ \"action\": \"regex\", \"pattern\": \"<regex>\", \"path\": \"<dir>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_search", "args": { "action": "regex", "pattern": "add", "path": "." } }
+  ],
+  "source_conversation_id": "manual-leanctx-search",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_search tool executed without error"
+  }
+}
