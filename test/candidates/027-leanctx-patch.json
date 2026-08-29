@@ -6,17 +6,17 @@
   "context": "The sandbox is the project root for the LeanCTX session; src/main.cpp contains 'return a + b;' inside add(); the local LLM has the LeanCTX ctx_patch tool",
   "constraints": [
     "Use ONLY the LeanCTX ctx_patch tool",
-    "Provide the exact parameters: {op, path, find, replace}",
-    "op = 'replace_unique', path = 'src/main.cpp', find = 'return a + b;', replace = 'return a + b + 1;'"
+    "Provide the exact parameters: {op, path, old_text, new_text}",
+    "op = 'replace_unique', path = 'src/main.cpp', old_text = 'return a + b;', new_text = 'return a + b + 1;'"
   ],
   "tool_template": {
     "service": "leanctx",
     "tool": "ctx_patch",
-    "syntax": "{ \"op\": \"<op>\", \"path\": \"<path>\", \"find\": \"<text>\", \"replace\": \"<text>\" }"
+    "syntax": "{ \"op\": \"<op>\", \"path\": \"<path>\", \"old_text\": \"<text>\", \"new_text\": \"<text>\" }"
   },
   "fixture": "test/fixtures/serena-project",
   "steps": [
-    { "service": "leanctx", "tool": "ctx_patch", "args": { "op": "replace_unique", "path": "src/main.cpp", "find": "return a + b;", "replace": "return a + b + 1;" } }
+    { "service": "leanctx", "tool": "ctx_patch", "args": { "op": "replace_unique", "path": "src/main.cpp", "old_text": "return a + b;", "new_text": "return a + b + 1;" } }
   ],
   "source_conversation_id": "manual-leanctx-patch",
   "difficulty": "hard",
