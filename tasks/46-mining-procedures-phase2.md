@@ -1,94 +1,70 @@
-# 45 — Mine procedures from conversation history — Phase 2: seed/eval split and matcher accuracy testing
+# 46 — Procedure candidates: progressive local-LLM performance tests
 
 **Status:** Planned (not yet implemented)
 **Phase:** Two-phase effort (Phase 2 = this task; Phase 1 = task 45)
-**Prerequisite:** Phase 1 (task 45) completed and the candidate batch **human-approved** for promotion. Also requires the live `procedures` table and `ProcedureStore.findMatches` (task 44).
+**Prerequisite:** Phase 1 (task 45) complete — the agent-curated candidate test
+files exist and a batch is approved.
 
 ## Goal
 
-Take the human-approved candidate set from Phase 1, split it into a **seed set**
-(promoted into the live `procedures` table) and a **held-out eval set**, then
-build a matcher-accuracy script to measure whether the seed set actually matches
-real requests. Produce a comparison table and a precision/recall-style summary
-for manual review.
+Take the **agent-curated candidate test files** from Phase 1 and use them to
+measure how the **local LLM performs at executing procedures**, progressively
+from easy to hard. The local LLM does **no mining** — it only *executes* the
+curated candidates. Each candidate becomes a test; we run them in difficulty
+order and record pass/fail per candidate.
 
 ## Scope & hard constraints
 
-- **Only proceed after Phase 1's output is reviewed and a batch approved for
-  promotion.** Do not auto-promote.
-- Split the **approved candidates**, not the full raw conversation set.
-- Mined data starts conservative: seed entries are tagged
-  `source: "mined_from_history"` and their `risk_tier` defaults to
-  `"requires_review"` — **never** default any mined procedure to
-  `auto_execute` without explicit user confirmation.
-- The eval set is held out and **not** written into the live `procedures` table.
+- The local LLM is used **only for execution**, never for mining/classification
+  (mining is the agent's job in Phase 1).
+- Nothing is auto-promoted. Any candidate promoted to the live `procedures`
+  table starts `risk_tier: "requires_review"` — never `auto_execute` without
+  explicit user confirmation.
 - This task must not touch the memory service or its data (same constraint as
   task 45).
 
-## Prerequisites / dependencies
-
-- Phase 1 (task 45) complete and approved.
-- The live `procedures` table and `ProcedureStore.findMatches` are referenced
-  as "built earlier". **They do not currently exist in `src/`** (verified: no
-  `procedures` / `ProcedureStore` / `findMatches` symbols). `findMatches` and
-  the `procedures` schema must exist before Step 2.2 can run — build them first
-  if they are not present.
-
 ## Deliverables
 
-### 1. Step 2.1 — Split into seed set and held-out eval set (`mine split`)
+### 1. Progressive test harness (`mine test`)
 
-Split the approved candidates:
-- **Seed set** (majority): promote into the live `procedures` table, tagged
-  `source: "mined_from_history"`, with `risk_tier` defaulted to
-  `"requires_review"` **regardless** of what the extraction step suggested
-  (mined data starts conservative, same as `learned_from_usage` entries). Do
-  not default anything to `auto_execute` without explicit user confirmation.
-- **Eval set** (held-out portion): kept **separate**, **not** written into the
-  live `procedures` table. This set represents real requests we can test
-  matching against.
-- Split method: **chronological** (e.g. most recent N weeks of approved
-  candidates), or a **random sample** if timestamps are unreliable.
-- Report the split sizes and the method used.
+Read the candidate test files (e.g. `test/candidates/*.json`, each with
+`trigger_pattern`, `keywords`, `steps`, `difficulty`, `source_conversation_id`).
 
-### 2. Step 2.2 — Matcher accuracy script (`mine evaluate`)
+- Order candidates by `difficulty`: **easy → medium → hard**.
+- For each candidate, run the **local LLM** on the task and let it drive the
+  relevant tool (RTK via `compress_command_output`, LeanCTX, Serena) to execute
+  the steps. This is the same handoff path used in production (task 44's
+  `findMatches` → `procedures` handoff).
+- Record per candidate: did it run? did it produce the expected output? pass /
+  fail / degraded (tool or model unavailable).
 
-Using `ProcedureStore.findMatches` (prerequisite), run each eval-set candidate's
-original request text (or its extracted entities, if that is what is available)
-through the same entity-extraction + matching pipeline used in production. For
-each eval item record:
-- Did it match any seeded procedure?
-- If yes, was it the **correct** match (i.e. does the matched procedure's steps
-  look like what actually happened in that conversation)? Because "correct"
-  requires judgment, produce a **human-reviewable comparison table** rather than
-  fully automated scoring:
-  - eval request → matched procedure → actual steps taken.
-- Clearly flag **false positives** (matched something wrong) and **false
-  negatives** (should have matched, didn't).
+### 2. Report — `mine test --report`
 
-### 3. Step 2.3 — Summary report
+Output a per-candidate table:
+- candidate id / trigger pattern / difficulty
+- tool used (RTK / LeanCTX / Serena)
+- result: pass | fail | degraded
+- any output/summary
 
-- A precision/recall-style summary **if judgeable automatically**, plus the
-  full comparison table for manual review.
-- This determines whether the seed set is good enough to trust, or needs
-  another round of curation before being relied on for any auto-execute
-  behavior.
+Plus a summary across difficulty tiers (easy/medium/hard pass rates). This tells
+us what the local LLM can reliably execute, and where it needs a better model or
+better candidates.
 
-### 4. CLI wiring
+### 3. CLI wiring
 
-- Add `cadet-brainstem mine split` and `cadet-brainstem mine evaluate`
-  subcommands, registered in `src/cli/commands.ts`.
+- Add `cadet-brainstem mine test` (and `--report`) subcommand, registered in
+  `src/cli/commands.ts`.
 - Update `test/cli.test.ts` command list.
-- Tests: `test/mine-split.test.ts`, `test/mine-evaluate.test.ts`.
+- Tests: `test/mine-candidates.test.ts` (candidate-file loading + difficulty
+  ordering + report building).
 
 ## Acceptance
 
 - `npm run typecheck`, `npm run lint`, `npm test` all pass.
-- `mine split` reports split sizes + method; seed entries carry
-  `source: "mined_from_history"` and `risk_tier: "requires_review"`; eval set is
-  held out and never written to the live table.
-- `mine evaluate` produces the comparison table (eval request → matched
-  procedure → actual steps) and flags false positives / false negatives.
-- `mine evaluate` emits a precision/recall summary where auto-judgeable.
+- `mine test` runs candidates in difficulty order (easy → hard), executes each
+  with the local LLM driving the tool, and records pass/fail/degraded.
+- `mine test --report` prints the per-candidate table + per-tier pass rates.
+- Candidate files are loaded from `test/candidates/*.json`.
 - Nothing is promoted or defaulted to `auto_execute` without explicit user
   approval.
+

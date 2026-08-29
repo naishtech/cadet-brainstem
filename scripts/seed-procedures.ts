@@ -1,11 +1,11 @@
 /**
- * Seed the `procedures` table with initial, READ-ONLY procedures (task 44,
- * revised design).
+ * Seed the `procedures` table with initial procedures (task 44).
  *
  * The local LLM executes these on behalf of the cloud LLM. Every step maps to a
  * real local service the local LLM has: LeanCTX (`leanctx`), Serena
- * (`serena`), RTK (`rtk`). All are read-only / context-reduction — no shell
- * write actions, no git commit/PR. All seed tiers are `auto_execute`.
+ * (`serena`), RTK (`rtk`). Read-only steps default to `auto_execute`; Serena
+ * edit steps (`replace_lines` / `delete_lines` / `insert_lines`) are write
+ * actions and default to `requires_review`.
  *
  * Usage:
  *   npm run seed:procedures            # seed only if the table is empty
@@ -37,6 +37,12 @@ const SEED: SeedProcedureInput[] = [
     keywords: ['structure', 'explore', 'tree', 'layout', 'project'],
     steps: [{ service: 'leanctx', tool: 'ctx_explore', args: {} }],
     riskTier: 'auto_execute', // read-only, local
+  },
+  {
+    triggerPattern: 'Replace a block of lines in a file',
+    keywords: ['replace', 'lines', 'edit', 'file', 'insert', 'delete'],
+    steps: [{ service: 'serena', tool: 'replace_lines', args: {} }],
+    riskTier: 'requires_review', // write action via Serena
   },
 ];
 

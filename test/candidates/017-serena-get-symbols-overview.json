@@ -1,0 +1,27 @@
+{
+  "id": "cand-017",
+  "trigger_pattern": "Get a symbols overview of a file via Serena",
+  "keywords": ["symbols", "overview", "project", "query", "serena"],
+  "goal": "Use the Serena get_symbols_overview tool to list the symbols defined in src/main.cpp",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has the Serena get_symbols_overview tool",
+  "constraints": [
+    "Use ONLY the Serena get_symbols_overview tool",
+    "Provide the exact parameters: {relative_path}",
+    "relative_path = 'src/main.cpp'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "get_symbols_overview",
+    "syntax": "{ \"relative_path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "get_symbols_overview", "args": { "relative_path": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-serena-get-symbols-overview",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the get_symbols_overview tool executed without error"
+  }
+}

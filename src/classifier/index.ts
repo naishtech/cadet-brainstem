@@ -9,11 +9,14 @@ export {
   OllamaClassifier,
   assess,
   buildAssessPrompt,
+  buildExtractPrompt,
   buildPrompt,
   classify,
+  extractProcedure,
   isDerivedClassifierModel,
   isModelAvailable,
   isOllamaAvailable,
+  resolveBaseModel,
 } from './ollama';
 export {
   CLASSIFICATION_JSON_SCHEMA,
@@ -22,6 +25,7 @@ export {
   DEFAULT_TOOL_PLAN,
   LANGUAGE_STANDARD_DESCRIPTIONS,
   LANGUAGE_STANDARDS,
+  PROCEDURE_EXTRACTION_JSON_SCHEMA,
   RECOMMENDED_TOOL_INTENTS,
   RESPONSE_POLICY_DIRECTIVES,
   RESPONSE_POLICY_KEYS,
@@ -34,7 +38,9 @@ export {
   languageStandardSchema,
   parseClassification,
   parseContextAssessment,
+  parseProcedureExtraction,
   precisionSchema,
+  procedureExtractionSchema,
   responsePolicyKeySchema,
   riskSchema,
   taskTypeSchema,
@@ -79,4 +85,5 @@ export type {
   ToolName,
   ToolPlan,
   Verdict,
+  ProcedureExtraction,
 } from './schema';

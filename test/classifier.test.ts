@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
   CLASSIFICATION_JSON_SCHEMA,
   ClassificationValidationError,
@@ -36,6 +36,12 @@ function requestBodyOf(fetchMock: Mock): Record<string, unknown> {
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   return JSON.parse(init.body as string) as Record<string, unknown>;
 }
+
+beforeEach(() => {
+  // Isolate from any real user config so loadConfig() returns defaults for
+  // tests that don't set their own config explicitly.
+  process.env.CADET_BRAINSTEM_CONFIG = join(tmpdir(), `cts-class-noconfig-${process.pid}.yaml`);
+});
 
 afterEach(() => {
   delete process.env.CADET_BRAINSTEM_CONFIG;

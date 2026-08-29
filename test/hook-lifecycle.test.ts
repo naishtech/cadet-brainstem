@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -27,9 +27,20 @@ beforeEach(() => {
   metricsPath = join(dir, 'metrics.db');
   memoryPath = join(dir, 'memory.db');
   stateDir = join(dir, 'hooks');
+  // Isolate auto-build tests from any real user config: write a controlled
+  // config where the base model (qwen3:1.7b) is present and the derived
+  // fast-classifier is absent, so the auto-build path is exercised.
+  const cfgFile = join(dir, 'config.yaml');
+  writeFileSync(
+    cfgFile,
+    'classifier:\n  model: qwen3:1.7b\n  derived_model: fast-classifier:latest\n  auto_build: true\n',
+    'utf8',
+  );
+  process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
 });
 
 afterEach(() => {
+  delete process.env.CADET_BRAINSTEM_CONFIG;
   rmSync(dir, { recursive: true, force: true });
 });
 

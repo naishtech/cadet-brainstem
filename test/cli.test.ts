@@ -39,6 +39,7 @@ describe('command routing', () => {
       'doctor',
       'stats',
       'memory',
+      'mine',
       'dashboard',
       'config',
       'telemetry',

@@ -1,6 +1,6 @@
 # 44 — `procedures` table + local-LLM procedure matcher
 
-**Status:** Implemented (read-only scope; pending review/commit)
+**Status:** Implemented (pending review/commit)
 **Source:** Real historical coding-conversation archive / new capability — local-LLM procedure matcher.
 
 ## Goal
@@ -9,9 +9,9 @@ Add a capability where the **local LLM executes routine tasks on behalf of the
 cloud LLM**. The `classify` response returns a **list of matched procedures**
 that the local LLM can execute; the cloud LLM hands off to those procedures
 instead of doing the work itself. Procedures match the **local services the
-local LLM has** (LeanCTX, Serena, RTK). Scope is **read-only** for now.
+local LLM has** (LeanCTX, Serena, RTK).
 
-## Architecture (revised)
+## Architecture
 
 1. Cloud LLM calls `classify(request)`.
 2. The classifier extracts `entities` and runs the procedure matcher
@@ -27,16 +27,25 @@ Capability model — each step references one of the local services:
 ```ts
 interface ProcedureStep {
   service: 'leanctx' | 'serena' | 'rtk';
-  tool: string;   // e.g. ctx_read, find_symbol, compress_command_output
+  tool: string;   // e.g. ctx_read, find_symbol, replace_lines, compress_command_output
   args?: Record<string, unknown>; // resolved at execution time
 }
 ```
 
-All local services are read-only / context-reduction:
+Services and their tools (NOT limited to read-only):
 
 - `leanctx` → `leanctx_call` (LeanCTX): read/compile/compress context.
-- `serena` → `serena_call` (Serena): symbol search / referencing / rename.
+- `serena` → `serena_call` (Serena): **read and edit** — `find_symbol`,
+  `find_referencing_symbols`, `rename_symbol`, and edit tools `replace_lines`,
+  `delete_lines`, `insert_lines`. The adapter is a generic passthrough, so any
+  tool Serena exposes is usable.
 - `rtk` → `compress_command_output` (RTK): compress noisy command output.
+
+Risk tier reflects the step's effect:
+- Read-only steps (LeanCTX/RTK, Serena `find_*`) → `auto_execute`.
+- Serena edit steps (`replace_lines` / `delete_lines` / `insert_lines`) are
+  write actions → **`requires_review`** by default (never auto without a proven
+  track record).
 
 ## Naming rule (critical)
 
@@ -124,27 +133,27 @@ returns to the local LLM for execution.
 
 ### 4. Seed script — `scripts/seed-procedures.ts`
 
-3–5 **read-only** starting procedures at conservative risk tiers, using **real
-local services** (LeanCTX `leanctx_call`, Serena `serena_call`, RTK
-`compress_command_output`). Do not invent tool names. Suggested seed set (all
-read-only, `risk_tier: auto_execute` unless noted):
+Starting procedures at conservative risk tiers, using **real local services**
+(LeanCTX `leanctx_call`, Serena `serena_call`, RTK
+`compress_command_output`). Do not invent tool names. Suggested seed set:
 
-- "Gather and compress relevant context" → `[leanctx_call(ctx_read)]`
-- "Find symbols for a change" → `[serena_call(find_symbol)]`
-- "Compress a command's output" → `[compress_command_output(...)]`
-- "Summarize project structure" → `[leanctx_call(ctx_explore)]`
+- "Gather and compress relevant context" → `[leanctx_call(ctx_read)]` — `auto_execute`
+- "Find symbols for a change" → `[serena_call(find_symbol)]` — `auto_execute`
+- "Compress a command's output" → `[compress_command_output(...)]` — `auto_execute`
+- "Summarize project structure" → `[leanctx_call(ctx_explore)]` — `auto_execute`
+- "Replace a block of lines in a file" → `[serena_call(replace_lines)]` — `requires_review` (write action)
 
-No git commit / PR / formatter entries — those are write actions the local
-read-only services cannot execute. `risk_tier` for all read-only steps is
-`auto_execute`; anything later discovered that touches state defaults to
-`requires_review`.
+Read-only steps default to `auto_execute`; Serena edit steps
+(`replace_lines` / `delete_lines` / `insert_lines`) default to
+`requires_review`. No git commit / PR / deploy steps — those leave the local
+machine and are `never_auto` (and not covered by these local tools).
 
 ## Review checkpoints (do not skip)
 
 - **Step 1 report:** confirm DB reuse finding with the user before building.
 - **Seed risk_tier confirmation:** read-only seed entries default to
-  `auto_execute`; do **not** add any non-read-only (write/state-changing) step
-  without the user confirming its `risk_tier`.
+  `auto_execute`; Serena edit steps default to `requires_review`; do **not**
+  set any write step to `auto_execute` without the user confirming it.
 
 ## Acceptance
 
@@ -155,7 +164,8 @@ read-only services cannot execute. `risk_tier` for all read-only steps is
   `logObservedUsage` with correct semantics (unproven procedures still returned,
   `logObservedUsage` forced to `requires_review`).
 - `Procedure.steps` use only real local services (`leanctx`, `serena`, `rtk`);
-  no arbitrary shell-command or write-action steps.
+  no arbitrary shell-command steps. Serena steps may be write actions
+  (`replace_lines` / `delete_lines` / `insert_lines`) at `requires_review`.
 - The `classify` response includes a `procedures` handoff list.
-- Seed script is read-only and starts conservative; no "memory" naming leak;
-  no non-read-only seed data without user confirmation.
+- Seed script starts conservative; no "memory" naming leak; no write step set
+  to `auto_execute` without user confirmation.

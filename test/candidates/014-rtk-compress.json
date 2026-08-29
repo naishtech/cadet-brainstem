@@ -1,0 +1,22 @@
+{
+  "id": "cand-014",
+  "trigger_pattern": "Compress a command's output via RTK",
+  "keywords": ["compress", "rtk", "command", "output", "summarize"],
+  "goal": "Pick a shell command for the project and use RTK to compress its output",
+  "context": "The sandbox is a fresh git repo containing a small tree of files; the local LLM has an rtk tool that runs a shell command and returns its RTK-compressed output",
+  "constraints": [
+    "Use ONLY the rtk tool (compress_command_output)",
+    "Pick a concrete, safe read-only shell command (e.g. git status or ls)",
+    "Run it through rtk so its output is compressed"
+  ],
+  "fixture": "test/fixtures/tree",
+  "steps": [
+    { "service": "rtk", "tool": "compress_command_output", "args": {} }
+  ],
+  "source_conversation_id": "manual-rtk-compress",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the rtk step executed a command and produced compressed output without error"
+  }
+}

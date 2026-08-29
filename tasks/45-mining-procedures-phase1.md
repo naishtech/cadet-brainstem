@@ -1,4 +1,4 @@
-# 44 — Mine procedures from conversation history — Phase 1: inventory, extract, scrub, stage for review
+# 45 — Mine procedures from conversation history — Phase 1: inventory, parse, scrub, curate (agent), stage for review
 
 **Status:** Planned (not yet implemented)
 **Phase:** Two-phase effort (Phase 1 = this task; Phase 2 = task 46)
@@ -74,11 +74,14 @@ Files (suggested):
 
 Scan `C:\Users\User\AppData\Roaming\Code\User\workspaceStorage` and report,
 without extracting:
-- How many workspace folders / `state.vscdb` files exist.
-- The **actual** format conversation data is stored in within each: SQLite
-  schema, key names, whether rows are JSON blobs, plain text, etc. This must be
-  **confirmed by reading the DB**, not assumed.
-- A rough count of distinct conversations found and the date range covered.
+- How many workspace folders exist.
+- How many `chatSessions/*.jsonl` conversation files exist (the conversations
+  are **JSONL**, one file per chat session — NOT stored in `state.vscdb`).
+- The **actual** JSONL record format: `kind:0` session metadata (`sessionId`,
+  `creationDate`), `kind:1` property patches, `kind:2` message records (`v` is
+  either a request array or a session snapshot with a `requests` array).
+- A rough count of distinct conversations found and the date range covered
+  (from each file's `kind:0` `creationDate`).
 
 The inventory command must stop here and print findings. **Do not proceed to
 extraction until the format is confirmed and reported** (the user sanity-checks
@@ -86,17 +89,19 @@ before processing everything).
 
 ### 3. Step 1.2 — Parse into normalized intermediate format (`mine parse`)
 
-Extract each conversation into:
+Parse each `chatSessions/*.jsonl` file into:
 ```json
 {
   "source_workspace": "<folder name>",
-  "conversation_id": "<id or generated hash>",
+  "conversation_id": "<sessionId or generated hash>",
   "timestamp": "<when>",
   "messages": [ { "role": "user"|"assistant", "text": "..." } ]
 }
 ```
-Write to `procedure_candidates_raw` (the intermediate store). This is **not**
-the final `procedures` table.
+Extract messages from `kind:2` records: user text from each request's
+`message.text`, assistant text from its `response.message`. Write to
+`procedure_candidates_raw` (the intermediate store). This is **not** the final
+`procedures` table.
 
 ### 4. Step 1.3 — Scrub for secrets BEFORE further processing (`mine scrub`)
 
@@ -113,18 +118,20 @@ Run a redaction pass over every extracted message in `procedure_candidates_raw`
 - The redacted result is what feeds Step 1.4; do not extract procedures from
   unredacted content.
 
-### 5. Step 1.4 — Extract candidate procedures from scrubbed conversations (`mine extract`)
+### 5. Step 1.4 — Curate candidate procedures (agent, NOT the local LLM)
 
 For each scrubbed conversation, decide whether it contains a **repeatable,
 mechanical task** (e.g. "stage and commit", "run tests and fix a specific
-failure", "scaffold a new component from an existing pattern") as opposed to
+failure", "scaffold a new component from an existing pattern", or a
+**Serena edit** like "replace/delete/insert lines in a file") as opposed to
 one-off creative/novel problem-solving.
 
-- Use the **local LLM** (the same one used for classification elsewhere in the
-  system — the `src/classifier` Ollama classifier, e.g.
-  `classifyWithFallback`). This is a classification/extraction task, not
-  synthesis, matching what that model is reliable at.
-- Per conversation, output:
+**The coding agent (not the local LLM) does this curation.** The local LLM is
+not used for mining at all — it is reserved for *executing* the curated
+candidates in Phase 2 (task 46). This avoids the small local model's weakness
+at extraction entirely.
+
+- Per conversation, the agent produces:
 ```json
 {
   "is_procedural": true|false,
@@ -132,24 +139,30 @@ one-off creative/novel problem-solving.
   "keywords": ["<extracted keywords>"],
   "steps": ["<concrete commands/actions taken, if identifiable>"],
   "source_conversation_id": "<link back to Step 1.2 record>",
-  "confidence": 0.0
+  "difficulty": "easy|medium|hard"
 }
 ```
-- Write results (procedural ones only) to `procedure_candidates_review` —
-  **staged, not live**. Include `source_conversation_id` and `timestamp` on
-  every candidate for provenance/debugging.
+- **Store curated candidates in test files** (e.g. `test/candidates/*.json`, one
+  file per candidate) so task 46 can run each one as a local-LLM performance
+  test. Also write them (procedural ones only) to `procedure_candidates_review`
+  — **staged, not live**. Include `source_conversation_id`, `timestamp`, and a
+  `difficulty` grade (easy → hard) for the progressive testing in Phase 2.
+- Mined candidates are **not limited to read-only** — capture edit-capable
+  procedures too. On promotion (task 46) any step that writes defaults to
+  `risk_tier: "requires_review"`; nothing auto-executes from mined data.
 
 ### 6. Step 1.5 — Produce a review summary (`mine review`)
 
 Output a report:
 - Total conversations scanned.
-- How many flagged procedural.
-- A sample of extracted candidates (15–20) for eyeballing.
-- Extraction failures / ambiguous cases.
+- How many candidates curated (procedural).
+- The candidate test files written (easy/medium/hard split).
+- A sample of candidates (15–20) for eyeballing.
+- Ambiguous cases.
 
 **Stop here and wait for review. Do not auto-promote anything to the live
-`procedures` table.** Promotion happens only in Phase 2 (task 46) after explicit
-approval.
+`procedures` table.** Promotion and the progressive local-LLM tests happen only
+in Phase 2 (task 46) after explicit approval.
 
 ### 7. CLI wiring
 

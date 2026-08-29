@@ -1,0 +1,28 @@
+{
+  "id": "cand-009",
+  "trigger_pattern": "Create a text file via Serena",
+  "keywords": ["create", "file", "text", "serena"],
+  "goal": "Use the Serena create_text_file tool to create a file named hello.txt with the content 'hello world'",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has access to the Serena create_text_file tool",
+  "constraints": [
+    "Use ONLY the Serena create_text_file tool",
+    "Provide the exact parameters: {file, content}",
+    "Create the file hello.txt"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "create_text_file",
+    "syntax": "{ \"relative_path\": \"<path>\", \"content\": \"<text>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "create_text_file", "args": {} }
+  ],
+  "source_conversation_id": "manual-serena-create",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "file_exists",
+    "path": "hello.txt",
+    "expected": "hello.txt exists"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "cand-012",
+  "trigger_pattern": "Find a symbol via Serena",
+  "keywords": ["find", "symbol", "serena", "definition"],
+  "goal": "Use the Serena find_symbol tool to locate the definition of the function 'add' in the project",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has access to the Serena find_symbol tool",
+  "constraints": [
+    "Use ONLY the Serena find_symbol tool",
+    "Provide the exact parameters: {name_path_pattern}",
+    "Search for the symbol 'add'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "find_symbol",
+    "syntax": "{ \"name_path_pattern\": \"<symbol>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "find_symbol", "args": { "name_path_pattern": "add" } }
+  ],
+  "source_conversation_id": "manual-serena-find-symbol",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the find_symbol tool executed without error and returned matches"
+  }
+}

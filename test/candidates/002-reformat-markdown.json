@@ -1,0 +1,19 @@
+{
+  "id": "cand-002",
+  "trigger_pattern": "Reformat a document as Markdown",
+  "keywords": ["format", "markdown", "document", "doc"],
+  "goal": "Reformat the input text document (notes.txt) into a valid Markdown document named notes.md",
+  "context": "The fixture notes.txt copied into the sandbox",
+  "constraints": ["Preserve the content; add Markdown structure (headings, bullets)", "Write the result to notes.md", "Write action (requires_review): executed only in the test sandbox"],
+  "fixture": "test/fixtures/notes.txt",
+  "steps": [
+    { "service": "serena", "tool": "replace_lines", "args": {} }
+  ],
+  "source_conversation_id": "3295c6c4-9d03-46a0-ac38-4c863690c0a5",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "file_exists",
+    "path": "notes.md",
+    "expected": "a notes.md Markdown file exists"
+  }
+}

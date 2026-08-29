@@ -1,0 +1,15 @@
+{
+  "id": "cand-005",
+  "trigger_pattern": "Break down an architecture into a task list in a Markdown doc",
+  "keywords": ["architecture", "tasks", "mvp", "document", "breakdown"],
+  "goal": "Break down an architecture into a task list written to a Markdown document",
+  "context": "The project architecture/docs",
+  "constraints": ["Write the task list to a Markdown doc (e.g. MVP.md)", "Write action (requires_review): executed only in the test sandbox"],
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_explore", "args": {} },
+    { "service": "serena", "tool": "replace_lines", "args": {} }
+  ],
+  "source_conversation_id": "cac918d2-3b8b-423c-affb-b0927d3e4293",
+  "difficulty": "hard",
+  "pass_fail": { "type": "file_exists", "path": "MVP.md", "expected": "an MVP.md task document exists" }
+}

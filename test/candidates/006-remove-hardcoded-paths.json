@@ -1,0 +1,20 @@
+{
+  "id": "cand-006",
+  "trigger_pattern": "Remove all hard-coded paths from a document",
+  "keywords": ["path", "hardcoded", "document", "edit", "remove"],
+  "goal": "Edit the Markdown document to remove every hard-coded file/directory path while keeping the rest of the text",
+  "context": "The fixture document hardcoded-paths.md copied into the sandbox",
+  "constraints": ["Keep all non-path prose", "Do not change headings or wording that is not a path", "Edit only the copy in the sandbox"],
+  "fixture": "test/fixtures/hardcoded-paths.md",
+  "steps": [
+    { "service": "serena", "tool": "replace_lines", "args": {} }
+  ],
+  "source_conversation_id": "manual-edit-fixture",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "excludes",
+    "path": "hardcoded-paths.md",
+    "needles": ["C:\\tools", "/opt/deploy", "E:\\dev\\output", "Unity.exe"],
+    "expected": "the document contains no hard-coded paths"
+  }
+}

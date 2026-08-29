@@ -5,10 +5,13 @@ import {
   CLASSIFICATION_JSON_SCHEMA,
   Classification,
   ClassificationValidationError,
+  PROCEDURE_EXTRACTION_JSON_SCHEMA,
   TOOL_NAMES,
   parseClassification,
   parseContextAssessment,
+  parseProcedureExtraction,
   type ContextAssessment,
+  type ProcedureExtraction,
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
@@ -110,6 +113,53 @@ const ASSESSMENT_SHAPE = `{
   "tool_plan": { "use": ["<tool>"] },
   "reason": "<one short sentence>"
 }`;
+
+const PROCEDURE_EXTRACTION_SHAPE = `{
+  "is_procedural": false,
+  "trigger_pattern": "",
+  "keywords": [],
+  "steps": [],
+  "confidence": 0.1
+}`;
+
+/** Build the procedure-extraction prompt (task 45 mining Step 1.4). */
+export function buildExtractPrompt(conversationText: string): string {
+  return [
+    'You are mining a historical coding conversation for a repeatable,',
+    'mechanical task (e.g. "stage and commit", "run tests and fix a specific',
+    'failure", "scaffold a component from an existing pattern", or a Serena',
+    'edit such as replacing/deleting/inserting lines in a file) as opposed to',
+    'one-off creative/novel problem-solving. These tasks are executed with the',
+    'local tools: LeanCTX (context read/compress), Serena (symbol search and',
+    'file edits), RTK (command-output compression).',
+    '',
+    'Respond with exactly this JSON shape:',
+    PROCEDURE_EXTRACTION_SHAPE,
+    '',
+    'Rules (be CONSERVATIVE — most conversations are NOT procedural):',
+    '- The JSON above is ONLY a format reference showing an EMPTY, non-procedural',
+    '  result. Never copy its field values — analyze THIS conversation and output',
+    '  your own values.',
+    '- is_procedural: true ONLY when the conversation shows a clear, repeated,',
+    '  mechanical task with concrete, identifiable commands/actions. Default to',
+    '  false for one-off problem-solving, planning, debugging, or creative work.',
+    '- is_procedural must be false when you cannot identify concrete steps.',
+    '- trigger_pattern: a short imperative phrase describing the task; empty',
+    '  string when is_procedural is false. NEVER use an error message, a',
+    '  file:line reference, a test/method name, or a status note.',
+    '- steps: the concrete commands/actions taken; MUST be non-empty when',
+    '  is_procedural is true.',
+    '- keywords: 2-6 match terms for recognizing this task again.',
+    '- confidence: 0..1 for how sure you are. Be honest — low confidence means',
+    '  you should lean toward is_procedural false.',
+    '- classification/extraction only — do not write code, do not explain.',
+    '',
+    'Conversation:',
+    '"""',
+    conversationText,
+    '"""',
+  ].join('\n');
+}
 
 /** Build the context-assessment prompt: is the gathered signal sufficient? */
 export function buildAssessPrompt(taskText: string, inventoryText: string): string {
@@ -222,6 +272,13 @@ export class OllamaClassifier {
     );
   }
 
+  /** Extract whether a conversation contains a repeatable procedure (mining). */
+  async extractProcedure(conversationText: string): Promise<ProcedureExtraction> {
+    return parseProcedureExtraction(
+      await this.chatJson(buildExtractPrompt(conversationText), PROCEDURE_EXTRACTION_JSON_SCHEMA),
+    );
+  }
+
   /** One chat round-trip returning the model's JSON text content. */
   private async chatJson(
     prompt: string,
@@ -316,6 +373,15 @@ export function isDerivedClassifierModel(model: string): boolean {
 }
 
 /**
+ * Resolve the BASE model (not the derived fast-classifier). The derived model
+ * carries a classification-only SYSTEM block that overrides extraction prompts,
+ * so extraction/mining tasks must use the base model instead.
+ */
+export function resolveBaseModel(): string {
+  return loadConfig().classifier.model || DERIVED_CLASSIFIER_MODEL;
+}
+
+/**
  * Default log sink for the classifier's latency instrumentation.
  *
  * IMPORTANT: this must write to STDERR, not stdout. When the classifier runs
@@ -358,6 +424,20 @@ export function assess(
   options: ClassifierOptions = {},
 ): Promise<ContextAssessment> {
   return new OllamaClassifier(options).assess(taskText, inventoryText);
+}
+
+/** Convenience function — extract a repeatable procedure from a conversation. */
+export function extractProcedure(
+  conversationText: string,
+  options: ClassifierOptions = {},
+): Promise<ProcedureExtraction> {
+  // Extraction is a different task from fast classification: use the BASE model
+  // (not the derived fast-classifier), which has no classification-only SYSTEM
+  // block that would override the extraction prompt.
+  return new OllamaClassifier({
+    ...options,
+    model: options.model ?? resolveBaseModel(),
+  }).extractProcedure(conversationText);
 }
 
 // Re-export so callers can distinguish "unavailable" from "invalid output"
