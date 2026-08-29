@@ -1,0 +1,22 @@
+{
+  "id": "cand-029",
+  "trigger_pattern": "Find, overview, then edit a file (multi-step)",
+  "keywords": ["multi-step", "find", "overview", "replace", "sequence", "serena", "task list"],
+  "goal": "Perform these operations in order on src/main.cpp: 1) find_symbol for 'add', 2) get_symbols_overview of src/main.cpp, 3) replace 'return a + b;' with 'return a + b + 1;'",
+  "context": "The sandbox is a registered Serena project; src/main.cpp defines add() with 'return a + b;'; the local LLM has the Serena tools find_symbol, get_symbols_overview, and replace_content; execute each step in the given order",
+  "constraints": [
+    "Follow the steps in exact order",
+    "Step 1: find_symbol {name_path_pattern:'add'}",
+    "Step 2: get_symbols_overview {relative_path:'src/main.cpp'}",
+    "Step 3: replace_content {relative_path:'src/main.cpp', needle:'return a + b;', repl:'return a + b + 1;', mode:'literal'}"
+  ],
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "find_symbol", "tool_template": { "service": "serena", "tool": "find_symbol", "syntax": "{ \"name_path_pattern\": \"<symbol>\" }" }, "args": { "name_path_pattern": "add" } },
+    { "service": "serena", "tool": "get_symbols_overview", "tool_template": { "service": "serena", "tool": "get_symbols_overview", "syntax": "{ \"relative_path\": \"<path>\" }" }, "args": { "relative_path": "src/main.cpp" } },
+    { "service": "serena", "tool": "replace_content", "tool_template": { "service": "serena", "tool": "replace_content", "syntax": "{ \"relative_path\": \"<path>\", \"needle\": \"<text>\", \"repl\": \"<text>\", \"mode\": \"literal\" }" }, "args": { "relative_path": "src/main.cpp", "needle": "return a + b;", "repl": "return a + b + 1;", "mode": "literal" } }
+  ],
+  "source_conversation_id": "manual-multistep-find-overview-edit",
+  "difficulty": "medium",
+  "pass_fail": { "type": "contains", "path": "src/main.cpp", "needle": "a + b + 1", "expected": "src/main.cpp contains 'a + b + 1' after the edit" }
+}

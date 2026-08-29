@@ -31,6 +31,8 @@ interface CandidateStep {
   service: string;
   tool: string;
   args?: Record<string, unknown>;
+  /** Per-step template overrides the candidate-level template (for multi-step candidates). */
+  tool_template?: { service?: string; tool?: string; syntax?: string };
 }
 
 interface Candidate {
@@ -375,18 +377,21 @@ async function main(): Promise<void> {
     }
   }
   // Shared LeanCtxAdapter for template-driven leanctx steps (reuse one MCP session).
-  const leanAdapter = candidate.tool_template?.service === 'leanctx' ? new LeanCtxAdapter() : null;
+  const leanAdapter = candidate.steps.some((s) => (s.tool_template ?? candidate.tool_template)?.service === 'leanctx')
+    ? new LeanCtxAdapter()
+    : null;
 
   let stepFailed = false;
   for (const step of candidate.steps) {
     process.stdout.write(`\n-- step ${step.service}:${step.tool} --\n`);
+    const template = step.tool_template ?? candidate.tool_template;
     try {
       if (step.service === 'rtk') {
         const out = await runRtkStep(step, sandbox);
         console.log('output:', out.slice(0, 500));
-      } else if (step.service === 'leanctx' && leanAdapter && candidate.tool_template?.tool) {
+      } else if (step.service === 'leanctx' && leanAdapter && template?.tool) {
         // Template-driven: real LeanCTX tool call with LLM-filled parameters.
-        const out = await runLeanToolStep(step, sandbox, leanAdapter, candidate.tool_template, {
+        const out = await runLeanToolStep(step, sandbox, leanAdapter, template, {
           ...(candidate.goal !== undefined ? { goal: candidate.goal } : {}),
           ...(candidate.context !== undefined ? { context: candidate.context } : {}),
           ...(candidate.constraints !== undefined ? { constraints: candidate.constraints } : {}),
@@ -397,9 +402,9 @@ async function main(): Promise<void> {
       } else if (step.service === 'leanctx') {
         const out = await runLeanStep(step);
         console.log('output:', out.slice(0, 300));
-      } else if (step.service === 'serena' && serenaAdapter && candidate.tool_template?.tool) {
+      } else if (step.service === 'serena' && serenaAdapter && template?.tool) {
         // Template-driven: real Serena tool call with LLM-filled parameters.
-        const out = await runSerenaToolStep(step, sandbox, serenaAdapter, candidate.tool_template, candidate.pass_fail?.path, {
+        const out = await runSerenaToolStep(step, sandbox, serenaAdapter, template, candidate.pass_fail?.path, {
           ...(candidate.goal !== undefined ? { goal: candidate.goal } : {}),
           ...(candidate.context !== undefined ? { context: candidate.context } : {}),
           ...(candidate.constraints !== undefined ? { constraints: candidate.constraints } : {}),

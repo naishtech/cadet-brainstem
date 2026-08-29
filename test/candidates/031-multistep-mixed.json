@@ -1,0 +1,22 @@
+{
+  "id": "cand-031",
+  "trigger_pattern": "Mixed LeanCTX + Serena sequence (multi-step)",
+  "keywords": ["multi-step", "mixed", "leanctx", "serena", "read", "find", "edit", "task list"],
+  "goal": "Perform these operations in order: 1) ctx_read 'src/main.cpp' (LeanCTX), 2) find_symbol 'add' (Serena), 3) replace_content in src/main.cpp (Serena) to change 'return a + b;' to 'return a + b + 1;'",
+  "context": "The sandbox is the project root for both the LeanCTX session and the Serena project; src/main.cpp defines add() with 'return a + b;'; the local LLM has both LeanCTX and Serena tools; execute each step in the given order across both services",
+  "constraints": [
+    "Follow the steps in exact order, using the service named in each step",
+    "Step 1 (LeanCTX): ctx_read {path:'src/main.cpp'}",
+    "Step 2 (Serena): find_symbol {name_path_pattern:'add'}",
+    "Step 3 (Serena): replace_content {relative_path:'src/main.cpp', needle:'return a + b;', repl:'return a + b + 1;', mode:'literal'}"
+  ],
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_read", "tool_template": { "service": "leanctx", "tool": "ctx_read", "syntax": "{ \"path\": \"<path>\" }" }, "args": { "path": "src/main.cpp" } },
+    { "service": "serena", "tool": "find_symbol", "tool_template": { "service": "serena", "tool": "find_symbol", "syntax": "{ \"name_path_pattern\": \"<symbol>\" }" }, "args": { "name_path_pattern": "add" } },
+    { "service": "serena", "tool": "replace_content", "tool_template": { "service": "serena", "tool": "replace_content", "syntax": "{ \"relative_path\": \"<path>\", \"needle\": \"<text>\", \"repl\": \"<text>\", \"mode\": \"literal\" }" }, "args": { "relative_path": "src/main.cpp", "needle": "return a + b;", "repl": "return a + b + 1;", "mode": "literal" } }
+  ],
+  "source_conversation_id": "manual-multistep-mixed",
+  "difficulty": "hard",
+  "pass_fail": { "type": "contains", "path": "src/main.cpp", "needle": "a + b + 1", "expected": "src/main.cpp contains 'a + b + 1' after the mixed sequence" }
+}

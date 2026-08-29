@@ -1,6 +1,6 @@
 # 48 — Multi-operation procedures: can the local LLM string together a task list?
 
-**Status:** Planned (design note / possible test)
+**Status:** In progress — **option 3 (explicit ordered task list) confirmed working.**
 **Prerequisite:** Tasks 44–46 (procedures + candidate harness + single-step
 performance tests). We have single-step candidates 001–022 confirmed for
 Serena + LeanCTX; this extends them to **multi-step** sequences.
@@ -51,6 +51,28 @@ Prove (or disprove) that the local LLM can execute a **multi-step task list**:
 
 Recommend starting with **(3)**, then relaxing to (2) to measure how much
 planning the 4b model can actually do.
+
+## Results so far — option 3 (explicit ordered task list) CONFIRMED
+
+All four multi-step candidates pass (end-state checks), so the local LLM **can**
+string together a task list:
+
+- **028** `create_text_file → read_file → replace_content` on `notes.md` — PASS
+  (creates, reads back its own output, edits; final contains `gamma`).
+- **029** `find_symbol → get_symbols_overview → replace_content` on
+  `src/main.cpp` — PASS (finds `add`, lists symbols, edits; final contains
+  `a + b + 1`).
+- **030** LeanCTX `ctx_tree → ctx_read → ctx_compose` — PASS (all steps run).
+- **031** **mixed** LeanCTX `ctx_read` → Serena `find_symbol` → Serena
+  `replace_content` — PASS (cross-service sequence works!).
+
+Harness change that enabled this: added a **per-step `tool_template`** on
+`CandidateStep`; the loop resolves `step.tool_template ?? candidate.tool_template`
+so each step can use a different tool. Each step is grounded with the candidate's
+goal/context/constraints as intent, and the final state is checked by `pass_fail`.
+
+Still to try (option 2): one prompt with the whole task list and let the local
+LLM plan/order the calls itself (harder — measures planning, not just execution).
 
 ## Sourcing the candidates
 
