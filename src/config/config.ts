@@ -87,11 +87,9 @@ export const defaultConfig: Config = {
   classifier: {
     provider: 'ollama',
     model: 'qwen3:1.7b',
-    // Modelfile-derived classifier used at runtime (built via `ollama create
-    // fast-classifier -f Modelfile`). Falls back to `model` if not set.
-    derived_model: 'fast-classifier',
-    // Build the derived model automatically (via HTTP) when missing, e.g. on
-    // SessionStart. Set false to require a manual `ollama create`.
+    // No derived_model by default: only used when explicitly configured (the
+    // Modelfile-derived classifier). Defaulting it to a model that isn't
+    // pulled makes classify fail with 404, so it is opt-in.
     auto_build: true,
     timeout_ms: 60_000,
     keep_alive: '30m',

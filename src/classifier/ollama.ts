@@ -234,7 +234,7 @@ export class OllamaClassifier {
   readonly model: string;
   readonly host: string;
   readonly timeoutMs: number;
-  readonly keepAlive: string;
+  readonly keepAlive: string | number;
   readonly log: (line: string) => void;
 
   constructor(options: ClassifierOptions = {}) {
@@ -259,6 +259,9 @@ export class OllamaClassifier {
     const prompt = isDerivedClassifierModel(this.model)
       ? taskText
       : buildPrompt(taskText);
+    // Structured output constrains enum values, so the model emits valid
+    // classification fields (previously this 400'd due to a string keep_alive
+    // and 404'd due to a default derived_model — both fixed elsewhere).
     return parseClassification(await this.chatJson(prompt, CLASSIFICATION_JSON_SCHEMA));
   }
 
@@ -306,7 +309,6 @@ export class OllamaClassifier {
           options: {
             temperature: 0,
             num_predict: DEFAULT_NUM_PREDICT,
-            num_ctx: DEFAULT_NUM_CTX,
           },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -404,9 +406,19 @@ function resolveTimeoutMs(override?: number): number {
   return fromConfig > 0 ? fromConfig : DEFAULT_CLASSIFIER_TIMEOUT_MS;
 }
 
-/** Resolve the keep_alive from configuration. */
-function resolveKeepAlive(): string {
-  return loadConfig().classifier.keep_alive;
+/**
+ * Resolve the keep_alive from configuration. Ollama accepts either a number
+ * (seconds, or -1 for indefinite) or a duration string WITH a unit (e.g.
+ * "30m"). A bare numeric STRING like "-1" has no unit and is rejected with
+ * HTTP 400 ("time: missing unit in duration "-1""), so coerce numeric strings
+ * to numbers.
+ */
+function resolveKeepAlive(): string | number {
+  const raw = loadConfig().classifier.keep_alive;
+  if (typeof raw === 'string' && raw.trim() !== '' && !Number.isNaN(Number(raw))) {
+    return Number(raw);
+  }
+  return raw;
 }
 
 /** Convenience function — constructs an {@link OllamaClassifier} and classifies. */

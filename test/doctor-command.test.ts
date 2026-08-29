@@ -131,7 +131,16 @@ describe('runDoctor', () => {
   });
 
   it('warns with a build hint when the derived model is not present', async () => {
-    const { configPath, metricsPath } = createHealthyState();
+    const { configPath, metricsPath } = paths();
+    saveConfig(
+      {
+        ...defaultConfig,
+        classifier: { ...defaultConfig.classifier, derived_model: 'fast-classifier' },
+      },
+      configPath,
+    );
+    const store = new MetricsStore(metricsPath);
+    store.close();
     const { exit, lines } = await run({ modelOk: false, configPath, metricsPath });
     const out = lines.join('\n');
 

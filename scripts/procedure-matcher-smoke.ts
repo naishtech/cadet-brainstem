@@ -18,6 +18,8 @@ import { isOllamaAvailable } from '../src/classifier';
 const SAMPLES = [
   'gather and compress the relevant context for this file',
   'find the symbols that reference the loader',
+  'create a file called notes.md',
+  'create, read, then edit a file',
 ];
 
 async function main(): Promise<void> {
@@ -46,10 +48,16 @@ async function main(): Promise<void> {
     try {
       const result = await classifyTool({ task });
       console.log(`entities:      ${JSON.stringify(result.entities)}`);
-      const procedures = (result.procedures ?? []) as Array<{ triggerPattern: string; steps: unknown[] }>;
+      const procedures = (result.procedures ?? []) as Array<{
+        triggerPattern: string;
+        steps: unknown[];
+        handoffShape?: string;
+      }>;
       console.log(`matched procedures: ${procedures.length}`);
       for (const p of procedures) {
-        console.log(`  - ${p.triggerPattern}  steps=${JSON.stringify(p.steps)}`);
+        console.log(`  - ${p.triggerPattern}`);
+        console.log(`    steps=${JSON.stringify(p.steps)}`);
+        console.log(`    handoffShape=${p.handoffShape ? JSON.stringify(p.handoffShape.slice(0, 120)) : '(none)'}`);
       }
       console.log(`degraded:      ${result.degraded === true}`);
     } catch (err) {
