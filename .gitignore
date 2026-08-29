@@ -4,8 +4,8 @@ node_modules/
 # Build output
 dist/
 
-# Local state (Cadet Token Saver)
-.cadet-token-saver/
+# Local state (Cadet Brainstem)
+.cadet-brainstem/
 .cadet/
 
 # Serena local project state (created on activation)

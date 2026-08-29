@@ -38,7 +38,7 @@ function requestBodyOf(fetchMock: Mock): Record<string, unknown> {
 }
 
 afterEach(() => {
-  delete process.env.CADET_TOKEN_SAVER_CONFIG;
+  delete process.env.CADET_BRAINSTEM_CONFIG;
   vi.unstubAllGlobals();
 });
 
@@ -439,7 +439,7 @@ describe('classify', () => {
       'classifier:\n  model: config-model\n  derived_model: derived-model\n',
       'utf8',
     );
-    process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;
+    process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
         message: { content: JSON.stringify(validClassification) },
@@ -460,7 +460,7 @@ describe('classify', () => {
       'classifier:\n  model: config-model\n  derived_model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
       'utf8',
     );
-    process.env.CADET_TOKEN_SAVER_CONFIG = cfgFile;
+    process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
         message: { content: JSON.stringify(validClassification) },

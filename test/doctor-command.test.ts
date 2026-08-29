@@ -84,7 +84,7 @@ describe('runDoctor', () => {
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
-    expect(out).toContain('Cadet Token Saver Doctor');
+    expect(out).toContain('Cadet Brainstem Doctor');
     expect(out).toContain('✓ Node.js');
     expect(out).toContain('✓ npm');
     expect(out).toContain('✓ Ollama');
@@ -104,7 +104,7 @@ describe('runDoctor', () => {
 
     expect(exit).toBe(0);
     expect(out).toContain('not created — using defaults');
-    expect(out).toContain('Run: cadet-token-saver init');
+    expect(out).toContain('Run: cadet-brainstem init');
     expect(out).toContain('not created — run init');
     expect(out).toContain('warning(s)');
   });

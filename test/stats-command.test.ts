@@ -149,6 +149,35 @@ describe('runStats', () => {
     expect(out).toContain('0 call(s)'); // rtk/serena unseeded
   });
 
+  it('joins recommended vs invoked adoption counts across MCP-prefixed tool names', async () => {
+    const metricsPath = join(dir, 'metrics.db');
+    seedStore(metricsPath, [
+      // Classifier recommended the bare canonical name.
+      makeEvent({
+        tool: 'ollama',
+        operation: 'classify',
+        recommended_tools: ['find_relevant_symbols'],
+      }),
+      // Invocations recorded by the MCP client carry the `mcp_<server>_` prefix.
+      makeEvent({ tool: 'mcp_cadet-token-s_find_relevant_symbols' }),
+      makeEvent({ tool: 'mcp_cadet-token-s_find_relevant_symbols' }),
+      makeEvent({ tool: 'rtk' }),
+    ]);
+
+    const { exit, lines } = await run(metricsPath);
+    const out = lines.join('\n');
+
+    expect(exit).toBe(0);
+    expect(out).toContain('Recommended vs invoked (adoption):');
+    // Recommended and invoked now line up on the same canonical row.
+    const adoptionStart = out.indexOf('Recommended vs invoked (adoption):');
+    const sessionsStart = out.indexOf('Sessions:', adoptionStart);
+    const adoptionSection = out.slice(adoptionStart, sessionsStart);
+    expect(adoptionSection).toMatch(/find_relevant_symbols\s+recommended 1 · invoked 2/);
+    // The MCP-prefixed name should not appear as its own adoption row.
+    expect(adoptionSection).not.toContain('mcp_cadet-token-s_find_relevant_symbols');
+  });
+
   it('exits 1 when the metrics database cannot be opened', async () => {
     // Make the parent path a file so MetricsStore's mkdirSync(dirname) throws
     // (ENOTDIR) — a reliable constructor failure.

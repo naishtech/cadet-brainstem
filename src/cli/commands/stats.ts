@@ -31,17 +31,17 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     store = new MetricsStore(metricsPath);
   } catch (err) {
     log(
-      `[cadet-token-saver] stats: could not open metrics database at ${metricsPath}`,
+      `[cadet-brainstem] stats: could not open metrics database at ${metricsPath}`,
     );
     log(`  ${(err as Error).message}`);
-    log('  Run "cadet-token-saver init" to create it.');
+    log('  Run "cadet-brainstem init" to create it.');
     return 1;
   }
 
   try {
     const count = store.count();
     log('');
-    log('Cadet Token Saver Stats');
+    log('Cadet Brainstem Stats');
     log('-----------------------');
     log(`Metrics database: ${metricsPath}`);
 
@@ -172,7 +172,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
 
     log('');
     log(
-      'All figures are ESTIMATES — see https://github.com/naishtech/cadet-token-saver/blob/main/docs/plans/initial_design.md#8-measurement-and-metrics',
+      'All figures are ESTIMATES — see https://github.com/naishtech/cadet-brainstem/blob/main/docs/plans/initial_design.md#8-measurement-and-metrics',
     );
     return 0;
   } finally {
@@ -195,7 +195,7 @@ export async function runStatsClear(deps: StatsDeps = {}): Promise<number> {
     store = new MetricsStore(metricsPath);
   } catch (err) {
     log(
-      `[cadet-token-saver] stats clear: could not open metrics database at ${metricsPath}`,
+      `[cadet-brainstem] stats clear: could not open metrics database at ${metricsPath}`,
     );
     log(`  ${(err as Error).message}`);
     return 1;
@@ -222,7 +222,7 @@ export async function runStatsClear(deps: StatsDeps = {}): Promise<number> {
 export const statsCommand: CliCommand = {
   name: 'stats',
   description: 'Show saved/processed token metrics (clear to wipe them)',
-  usage: 'cadet-token-saver stats [clear]',
+  usage: 'cadet-brainstem stats [clear]',
   run(args: readonly string[]): Promise<number> {
     if (args[0] === 'clear') {
       return runStatsClear();

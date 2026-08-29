@@ -1,4 +1,4 @@
-# Publish cadet-token-saver to npm using a granular access token.
+# Publish cadet-brainstem to npm using a granular access token.
 #
 # The token file (~/.npm_token) must contain ONLY the token, created at
 # https://www.npmjs.com/settings/<user>/tokens with "Publish" permission and

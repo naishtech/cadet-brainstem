@@ -1,6 +1,6 @@
-# Cadet Token Saver — Requirements
+# Cadet Brainstem — Requirements
 
-What you need installed to run Cadet Token Saver and its integrations.
+What you need installed to run Cadet Brainstem and its integrations.
 
 ## Core
 
@@ -44,5 +44,5 @@ Install per its own documentation. Verify: `serena --version`
 
 ## Notes
 
-- `cadet-token-saver doctor` reports which tools are installed and how to fix missing ones.
+- `cadet-brainstem doctor` reports which tools are installed and how to fix missing ones.
 - Missing integration tools degrade gracefully — the pipeline still runs; only that tool's savings are unavailable.

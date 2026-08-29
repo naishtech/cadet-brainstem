@@ -1,4 +1,4 @@
-export { MetricsStore, getDefaultMetricsPath } from './store';
+export { MetricsStore, getDefaultMetricsPath, normalizeToolName } from './store';
 export type {
   CallStats,
   GroupedCalls,

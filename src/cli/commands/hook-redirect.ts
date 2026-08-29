@@ -9,7 +9,7 @@ import { recordMetrics } from './hook-lifecycle';
  * intercepting the expensive native tools (raw code search, directory dumps,
  * full-file reads, and noisy shell commands) and denying them in favour of the
  * compressed cadet replacement. Every redirect targets a cadet MCP tool, so all
- * traffic flows through the token-saver MCP:
+ * traffic flows through the brainstem MCP:
  *   - code search / directory dumps  → find_relevant_symbols   (Serena-backed)
  *   - full-file code reads           → optimize_context        (LeanCTX-backed)
  *   - noisy shell commands           → compress_command_output (RTK-backed)
@@ -386,7 +386,7 @@ export async function runHookRedirect(
   const writeOut = deps.writeOut ?? ((line: string) => process.stdout.write(line));
   const stateDir =
     options.stateDir ??
-    join(os.homedir(), '.local', 'state', 'cadet-token-saver', 'hooks');
+    join(os.homedir(), '.local', 'state', 'cadet-brainstem', 'hooks');
 
   const raw = (await readStdin()).trim();
   if (!raw) {
@@ -468,7 +468,7 @@ export const hookRedirectCommand: CliCommand = {
   name: 'hook-redirect',
   description:
     'PreToolUse hook handler that denies native code-search/list/read tools and redirects to the cadet compressed tools (find_relevant_symbols / optimize_context)',
-  usage: 'cadet-token-saver hook-redirect',
+  usage: 'cadet-brainstem hook-redirect',
   run(): Promise<number> {
     return runHookRedirect();
   },

@@ -1,8 +1,8 @@
-# Cadet Token Saver
+# Cadet Brainstem
 
 Reduce the amount of context and tool output your AI coding agent consumes — locally, and measurably.
 
-`cadet-token-saver` is an **orchestration + measurement layer** that sits above [RTK](https://github.com/rtk-ai/rtk), [Serena](https://github.com/oraios/serena) and [LeanCTX](https://github.com/yvgude/lean-ctx). It decides **when** to compress context, runs the right tool, and records **how many tokens it saved**.
+`cadet-brainstem` is an **orchestration + measurement layer** that sits above [RTK](https://github.com/rtk-ai/rtk), [Serena](https://github.com/oraios/serena) and [LeanCTX](https://github.com/yvgude/lean-ctx). It decides **when** to compress context, runs the right tool, and records **how many tokens it saved**.
 
 > Version 0.1.4 · MIT · Node.js 18+ · local-first operation
 
@@ -12,7 +12,7 @@ Reduce the amount of context and tool output your AI coding agent consumes — l
 
 AI coding agents send huge amounts of context to the model: full files, symbol dumps, noisy command output. Every token costs money and latency — and most of it is irrelevant to the task at hand.
 
-Cadet Token Saver attacks that waste:
+Cadet Brainstem attacks that waste:
 
 - **Compresses what you actually read** — instead of an agent reading a large file raw, it gets the LeanCTX-compressed representation (map/aggressive modes). Real tests showed ~90% size reduction on typical source files.
 - **Finds only what matters** — Serena semantic search returns just the relevant symbols/files, not the whole codebase.
@@ -33,7 +33,7 @@ Cadet Token Saver attacks that waste:
 npm link
 
 # once published:
-npm i -g cadet-token-saver   # then: npx cadet-token-saver
+npm i -g cadet-brainstem   # then: npx cadet-brainstem
 ```
 
 Then install the integration tools — see [docs/requirements.md](docs/requirements.md): **Ollama** (with the `qwen3:1.7b` model), **RTK**, **Serena**, **LeanCTX**.
@@ -41,8 +41,8 @@ Then install the integration tools — see [docs/requirements.md](docs/requireme
 ### 2. First run
 
 ```bash
-cadet-token-saver init      # detect your environment, create config + metrics db
-cadet-token-saver doctor    # read-only health check with actionable fixes
+cadet-brainstem init      # detect your environment, create config + metrics db
+cadet-brainstem doctor    # read-only health check with actionable fixes
 ```
 
 ### 3. Save tokens
@@ -67,9 +67,9 @@ the fallback path enabled for unavailable Ollama or non-compliant clients.
 **From the terminal:**
 
 ```bash
-cadet-token-saver wrap -- git status                # print RTK-reduced output
-cadet-token-saver wrap --raw -- git status          # print the original output
-cadet-token-saver wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
+cadet-brainstem wrap -- git status                # print RTK-reduced output
+cadet-brainstem wrap --raw -- git status          # print the original output
+cadet-brainstem wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
 ```
 
 > Commands run in the platform shell (`cmd.exe` on Windows) unless you pass
@@ -85,11 +85,11 @@ installs everything into the global hooks dir VS Code auto-loads from.
 
 #### Prerequisites
 
-- **cadet-token-saver on your `PATH`.** The hook config invokes
-  `cadet-token-saver hook-*` commands, so the binary must be resolvable from the
+- **cadet-brainstem on your `PATH`.** The hook config invokes
+  `cadet-brainstem hook-*` commands, so the binary must be resolvable from the
   shell VS Code uses to run hooks. Verify with:
   ```bash
-  cadet-token-saver --version
+  cadet-brainstem --version
   ```
 - **VS Code with agent hooks enabled.** Hooks are currently a preview feature.
   If your organization disables them, this won't take effect. You can confirm
@@ -99,10 +99,10 @@ installs everything into the global hooks dir VS Code auto-loads from.
 #### 1. Install all hooks (one command)
 
 ```bash
-cadet-token-saver hooks find_relevant_symbols   # writes ~/.copilot/hooks/cadet-token-saver.json
+cadet-brainstem hooks find_relevant_symbols   # writes ~/.copilot/hooks/cadet-brainstem.json
 ```
 
-This registers all eight lifecycle events, each wired to a `cadet-token-saver
+This registers all eight lifecycle events, each wired to a `cadet-brainstem
 hook-*` handler:
 
 | Event | Handler | What it saves |
@@ -116,11 +116,11 @@ hook-*` handler:
 | `SubagentStop` | `hook-subagent-stop` | Records nested usage, cleans up state |
 | `Stop` | `hook-stop` | Persists a session summary, cleans up state |
 
-The generated file lives at `~/.copilot/hooks/cadet-token-saver.json`. To use a
+The generated file lives at `~/.copilot/hooks/cadet-brainstem.json`. To use a
 different recommended tool or write somewhere else:
 
 ```bash
-cadet-token-saver hooks --tool leanctx_call --out ~/.copilot/hooks
+cadet-brainstem hooks --tool leanctx_call --out ~/.copilot/hooks
 ```
 
 #### 2. Load the hooks
@@ -133,7 +133,7 @@ Reload Window**) for the hooks to become active.
 
 - Open the **Output** panel and select **GitHub Copilot Chat Hooks** from the
   channel list. You should see the hooks loaded from
-  `~/.copilot/hooks/cadet-token-saver.json`.
+  `~/.copilot/hooks/cadet-brainstem.json`.
 - Run **Developer: Show Agent Debug Logs** to inspect hook input/output per
   event.
 - Run **View Logs** and look for a **"Load Hooks"** entry to confirm which
@@ -143,7 +143,7 @@ Reload Window**) for the hooks to become active.
 
 Handlers read the hook payload from stdin and are best-effort — they never
 break the agent session. The `PreToolUse` hooks steer toward the cheap cadet
-MCP tools (everything flows through the token-saver MCP): `hook-redirect`
+MCP tools (everything flows through the brainstem MCP): `hook-redirect`
 **hard-denies** raw code search and directory dumps (redirecting to
 `find_relevant_symbols`), and **soft-redirects** full-file reads and noisy
 shell commands (allow + a reminder to use `optimize_context` /
@@ -158,7 +158,7 @@ truncation.
 
 - **Hook not executing** — confirm the file is `~/.copilot/hooks/*.json`, has a
   `.json` extension, and `type: "command"` is present on each entry.
-- **Permission denied / command not found** — ensure `cadet-token-saver` is on
+- **Permission denied / command not found** — ensure `cadet-brainstem` is on
   your `PATH` (hooks run in a shell, not the VS Code terminal). Use the full
   path to the binary if needed.
 - **Timeout** — hooks default to a 30s timeout; the cadet handlers are fast, so
@@ -170,7 +170,7 @@ truncation.
 ### 4. See the results
 
 ```bash
-cadet-token-saver stats    # events, tokens saved, reduction %, savings by tool / task / session
+cadet-brainstem stats    # events, tokens saved, reduction %, savings by tool / task / session
 ```
 
 ### 5. Tell your agent how to use it
@@ -193,7 +193,7 @@ and prefers the cheap paths:
 
 ## What it is
 
-Cadet Token Saver is a local CLI built around one decision: **what context does this task actually need?** It classifies the task with a small local model, applies a deterministic policy, invokes the right optimisation tool, and records the result.
+Cadet Brainstem is a local CLI built around one decision: **what context does this task actually need?** It classifies the task with a small local model, applies a deterministic policy, invokes the right optimisation tool, and records the result.
 
 ```
 task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised context + metrics.db
@@ -202,14 +202,14 @@ task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised c
 - **Classifier** — a local Ollama model (`qwen3:1.7b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
 - **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
-- **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-token-saver/metrics.db`), fully offline, with estimates clearly labelled.
-- **Memory** — a local SQLite memory store (`~/.cadet-token-saver/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`.
+- **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-brainstem/metrics.db`), fully offline, with estimates clearly labelled.
+- **Memory** — a local SQLite memory store (`~/.cadet-brainstem/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`.
 
 ### Project layout
 
 ```
 src/
-  cli/          the cadet-token-saver commands (init, doctor, stats, wrap, mcp, …)
+  cli/          the cadet-brainstem commands (init, doctor, stats, wrap, mcp, …)
   classifier/   Ollama classification + graceful degradation
   policy/       deterministic strategy engine
   integrations/ RTK / Serena / LeanCTX adapters

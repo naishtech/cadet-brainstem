@@ -74,8 +74,8 @@ export async function runCli(
 
   const command = COMMAND_MAP.get(first);
   if (command === undefined) {
-    console.error(`cadet-token-saver: unknown command "${first}"`);
-    console.error('Run "cadet-token-saver --help" for usage.');
+    console.error(`cadet-brainstem: unknown command "${first}"`);
+    console.error('Run "cadet-brainstem --help" for usage.');
     return 1;
   }
 

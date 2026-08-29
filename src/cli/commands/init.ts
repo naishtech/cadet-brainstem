@@ -183,7 +183,7 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('');
   log(INIT_BANNER);
   log('');
-  log('[cadet-token-saver] init — environment report');
+  log('[cadet-brainstem] init — environment report');
   log('--------------------------------------------');
   log(`Platform: ${report.platform}`);
   log(`Node:     ${formatAvailability(report.node)}`);
@@ -197,17 +197,17 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   // 2. Create the config (idempotent — never clobber an existing file).
   const configPath = deps.configPath ?? getConfigPath();
   if (existsSync(configPath)) {
-    log(`[cadet-token-saver] config already exists (unchanged): ${configPath}`);
+    log(`[cadet-brainstem] config already exists (unchanged): ${configPath}`);
   } else {
     saveConfig(loadConfig(configPath), configPath);
-    log(`[cadet-token-saver] config created: ${configPath}`);
+    log(`[cadet-brainstem] config created: ${configPath}`);
   }
 
   // 3. Initialise the metrics database (idempotent — CREATE TABLE IF NOT EXISTS).
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
   const store = new MetricsStore(metricsPath);
   store.close();
-  log(`[cadet-token-saver] metrics database ready: ${metricsPath}`);
+  log(`[cadet-brainstem] metrics database ready: ${metricsPath}`);
 
   // 4. Consent-gated configuration/installation of missing pieces.
   const model = loadConfig(configPath).classifier.model;
@@ -216,11 +216,11 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
 
   // 5. Summary.
   log('');
-  log('[cadet-token-saver] init complete.');
+  log('[cadet-brainstem] init complete.');
   log(`  Tools available: ${report.availableTools.join(', ') || '(none)'}`);
   if (report.missingTools.length > 0) {
     log(`  Tools missing:   ${report.missingTools.join(', ')}`);
-    log('  Run "cadet-token-saver doctor" for details.');
+    log('  Run "cadet-brainstem doctor" for details.');
   }
 
   // 6. IDE / MCP wiring hint.
@@ -230,24 +230,24 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('');
   log('{');
   log('  "servers": {');
-  log('    "cadet-token-saver": {');
+  log('    "cadet-brainstem": {');
   log('      "type": "stdio",');
-  log('      "command": "cadet-token-saver",');
+  log('      "command": "cadet-brainstem",');
   log('      "args": ["mcp"]');
   log('    }');
   log('  }');
   log('}');
   log('');
-  log('The "cadet-token-saver" MCP server will then appear in Copilot Chat,');
+  log('The "cadet-brainstem" MCP server will then appear in Copilot Chat,');
   log('exposing classify, optimize_context, find_relevant_symbols, compress_command_output and chat_memory_store.');
-  log('Docs: https://github.com/naishtech/cadet-token-saver/blob/main/docs/integration-vscode.md');
+  log('Docs: https://github.com/naishtech/cadet-brainstem/blob/main/docs/integration-vscode.md');
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
   log('  "For every user request, before doing anything else, call the `classify` tool once');
   log('   with a short, faithful restatement of the request — not the verbatim message. It');
   log('   runs the local LLM and returns the recommended strategy plus a `response_policy`');
   log('   and a `memory_policy`; parse and follow both in every reply. Then use the Cadet');
-  log('   Token Saver tools to save context: call optimize_context before reading a large');
+  log('   Brainstem tools to save context: call optimize_context before reading a large');
   log('   file; use find_relevant_symbols before broad searches; call compress_command_output');
   log('   for noisy command output (pass "shell": "bash" if you are in git-bash on Windows).');
   log('   Use chat_memory_store to check memory before starting work and to store facts that');
@@ -256,14 +256,14 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('');
   log('Notes: commands run in the platform shell (cmd.exe on Windows) unless a shell is');
   log('specified; compression only helps on large/noisy output — small output is pass-through.');
-  log('Design: https://github.com/naishtech/cadet-token-saver/blob/main/docs/plans/initial_design.md');
+  log('Design: https://github.com/naishtech/cadet-brainstem/blob/main/docs/plans/initial_design.md');
   return 0;
 }
 
 export const initCommand: CliCommand = {
   name: 'init',
   description: 'Set up configuration and integrations (first run)',
-  usage: 'cadet-token-saver init',
+  usage: 'cadet-brainstem init',
   run(): Promise<number> {
     return runInit();
   },

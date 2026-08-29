@@ -1,7 +1,7 @@
 /**
  * Shared adapter contract for external optimisation tools (RTK, Serena, LeanCTX).
  *
- * Cadet Token Saver does NOT reimplement these tools — it orchestrates them
+ * Cadet Brainstem does NOT reimplement these tools — it orchestrates them
  * behind a common interface so they can be swapped later (design doc §2).
  */
 export interface ContextOptimizer {

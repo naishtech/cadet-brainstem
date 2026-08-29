@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   MetricsStore,
   getDefaultMetricsPath,
+  normalizeToolName,
   type OptimisationEvent,
 } from '../src/metrics/index';
 
@@ -37,12 +38,12 @@ function makeTempDir(): string {
 
 beforeEach(() => {
   // Guard against a leaked override from the environment (e.g. a prior
-  // `CADET_TOKEN_SAVER_METRICS=... cadet-token-saver init` in the same shell).
-  delete process.env.CADET_TOKEN_SAVER_METRICS;
+  // `CADET_BRAINSTEM_METRICS=... cadet-brainstem init` in the same shell).
+  delete process.env.CADET_BRAINSTEM_METRICS;
 });
 
 afterEach(() => {
-  delete process.env.CADET_TOKEN_SAVER_METRICS;
+  delete process.env.CADET_BRAINSTEM_METRICS;
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -50,11 +51,11 @@ afterEach(() => {
 
 describe('getDefaultMetricsPath', () => {
   it('returns a stable default path', () => {
-    expect(getDefaultMetricsPath()).toMatch(/\.cadet-token-saver[/\\]metrics\.db$/);
+    expect(getDefaultMetricsPath()).toMatch(/\.cadet-brainstem[/\\]metrics\.db$/);
   });
 
-  it('honours the CADET_TOKEN_SAVER_METRICS override', () => {
-    process.env.CADET_TOKEN_SAVER_METRICS = 'C:/custom/metrics.db';
+  it('honours the CADET_BRAINSTEM_METRICS override', () => {
+    process.env.CADET_BRAINSTEM_METRICS = 'C:/custom/metrics.db';
     expect(getDefaultMetricsPath()).toBe('C:/custom/metrics.db');
   });
 });
@@ -156,6 +157,54 @@ describe('MetricsStore (in-memory)', () => {
       { tool: 'rtk', calls: 2, degraded: 1, avgLatencyMs: 200 },
       { tool: 'serena', calls: 1, degraded: 0, avgLatencyMs: null },
     ]);
+  });
+
+  it('normalises MCP-prefixed tool names so adoption joins match (recommended vs invoked)', () => {
+    // Invocations recorded by the MCP client carry a `mcp_<server>_` prefix.
+    store.record(
+      makeEvent({
+        tool: 'mcp_cadet-token-s_find_relevant_symbols',
+        degraded: false,
+        latency_ms: 40,
+      }),
+    );
+    store.record(
+      makeEvent({
+        tool: 'mcp_cadet-token-s_find_relevant_symbols',
+        degraded: false,
+        latency_ms: 120,
+      }),
+    );
+    store.record(
+      makeEvent({ tool: 'mcp_cadet-brainstem_find_relevant_symbols', degraded: true }),
+    );
+    store.record(makeEvent({ tool: 'rtk', degraded: false }));
+    // Classifier recommended the bare canonical name on classify events.
+    store.record(
+      makeEvent({ tool: 'ollama', recommended_tools: ['find_relevant_symbols'] }),
+    );
+
+    // Call stats merge all three prefixed invocations into one canonical row.
+    expect(store.getCallStatsByTool()).toEqual([
+      { tool: 'find_relevant_symbols', calls: 2, degraded: 1, avgLatencyMs: 80 },
+      { tool: 'ollama', calls: 1, degraded: 0, avgLatencyMs: null },
+      { tool: 'rtk', calls: 1, degraded: 0, avgLatencyMs: null },
+    ]);
+    // Recommendation uses the same canonical name, so recommended==invoked lines up.
+    expect(store.getRecommendedByTool()).toEqual([
+      { tool: 'find_relevant_symbols', calls: 1 },
+    ]);
+  });
+
+  it('normalizeToolName strips any mcp_<server>_ prefix and leaves plain names alone', () => {
+    expect(normalizeToolName('mcp_cadet-token-s_find_relevant_symbols')).toBe(
+      'find_relevant_symbols',
+    );
+    expect(normalizeToolName('mcp_cadet-brainstem_optimize_context')).toBe(
+      'optimize_context',
+    );
+    expect(normalizeToolName('rtk')).toBe('rtk');
+    expect(normalizeToolName('find_relevant_symbols')).toBe('find_relevant_symbols');
   });
 
   it('groups savings by task type', () => {

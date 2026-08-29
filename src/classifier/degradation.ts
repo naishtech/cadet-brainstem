@@ -63,7 +63,7 @@ export async function classifyWithFallback(
     }
     const reason = (err as Error).message;
     // Explicit, never silent.
-    console.warn(`[cadet-token-saver] classifier degraded to conservative default: ${reason}`);
+    console.warn(`[cadet-brainstem] classifier degraded to conservative default: ${reason}`);
     return {
       classification: structuredClone(conservativeDefaultClassification),
       degraded: true,
@@ -113,7 +113,7 @@ export async function assessWithFallback(
       throw err;
     }
     const reason = (err as Error).message;
-    console.warn(`[cadet-token-saver] assess degraded to conservative default: ${reason}`);
+    console.warn(`[cadet-brainstem] assess degraded to conservative default: ${reason}`);
     return {
       assessment: structuredClone(conservativeDefaultAssessment),
       degraded: true,

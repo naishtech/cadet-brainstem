@@ -3,7 +3,7 @@ import type { CliCommand } from '../types';
 
 function stub(subcommand: string): number {
   console.log(
-    `[cadet-token-saver] telemetry ${subcommand}: not implemented yet (wired in a later task).`,
+    `[cadet-brainstem] telemetry ${subcommand}: not implemented yet (wired in a later task).`,
   );
   return 0;
 }
@@ -11,7 +11,7 @@ function stub(subcommand: string): number {
 export const telemetryCommand: CliCommand = {
   name: 'telemetry',
   description: 'Manage anonymous telemetry (status | on | off)',
-  usage: 'cadet-token-saver telemetry <status|on|off>',
+  usage: 'cadet-brainstem telemetry <status|on|off>',
   run(args: readonly string[]): number {
     const sub = args[0];
     if (sub === undefined || sub === '--help' || sub === '-h') {
@@ -27,7 +27,7 @@ export const telemetryCommand: CliCommand = {
         return stub('off');
       default:
         console.error(
-          `cadet-token-saver telemetry: unknown subcommand "${sub}"`,
+          `cadet-brainstem telemetry: unknown subcommand "${sub}"`,
         );
         console.error(TELEMETRY_HELP);
         return 1;

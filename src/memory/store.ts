@@ -54,14 +54,14 @@ CREATE TABLE IF NOT EXISTS memories (
 const MEMORY_COLUMNS =
   'id, content, tags, project, created_at, updated_at, last_accessed_at, hits';
 
-export const DEFAULT_MEMORY_DIR = '.cadet-token-saver';
+export const DEFAULT_MEMORY_DIR = '.cadet-brainstem';
 
 /**
  * Stable local path for the memory database.
- * Overridable via CADET_TOKEN_SAVER_MEMORY (useful for tests / non-default setups).
+ * Overridable via CADET_BRAINSTEM_MEMORY (useful for tests / non-default setups).
  */
 export function getDefaultMemoryPath(): string {
-  const env = process.env.CADET_TOKEN_SAVER_MEMORY;
+  const env = process.env.CADET_BRAINSTEM_MEMORY;
   if (env !== undefined && env.length > 0) {
     return env;
   }

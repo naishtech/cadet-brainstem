@@ -16,10 +16,10 @@ describe('VS Code integration files', () => {
         { type?: string; command?: string; args?: string[] }
       >;
     };
-    const server = mcp.servers?.['cadet-token-saver'];
+    const server = mcp.servers?.['cadet-brainstem'];
     expect(server).toBeDefined();
     expect(server?.type).toBe('stdio');
-    expect(server?.command).toBe('cadet-token-saver');
+    expect(server?.command).toBe('cadet-brainstem');
     expect(server?.args).toContain('mcp');
   });
 
@@ -39,7 +39,7 @@ describe('VS Code integration files', () => {
     expect(agents).toContain('optimize_context');
     expect(agents).toContain('find_relevant_symbols');
     expect(agents).toContain('compress_command_output');
-    expect(agents).toContain('cadet-token-saver wrap');
+    expect(agents).toContain('cadet-brainstem wrap');
   });
 
   it('documents the VS Code integration including wrap tasks', () => {

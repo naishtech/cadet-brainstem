@@ -1,7 +1,7 @@
 {
-  "name": "cadet-token-saver",
-  "version": "0.1.27",
-  "description": "Cadet Token Saver — an orchestration + measurement layer that reduces AI-agent context consumption.",
+  "name": "cadet-brainstem",
+  "version": "0.2.0",
+  "description": "Cadet Brainstem — an orchestration + measurement layer that reduces AI-agent context consumption.",
   "keywords": [
     "cli",
     "ai",
@@ -11,17 +11,17 @@
     "agent"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/naishtech/cadet-token-saver#readme",
+  "homepage": "https://github.com/naishtech/cadet-brainstem#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/naishtech/cadet-token-saver.git"
+    "url": "git+https://github.com/naishtech/cadet-brainstem.git"
   },
   "type": "module",
   "engines": {
     "node": ">=18"
   },
   "bin": {
-    "cadet-token-saver": "bin/cadet-token-saver.cjs"
+    "cadet-brainstem": "bin/cadet-brainstem.cjs"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,7 +40,7 @@
     "classify:smoke": "tsx scripts/classify-smoke.ts",
     "benchmark:shell": "tsx scripts/benchmark-shell-compression.ts",
     "mcp:smoke": "npm run build && tsx scripts/mcp-classify-e2e.ts",
-    "postinstall": "node -e \"console.log('cadet-token-saver v' + (process.env.npm_package_version || 'unknown') + ' installed')\"",
+    "postinstall": "node -e \"console.log('cadet-brainstem v' + (process.env.npm_package_version || 'unknown') + ' installed')\"",
     "prepublishOnly": "npm run build && npm run typecheck && npm run lint && npm test"
   },
   "publishConfig": {

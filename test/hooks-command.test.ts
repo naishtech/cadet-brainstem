@@ -104,9 +104,9 @@ describe('buildHooksConfig', () => {
 });
 
 describe('defaultHooksFilePath', () => {
-  it('names the config file cadet-token-saver.json in the out dir', () => {
+  it('names the config file cadet-brainstem.json in the out dir', () => {
     expect(defaultHooksFilePath(join('proj', '.copilot', 'hooks'))).toBe(
-      join('proj', '.copilot', 'hooks', 'cadet-token-saver.json'),
+      join('proj', '.copilot', 'hooks', 'cadet-brainstem.json'),
     );
   });
 });
