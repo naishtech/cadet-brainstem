@@ -40,6 +40,7 @@ describe('command routing', () => {
       'stats',
       'memory',
       'mine',
+      'procedure',
       'dashboard',
       'config',
       'telemetry',

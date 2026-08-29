@@ -1,4 +1,10 @@
 export { ProcedureStore, getDefaultProcedurePath } from './store';
+export { executeProcedure, defaultFillArgs, isWriteStep } from './execute';
+export type {
+  ExecuteProcedureOptions,
+  ExecuteProcedureResult,
+  ExecuteStepResult,
+} from './execute';
 export {
   PROCEDURE_OUTCOMES,
   PROCEDURE_SERVICES,

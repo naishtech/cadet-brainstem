@@ -20,6 +20,7 @@ import { initCommand } from './commands/init';
 import { mcpCommand } from './commands/mcp';
 import { memoryCommand } from './commands/memory';
 import { mineCommand } from './commands/mine';
+import { procedureCommand } from './commands/procedure';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
 import { wrapCommand } from './commands/wrap';
@@ -32,6 +33,7 @@ export const COMMANDS: readonly CliCommand[] = [
   statsCommand,
   memoryCommand,
   mineCommand,
+  procedureCommand,
   dashboardCommand,
   configCommand,
   telemetryCommand,
