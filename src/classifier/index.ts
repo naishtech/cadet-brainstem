@@ -23,6 +23,10 @@ export type {
   WarmUpOptions,
   WarmUpResult,
 } from './ollama';
+export type {
+  LlmUsage,
+  TraceSink,
+} from './ollama';
 export {
   LlmStatusTracker,
 } from './llm-status';

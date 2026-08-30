@@ -232,16 +232,8 @@ describe('optimize_context', () => {
         { name: 'find_relevant_symbols', intent: 'locate the code/symbols involved in the issue', priority: 1 },
       ],
     });
-    expect(result.guidance).toBe(
-      'Advisory: trace the loader debug path and verify before concluding.',
-    );
-    expect(result.evidence_plan).toEqual({
-      prioritized_queries: [
-        { id: 'q1', query: 'loader', sources: ['file_search'] },
-        { id: 'q2', query: 'debug', sources: ['file_search'] },
-      ],
-      scope: 'debug: loader, debug',
-    });
+    expect(result.guidance).toBeUndefined();
+    expect(result.evidence_plan).toBeUndefined();
     expect(result.memory_hints).toEqual({
       use: 'if_necessary',
       reason: 'check prior loader notes',
@@ -336,7 +328,12 @@ describe('classify', () => {
       context_need: 'broad',
       precision: 'normal',
     });
-    expect(result.strategy).toEqual(makeStrategy());
+    expect(result.strategy).toEqual({
+      compression: 'normal',
+      code_search: 'semantic',
+      terminal_output: 'error-focused',
+      leanctx_mode: 'cognitive',
+    });
     expect(result.degraded).toBe(false);
     expect(result.response_policy).toEqual({
       directives: {
@@ -351,16 +348,8 @@ describe('classify', () => {
         { name: 'find_relevant_symbols', intent: 'locate the code/symbols involved in the issue', priority: 1 },
       ],
     });
-    expect(result.guidance).toBe(
-      'Advisory: trace the loader debug path and verify before concluding.',
-    );
-    expect(result.evidence_plan).toEqual({
-      prioritized_queries: [
-        { id: 'q1', query: 'loader', sources: ['file_search'] },
-        { id: 'q2', query: 'debug', sources: ['file_search'] },
-      ],
-      scope: 'debug: loader, debug',
-    });
+    expect(result.guidance).toBeUndefined();
+    expect(result.evidence_plan).toBeUndefined();
     expect(result.memory_hints).toEqual({
       use: 'if_necessary',
       reason: 'check prior loader notes',

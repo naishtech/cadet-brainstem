@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../config/index';
 import Mustache from 'mustache';
 import {
@@ -35,6 +36,26 @@ export class ClassifierUnavailableError extends Error {
   }
 }
 
+export interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * Live LLM trace sink (design doc §7). When provided, the classifier streams
+ * the model's output and emits start/token/complete events so the dashboard can
+ * render the reasoning live. Optional — callers that don't pass one get the
+ * original non-streaming behaviour unchanged.
+ */
+export interface TraceSink {
+  /** Emitted before the model call. */
+  start(info: { id: string; model: string; request: string }): void;
+  /** Emitted per streamed delta. */
+  token(info: { id: string; delta: string }): void;
+  /** Emitted after the model call (the non-streaming fallback emits this too). */
+  complete(info: { id: string; usage?: LlmUsage }): void;
+}
+
 export interface ClassifierOptions {
   /** Overrides the configured `classifier.model`. */
   model?: string;
@@ -43,6 +64,8 @@ export interface ClassifierOptions {
   timeoutMs?: number;
   /** Latency/metrics log sink. Defaults to console.log. */
   log?: (line: string) => void;
+  /** Optional LLM trace sink (dashboard live streaming). */
+  trace?: TraceSink;
 }
 
 const CLASSIFICATION_SHAPE = `{
@@ -316,6 +339,8 @@ export class OllamaClassifier {
   readonly timeoutMs: number;
   readonly keepAlive: string | number;
   readonly log: (line: string) => void;
+  readonly trace: TraceSink | undefined;
+  private lastUsage: LlmUsage | undefined;
 
   constructor(options: ClassifierOptions = {}) {
     this.model = resolveModel(options.model);
@@ -326,6 +351,7 @@ export class OllamaClassifier {
     this.timeoutMs = options.timeoutMs ?? resolveTimeoutMs();
     this.keepAlive = resolveKeepAlive();
     this.log = options.log ?? defaultLog;
+    this.trace = options.trace;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -367,30 +393,64 @@ export class OllamaClassifier {
     prompt: string,
     format: unknown = 'json',
   ): Promise<string> {
+    const baseBody = {
+      model: this.model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+      // Structured output for classify: pass the JSON Schema so the model
+      // emits valid JSON matching the classification shape. Assess keeps
+      // plain JSON mode (no schema).
+      format,
+      // Disable qwen3 reasoning/thinking — we only need a short structured
+      // decision, so thinking wastes tokens and latency.
+      think: false,
+      // Keep the model warm between calls so a cold reload (which can take
+      // ~10s on CPU) doesn't blow the timeout.
+      keep_alive: this.keepAlive,
+      options: {
+        temperature: 0,
+        num_predict: DEFAULT_NUM_PREDICT,
+      },
+    };
+
+    // No trace sink (default) — original non-streaming behaviour.
+    if (this.trace === undefined) {
+      return this.chatOnce(baseBody);
+    }
+
+    // Dashboard trace active — stream deltas live (design §7).
+    const id = randomUUID();
+    this.trace.start({ id, model: this.model, request: prompt });
+    try {
+      const content = await this.streamChat({ ...baseBody, stream: true }, id);
+      this.trace.complete(
+        this.lastUsage !== undefined ? { id, usage: this.lastUsage } : { id },
+      );
+      return content;
+    } catch {
+      // Graceful degradation (design §7, degradation.ts): fall back to the
+      // non-streaming path and still emit a bracketing complete.
+      try {
+        const content = await this.chatOnce(baseBody);
+        this.trace.complete(
+          this.lastUsage !== undefined ? { id, usage: this.lastUsage } : { id },
+        );
+        return content;
+      } catch (fallbackErr) {
+        this.trace.complete({ id });
+        throw fallbackErr;
+      }
+    }
+  }
+
+  /** Non-streaming /api/chat round-trip (the original path). */
+  private async chatOnce(body: Record<string, unknown>): Promise<string> {
     let response: Response;
     try {
       response = await fetch(`${this.host}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [{ role: 'user', content: prompt }],
-          stream: false,
-          // Structured output for classify: pass the JSON Schema so the model
-          // emits valid JSON matching the classification shape. Assess keeps
-          // plain JSON mode (no schema).
-          format,
-          // Disable qwen3 reasoning/thinking — we only need a short structured
-          // decision, so thinking wastes tokens and latency.
-          think: false,
-          // Keep the model warm between calls so a cold reload (which can take
-          // ~10s on CPU) doesn't blow the timeout.
-          keep_alive: this.keepAlive,
-          options: {
-            temperature: 0,
-            num_predict: DEFAULT_NUM_PREDICT,
-          },
-        }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
@@ -433,6 +493,90 @@ export class OllamaClassifier {
     );
 
     return data.message.content;
+  }
+
+  /**
+   * Streaming /api/chat (NDJSON deltas). Emits `llm.trace.token` per delta and
+   * accumulates the full content. Throws on any failure so the caller can fall
+   * back to the non-streaming path.
+   */
+  private async streamChat(
+    body: Record<string, unknown>,
+    id: string,
+  ): Promise<string> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.host}/api/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (err) {
+      throw new ClassifierUnavailableError(
+        `Could not reach Ollama at ${this.host}: ${(err as Error).message}`,
+      );
+    }
+    if (!response.ok || response.body === null) {
+      throw new ClassifierUnavailableError(
+        `Ollama responded with HTTP ${response.status} at ${this.host}`,
+      );
+    }
+
+    let accumulated = '';
+    let usage: LlmUsage | undefined;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0) continue;
+          let data: {
+            message?: { content?: string };
+            prompt_eval_count?: number;
+            eval_count?: number;
+          };
+          try {
+            data = JSON.parse(trimmed);
+          } catch {
+            continue; // skip malformed frames
+          }
+          if (
+            typeof data.prompt_eval_count === 'number' ||
+            typeof data.eval_count === 'number'
+          ) {
+            usage = {
+              inputTokens: data.prompt_eval_count ?? 0,
+              outputTokens: data.eval_count ?? 0,
+            };
+          }
+          const delta = data.message?.content ?? '';
+          if (delta.length > 0) {
+            accumulated += delta;
+            this.trace?.token({ id, delta });
+          }
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        /* already released */
+      }
+    }
+
+    if (accumulated.length === 0) {
+      throw new ClassifierUnavailableError('Ollama returned no message content');
+    }
+    this.lastUsage = usage;
+    return accumulated;
   }
 }
 
