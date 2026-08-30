@@ -37,6 +37,7 @@ describe('command routing', () => {
     expect(COMMANDS.map((command) => command.name)).toEqual([
       'init',
       'doctor',
+      'warm',
       'stats',
       'memory',
       'mine',

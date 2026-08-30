@@ -57,15 +57,25 @@ export interface HooksOptions {
   /**
    * Include the PreToolUse redirect/remind hooks (default false). They intercept
    * every tool call and were found too intrusive for daily dev work, so they are
-   * opt-in. Enable with `--pretool`.
+   * opt-in. Enable with `--pretool`. hook-redirect hard-denies raw search/list
+   * and redirects to the recommended tool; hook-remind allows + nudges only
+   * after repeated raw bursts.
    */
   pretool?: boolean;
+  /**
+   * Include ONLY the PreToolUse `hook-remind` nudge (default false). Unlike
+   * `--pretool`, this does NOT install `hook-redirect`, so native search/read
+   * is never hard-denied — the agent is merely reminded toward the recommended
+   * tool after repeated raw calls. Enable with `--remind`.
+   */
+  remind?: boolean;
 }
 
 export interface ParsedHooksArgs {
   tool?: string;
   outDir?: string;
   pretool?: boolean;
+  remind?: boolean;
 }
 
 /** Supported default recommended tool when none is provided. */
@@ -86,6 +96,7 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
   let tool: string | undefined;
   let outDir: string | undefined;
   let pretool = false;
+  let remind = false;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -112,6 +123,10 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
       pretool = true;
       continue;
     }
+    if (arg === '--remind') {
+      remind = true;
+      continue;
+    }
     positional.push(arg);
   }
   if (tool === undefined && positional.length > 0) {
@@ -121,6 +136,7 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
     ...(tool !== undefined ? { tool } : {}),
     ...(outDir !== undefined ? { outDir } : {}),
     ...(pretool ? { pretool: true } : {}),
+    ...(remind ? { remind: true } : {}),
   };
 }
 
@@ -140,7 +156,7 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
  */
 export function buildHooksConfig(
   tool: string,
-  opts: { pretool?: boolean } = {},
+  opts: { pretool?: boolean; remind?: boolean } = {},
 ): CopilotHooksConfig {
   return {
     hooks: {
@@ -170,7 +186,19 @@ export function buildHooksConfig(
               },
             ],
           }
-        : {}),
+        : opts.remind === true
+          ? {
+              // Remind-only nudge: allow + steer toward the recommended tool
+              // after repeated raw search/read bursts, without hard-denying
+              // native tools.
+              PreToolUse: [
+                {
+                  type: 'command',
+                  command: `cadet-brainstem hook-remind --tool ${tool}`,
+                },
+              ],
+            }
+          : {}),
       PostToolUse: [
         { type: 'command', command: 'cadet-brainstem hook-post-tool' },
       ],
@@ -219,10 +247,10 @@ export function runHooks(
     return 1;
   }
 
-  const config = buildHooksConfig(
-    tool,
-    options.pretool !== undefined ? { pretool: options.pretool } : {},
-  );
+  const config = buildHooksConfig(tool, {
+    ...(options.pretool !== undefined ? { pretool: options.pretool } : {}),
+    ...(options.remind !== undefined ? { remind: options.remind } : {}),
+  });
   const filePath = resolve(defaultHooksFilePath(outDir));
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
@@ -248,14 +276,15 @@ export function runHooks(
 
 export const hooksCommand: CliCommand = {
   name: 'hooks',
-  description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-brainstem.json; PreToolUse is opt-in via --pretool)',
-  usage: 'cadet-brainstem hooks [tool] [--tool <name>] [--out <dir>] [--pretool]',
+  description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-brainstem.json; PreToolUse is opt-in via --pretool, remind-only via --remind)',
+  usage: 'cadet-brainstem hooks [tool] [--tool <name>] [--out <dir>] [--pretool] [--remind]',
   run(args: readonly string[]): number {
-    const { tool, outDir, pretool } = parseHooksArgs(args);
+    const { tool, outDir, pretool, remind } = parseHooksArgs(args);
     return runHooks({
       ...(tool !== undefined ? { tool } : {}),
       ...(outDir !== undefined ? { outDir } : {}),
       ...(pretool !== undefined ? { pretool } : {}),
+      ...(remind !== undefined ? { remind } : {}),
     });
   },
 };

@@ -225,6 +225,86 @@ export async function isModelAvailable(
   }
 }
 
+export interface WarmUpOptions {
+  host?: string;
+  /** Model to load (defaults to the configured classifier model). */
+  model?: string;
+  /** keep_alive for the warm request (defaults to config). */
+  keepAlive?: string | number;
+  /** Cap for the cold-load warm request (defaults to 5 minutes). */
+  timeoutMs?: number;
+  log?: (line: string) => void;
+}
+
+export interface WarmUpResult {
+  /** True when the model loaded successfully. */
+  ok: boolean;
+  /** Ollama server reachable. */
+  available: boolean;
+  /** Configured model present on the server. */
+  modelReady: boolean;
+  latencyMs: number;
+  /** Present when !ok. */
+  error?: string;
+}
+
+/**
+ * Force the local model to load so the first real classify call doesn't pay
+ * the cold-load latency (which can take minutes on a cold start). Pings the
+ * server, verifies the model is present, then issues a tiny throwaway chat
+ * request with a generous timeout. Never throws — returns a WarmUpResult.
+ */
+export async function warmUpOllama(options: WarmUpOptions = {}): Promise<WarmUpResult> {
+  const host = options.host ?? process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
+  const model = options.model ?? resolveBaseModel();
+  const keepAlive = options.keepAlive ?? resolveKeepAlive();
+  const timeoutMs = options.timeoutMs ?? 300_000;
+  const log = options.log ?? defaultLog;
+  const started = Date.now();
+  const latency = (): number => Date.now() - started;
+
+  const available = await isOllamaAvailable(host);
+  if (!available) {
+    const error = `Ollama not reachable at ${host}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: false, modelReady: false, latencyMs: latency(), error };
+  }
+
+  const modelReady = await isModelAvailable(model, host);
+  if (!modelReady) {
+    const error = `model "${model}" not present on ${host}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+  }
+
+  try {
+    const response = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        stream: false,
+        think: false,
+        keep_alive: keepAlive,
+        options: { temperature: 0, num_predict: 1 },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      const error = `warm request returned HTTP ${response.status} for model ${model}`;
+      log(`[cadet-brainstem] warm-up failed: ${error}`);
+      return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+    }
+    log(`[cadet-brainstem] warm-up complete (${latency()}ms) model=${model}`);
+    return { ok: true, available: true, modelReady: true, latencyMs: latency() };
+  } catch (err) {
+    const error = `warm request failed: ${(err as Error).message}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+  }
+}
+
 /**
  * Local Ollama classifier. Uses HTTP only — it never executes or constructs
  * shell commands (safety principle §14.4). Model and host come from config

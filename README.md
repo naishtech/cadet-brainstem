@@ -4,7 +4,7 @@ Reduce the amount of context and tool output your AI coding agent consumes — l
 
 `cadet-brainstem` is an **orchestration + measurement layer** that sits above [RTK](https://github.com/rtk-ai/rtk), [Serena](https://github.com/oraios/serena) and [LeanCTX](https://github.com/yvgude/lean-ctx). It decides **when** to compress context, runs the right tool, and records **how many tokens it saved**.
 
-> Version 0.1.4 · MIT · Node.js 18+ · local-first operation
+> Version 0.2.0 · MIT · Node.js 18+ · local-first operation
 
 ---
 
@@ -55,7 +55,13 @@ cadet-brainstem doctor    # read-only health check with actionable fixes
 | `optimize_context` | Classify the task, return the LeanCTX-compressed context for a file/dir |
 | `find_relevant_symbols` | Serena semantic search → only the relevant symbols/files |
 | `compress_command_output` | RTK-reduced output for a command |
+| `serena_call` / `serena_list_tools` | Forward to Serena (full navigation / rename / diagnostics capability) |
+| `leanctx_call` / `leanctx_list_tools` | Forward to LeanCTX (full context compilation capability) |
 | `chat_memory_store` | Persist / retrieve agent memories (local SQLite) — check before work, store expensive-to-rediscover facts |
+| `activate_project` | Set the active project so memory and procedures are scoped to it |
+| `assess_context` | Ask whether the context gathered so far is sufficient and what to gather next |
+| `procedure_review` | Build a concrete, reviewable diff for a write-procedure step before it applies |
+| `procedure_apply` | Execute a procedure step against a real repo — write steps are gated behind approval |
 
 The intended flow is to call `classify` once at the start of each agent turn,
 then use its strategy to choose the context tools. MCP is client-driven: the
@@ -70,6 +76,19 @@ the fallback path enabled for unavailable Ollama or non-compliant clients.
 cadet-brainstem wrap -- git status                # print RTK-reduced output
 cadet-brainstem wrap --raw -- git status          # print the original output
 cadet-brainstem wrap --shell bash -- grep -r foo  # run in git-bash (Windows)
+```
+
+Manage the rest of the stack from the CLI:
+
+```bash
+cadet-brainstem init        # first-run setup (config + integrations + db)
+cadet-brainstem doctor      # read-only health check with actionable fixes
+cadet-brainstem stats       # saved/processed token metrics (clear to wipe)
+cadet-brainstem memory      # show/manage agent memories (per-project or --global)
+cadet-brainstem procedure   # list procedures; run/review one against a repo
+cadet-brainstem mine        # mine conversations for procedure candidates
+cadet-brainstem hooks --pretool   # install VS Code Copilot Chat Hooks
+cadet-brainstem mcp         # run the local MCP server
 ```
 
 > Commands run in the platform shell (`cmd.exe` on Windows) unless you pass
@@ -99,17 +118,19 @@ installs everything into the global hooks dir VS Code auto-loads from.
 #### 1. Install all hooks (one command)
 
 ```bash
-cadet-brainstem hooks find_relevant_symbols   # writes ~/.copilot/hooks/cadet-brainstem.json
+cadet-brainstem hooks --pretool   # writes ~/.copilot/hooks/cadet-brainstem.json
 ```
 
-This registers all eight lifecycle events, each wired to a `cadet-brainstem
-hook-*` handler:
+This registers every lifecycle event, each wired to a `cadet-brainstem hook-*`
+handler. `PreToolUse` is **opt-in** via `--pretool` — it intercepts every tool
+call and proved too intrusive for daily dev, so it is off by default:
 
 | Event | Handler | What it saves |
 | --- | --- | --- |
 | `SessionStart` | `hook-session-start` | Primes the session with memory hints + the recommended tool |
 | `UserPromptSubmit` | `hook-user-prompt` | Classifies the prompt and injects the strategy deterministically |
-| `PreToolUse` | `hook-redirect` + `hook-remind` | Redirects native search/list (hard-deny) and read/shell (soft-nudge) to cadet MCP tools; reminds after |
+| `PreToolUse` *(opt-in)* | `hook-redirect` + `hook-remind` | Redirects native search/list (hard-deny) and read/shell (soft-nudge) to cadet MCP tools; reminds after |
+| `PreToolUse` *(opt-in)* | `hook-procedure-review` | Denies `procedure_apply` without approval and surfaces the reviewable diff |
 | `PostToolUse` | `hook-post-tool` | Records token-saving metrics per tool call |
 | `PreCompact` | `hook-pre-compact` | Exports important context to memory before truncation |
 | `SubagentStart` | `hook-subagent-start` | Classifies the subtask, injects a cheap-path primer |
@@ -150,9 +171,11 @@ shell commands (allow + a reminder to use `optimize_context` /
 `compress_command_output` instead — so the agent is never blocked from
 reading a file it needs to edit or running a necessary command). `hook-remind`
 nudges toward the recommended tool when the agent still over-uses raw
-`grep`/`read`. The `UserPromptSubmit` and `PreCompact` hooks do the heavy
-token-saving: classifying each prompt and exporting context to memory before
-truncation.
+`grep`/`read`. `hook-procedure-review` denies `procedure_apply` unless the call
+carries `approved:true`, and surfaces the concrete diff so a human can review
+a write before it lands. The `UserPromptSubmit` and `PreCompact` hooks do the
+heavy token-saving: classifying each prompt and exporting context to memory
+before truncation.
 
 #### Troubleshooting
 
@@ -187,7 +210,9 @@ and prefers the cheap paths:
 > if you are in git-bash on Windows). Use `chat_memory_store` to check memory
 > before starting work and to store facts that are expensive to rediscover
 > (decisions, constraints, verified commands, gotchas) — never store secrets.
-> If an MCP tool is unavailable, fall back to the normal operation.
+> For reusable or write work, use `procedure_review` to see the diff and
+> `procedure_apply` (with approval) to execute. If an MCP tool is unavailable,
+> fall back to the normal operation.
 
 ---
 
@@ -202,8 +227,9 @@ task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised c
 - **Classifier** — a local Ollama model (`qwen3:1.7b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
 - **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
+- **Procedures** — reusable, intent-grounded operation sequences (`service: leanctx | serena | rtk`, tool, args) that the local model can execute against a real repo on the cloud agent's behalf. Read-only steps run automatically; write steps are gated behind a reviewable diff and explicit approval (`procedure_review` → `procedure_apply`). New candidates are discovered by mining historical conversations (`mine`).
 - **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-brainstem/metrics.db`), fully offline, with estimates clearly labelled.
-- **Memory** — a local SQLite memory store (`~/.cadet-brainstem/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`.
+- **Memory** — a local SQLite memory store (`~/.cadet-brainstem/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`, scoped per project (`activate_project`).
 
 ### Project layout
 
@@ -216,9 +242,11 @@ src/
   metrics/      local SQLite metrics store
   memory/       local SQLite agent-memory store
   mcp/          local MCP server exposing the engine as tools
+  mine/         mine historical conversations for procedure candidates
+  procedure/    reusable procedure store + execution/review bridge
   config/       YAML configuration
 docs/
-  plans/        design document (docs/plans/initial_design.md)
+  plans/        design documents
   requirements.md
 ```
 
@@ -235,4 +263,12 @@ The project is built incrementally from the task files in `tasks/`; see the desi
 
 ---
 
-**Status:** MVP. Wired commands: `init`, `doctor`, `stats`, `wrap`, `hooks`, `hook-remind`, `hook-session-start`, `hook-user-prompt`, `hook-post-tool`, `hook-pre-compact`, `hook-subagent-start`, `hook-subagent-stop`, `hook-stop`, `mcp`. (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP server exposes `classify`, `optimize_context`, `find_relevant_symbols`, `compress_command_output`, and `chat_memory_store`.
+**Status.** Wired commands: `init`, `doctor`, `stats`, `memory`, `mine`,
+`procedure`, `hooks`, `hook-remind`, `hook-procedure-review`, `hook-redirect`,
+`hook-session-start`, `hook-user-prompt`, `hook-post-tool`, `hook-pre-compact`,
+`hook-subagent-start`, `hook-subagent-stop`, `hook-stop`, `mcp`, `wrap`.
+(`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP
+server exposes `classify`, `optimize_context`, `find_relevant_symbols`,
+`compress_command_output`, `serena_call`, `serena_list_tools`, `leanctx_call`,
+`leanctx_list_tools`, `chat_memory_store`, `activate_project`,
+`assess_context`, `procedure_review`, and `procedure_apply`.

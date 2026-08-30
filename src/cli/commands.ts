@@ -24,6 +24,7 @@ import { mineCommand } from './commands/mine';
 import { procedureCommand } from './commands/procedure';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
+import { warmCommand } from './commands/warm';
 import { wrapCommand } from './commands/wrap';
 
 export const VERSION: string = pkg.version;
@@ -31,6 +32,7 @@ export const VERSION: string = pkg.version;
 export const COMMANDS: readonly CliCommand[] = [
   initCommand,
   doctorCommand,
+  warmCommand,
   statsCommand,
   memoryCommand,
   mineCommand,

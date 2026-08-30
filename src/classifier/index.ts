@@ -17,7 +17,18 @@ export {
   isModelAvailable,
   isOllamaAvailable,
   resolveBaseModel,
+  warmUpOllama,
 } from './ollama';
+export type {
+  WarmUpOptions,
+  WarmUpResult,
+} from './ollama';
+export {
+  LlmStatusTracker,
+} from './llm-status';
+export type {
+  LlmStatus,
+} from './llm-status';
 export {
   CLASSIFICATION_JSON_SCHEMA,
   ClassificationValidationError,

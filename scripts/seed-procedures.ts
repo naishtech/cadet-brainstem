@@ -47,6 +47,14 @@ const SEED: SeedProcedureInput[] = [
       'To read a file, ask the local LLM to call read_file with { relative_path: "<path>" }.',
   },
   {
+    triggerPattern: 'Run diagnostics on a file',
+    keywords: ['diagnostic', 'diagnostics', 'lint', 'issues', 'errors', 'check', 'compile', 'serena'],
+    steps: [{ service: 'serena', tool: 'get_diagnostics_for_file', args: {} }],
+    riskTier: 'auto_execute', // read-only, local
+    handoffShape:
+      'To run diagnostics on a file, ask the local LLM to call get_diagnostics_for_file with { relative_path: "<path>" }, then report the issues it returns (or that there are none). Do NOT fabricate a language-server result — the local LLM must actually invoke the tool.',
+  },
+  {
     triggerPattern: 'Search a file for a pattern',
     keywords: ['search', 'pattern', 'regex', 'find', 'serena'],
     steps: [{ service: 'serena', tool: 'search_for_pattern', args: {} }],
