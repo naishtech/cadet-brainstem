@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DashboardServer } from '../src/dashboard/server';
 import { MetricsStore } from '../src/metrics';
+import type { ToolStatus } from '../src/dashboard/status';
 
 const tempDirs: string[] = [];
 
@@ -19,6 +20,23 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const STATUS_FIXTURE: ToolStatus[] = [
+  { name: 'ollama', kind: 'llm', available: true, detail: '0.5.1' },
+  { name: 'rtk', kind: 'rtk', available: false },
+  { name: 'serena', kind: 'serena', available: true, detail: '1.0.0' },
+  { name: 'leanctx', kind: 'leanctx', available: true },
+];
+
+/** Construct a server that never runs real environment detection. */
+function makeServer(
+  opts: ConstructorParameters<typeof DashboardServer>[0] = {},
+): DashboardServer {
+  return new DashboardServer({
+    getStatus: async () => STATUS_FIXTURE,
+    ...opts,
+  });
+}
 
 function get(
   port: number,
@@ -55,7 +73,7 @@ function openSseClient(port: number): Promise<string> {
 
 describe('DashboardServer', () => {
   it('serves /api/health', async () => {
-    const server = new DashboardServer({ port: 0 });
+    const server = makeServer({ port: 0 });
     const info = await server.start();
     const res = await get(info.port, '/api/health');
     expect(res.status).toBe(200);
@@ -68,7 +86,7 @@ describe('DashboardServer', () => {
     writeFileSync(join(dir, 'index.html'), '<html>dashboard</html>');
     writeFileSync(join(dir, 'app.js'), 'console.log(1);');
 
-    const server = new DashboardServer({ port: 0, staticDir: dir });
+    const server = makeServer({ port: 0, staticDir: dir });
     const info = await server.start();
 
     const index = await get(info.port, '/');
@@ -88,18 +106,32 @@ describe('DashboardServer', () => {
   });
 
   it('returns 404 for unknown /api routes', async () => {
-    const server = new DashboardServer({ port: 0 });
+    const server = makeServer({ port: 0 });
     const info = await server.start();
     const res = await get(info.port, '/api/nope');
     expect(res.status).toBe(404);
     await server.stop();
   });
 
-  it('returns 501 for not-yet-wired api routes', async () => {
-    const server = new DashboardServer({ port: 0 });
+  it('returns 501 for /api/logs until Task 52', async () => {
+    const server = makeServer({ port: 0 });
+    const info = await server.start();
+    const res = await get(info.port, '/api/logs');
+    expect(res.status).toBe(501);
+    await server.stop();
+  });
+
+  it('serves /api/status with per-service availability', async () => {
+    const server = makeServer({ port: 0 });
     const info = await server.start();
     const res = await get(info.port, '/api/status');
-    expect(res.status).toBe(501);
+    expect(res.status).toBe(200);
+    const status = JSON.parse(res.body) as ToolStatus[];
+    expect(status).toHaveLength(4);
+    const ollama = status.find((s) => s.kind === 'llm');
+    expect(ollama?.available).toBe(true);
+    expect(ollama?.detail).toBe('0.5.1');
+    expect(status.find((s) => s.name === 'rtk')?.available).toBe(false);
     await server.stop();
   });
 
@@ -123,7 +155,7 @@ describe('DashboardServer', () => {
     });
     seed.close();
 
-    const server = new DashboardServer({ port: 0, metricsPath });
+    const server = makeServer({ port: 0, metricsPath });
     const info = await server.start();
     const res = await get(info.port, '/api/stats');
     expect(res.status).toBe(200);
@@ -139,10 +171,10 @@ describe('DashboardServer', () => {
   });
 
   it('auto-increments the port when the requested one is busy', async () => {
-    const first = new DashboardServer({ port: 0 });
+    const first = makeServer({ port: 0 });
     const info1 = await first.start();
 
-    const second = new DashboardServer({ port: info1.port });
+    const second = makeServer({ port: info1.port });
     const info2 = await second.start();
     expect(info2.port).toBe(info1.port + 1);
 
@@ -151,7 +183,7 @@ describe('DashboardServer', () => {
   });
 
   it('start is idempotent and stop is clean', async () => {
-    const server = new DashboardServer({ port: 0 });
+    const server = makeServer({ port: 0 });
     const info = await server.start();
     expect(server.isRunning()).toBe(true);
 
@@ -164,7 +196,7 @@ describe('DashboardServer', () => {
   });
 
   it('SSE supports multiple subscribers', async () => {
-    const server = new DashboardServer({ port: 0 });
+    const server = makeServer({ port: 0 });
     const info = await server.start();
 
     const [a, b] = await Promise.all([

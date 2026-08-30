@@ -5,6 +5,8 @@ import pkg from '../../package.json';
 import { getDefaultMetricsPath, MetricsStore, formatStats } from '../metrics';
 import { Router, sendJson } from './router';
 import { openSse, type SseConnection } from './stream';
+import { getEventBus, type DashboardEvent, type EventBus } from './event-bus';
+import { getServiceStatus, type ToolStatus } from './status';
 
 export const DEFAULT_DASHBOARD_HOST = '127.0.0.1';
 export const DEFAULT_DASHBOARD_PORT = 4100;
@@ -12,6 +14,8 @@ export const DEFAULT_DASHBOARD_PORT = 4100;
 export const PORT_RANGE = 20;
 /** Heartbeat cadence for SSE connections (design §5.4). */
 export const SSE_HEARTBEAT_MS = 15_000;
+/** Default status re-check interval in seconds (design §5.5). */
+export const DEFAULT_STATUS_INTERVAL_SEC = 30;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -37,6 +41,12 @@ export interface DashboardServerOptions {
   staticDir?: string;
   /** Metrics database path for /api/stats. Defaults to the standard path. */
   metricsPath?: string;
+  /** Status re-check interval in seconds. Defaults to 30. */
+  statusIntervalSec?: number;
+  /** EventBus to subscribe for SSE broadcasts. Defaults to the singleton. */
+  eventBus?: EventBus;
+  /** Status resolver for /api/status. Defaults to getServiceStatus(). */
+  getStatus?: () => Promise<ToolStatus[]>;
   /** Optional log sink. */
   log?: (line: string) => void;
 }
@@ -54,13 +64,17 @@ export interface ServerInfo {
 export class DashboardServer {
   private readonly options: DashboardServerOptions;
   private readonly router = new Router();
+  private readonly eventBus: EventBus;
   private server: HttpServer | undefined;
   private info: ServerInfo | undefined;
   private readonly sseConnections = new Set<SseConnection>();
   private heartbeat: NodeJS.Timeout | undefined;
+  private statusTimer: NodeJS.Timeout | undefined;
+  private unsubscribe: (() => void) | undefined;
 
   constructor(options: DashboardServerOptions = {}) {
     this.options = options;
+    this.eventBus = options.eventBus ?? getEventBus();
     this.registerRoutes();
   }
 
@@ -114,12 +128,16 @@ export class DashboardServer {
     this.server = server;
     this.info = { host, port, url: `http://${host}:${port}` };
     this.startHeartbeat();
+    this.startStatusRefresh();
     return this.info;
   }
 
   /** Stop the server and close all SSE connections. Idempotent. */
   async stop(): Promise<void> {
     this.stopHeartbeat();
+    this.stopStatusRefresh();
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
     for (const conn of this.sseConnections) {
       conn.close();
     }
@@ -157,12 +175,19 @@ export class DashboardServer {
       }
     });
 
-    // Placeholders; wired by Tasks 51-52.
-    for (const path of ['/api/status', '/api/logs']) {
-      this.router.get(path, (_req, res) => {
-        sendJson(res, 501, { error: 'not implemented yet' });
-      });
-    }
+    this.router.get('/api/status', async (_req, res) => {
+      try {
+        const services = await this.refreshStatus();
+        sendJson(res, 200, services);
+      } catch (err) {
+        sendJson(res, 500, { error: (err as Error).message });
+      }
+    });
+
+    // Placeholder; wired by Task 52.
+    this.router.get('/api/logs', (_req, res) => {
+      sendJson(res, 501, { error: 'not implemented yet' });
+    });
 
     this.router.get('/api/events', (req, res) => {
       this.handleSse(req, res);
@@ -178,6 +203,40 @@ export class DashboardServer {
     });
     // Initial comment so the client sees the stream open immediately.
     conn.comment('connected');
+  }
+
+  /** Re-check service status, publish on the EventBus, and return it. */
+  private async refreshStatus(): Promise<ToolStatus[]> {
+    const getStatus = this.options.getStatus ?? getServiceStatus;
+    const services = await getStatus();
+    this.eventBus.status(services);
+    return services;
+  }
+
+  /** Broadcast an EventBus event to all SSE subscribers as a named frame. */
+  private broadcastEvent(event: DashboardEvent): void {
+    const { type, ...data } = event;
+    for (const conn of this.sseConnections) {
+      conn.write(type, data);
+    }
+  }
+
+  private startStatusRefresh(): void {
+    const intervalSec = this.options.statusIntervalSec ?? DEFAULT_STATUS_INTERVAL_SEC;
+    this.statusTimer = setInterval(() => {
+      void this.refreshStatus().catch(() => undefined);
+    }, intervalSec * 1000);
+    this.statusTimer.unref?.();
+    // Subscribe the SSE broadcast to the EventBus, then do an initial check.
+    this.unsubscribe = this.eventBus.subscribe((event) => this.broadcastEvent(event));
+    void this.refreshStatus().catch(() => undefined);
+  }
+
+  private stopStatusRefresh(): void {
+    if (this.statusTimer !== undefined) {
+      clearInterval(this.statusTimer);
+      this.statusTimer = undefined;
+    }
   }
 
   private startHeartbeat(): void {
