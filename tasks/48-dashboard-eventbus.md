@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — new in-process module; no existing behaviour touched.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §5.3 EventBus
 
@@ -30,7 +30,7 @@ dashboard events, keeps an in-memory ring buffer, and optionally persists to a J
 
 ## Acceptance Criteria
 
-- [ ] Events round-trip: publish → subscriber receives typed event.
-- [ ] Ring buffer respects capacity and returns newest-first.
-- [ ] With `persistLogs` on, events are appended as valid JSONL; off ⇒ no file writes.
-- [ ] Singleton is shared (same instance imported anywhere).
+- [x] Events round-trip: publish → subscriber receives typed event.
+- [x] Ring buffer respects capacity and returns newest-first.
+- [x] With `persistLogs` on, events are appended as valid JSONL; off ⇒ no file writes.
+- [x] Singleton is shared (same instance imported anywhere).
