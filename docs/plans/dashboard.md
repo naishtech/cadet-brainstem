@@ -1,9 +1,23 @@
 # Dashboard — Technical Design
 
-**Status:** Draft
+**Status:** Implemented (Tasks 47–55, 2026-08-30)
 **Author:** cadet-brainstem engineering
 **Date:** 2026-08-30
 **Related:** `docs/plans/initial_design.md` §9 (Dashboard) & §11 (Telemetry); `tasks/18-dashboard-command.md`; `tasks/19-dashboard-web-ui.md`
+
+---
+
+## 0. Usage (run / stop)
+
+- **Run:** `cadet-brainstem dashboard` — starts the server on `127.0.0.1:4100`
+  (auto-increments if busy), opens the default browser, and blocks.
+- **Flags:** `--no-open` (skip auto-open), `--port <n>` (override port).
+- **Stop:** `cadet-brainstem dashboard --stop` (terminates the registered instance
+  via its PID file).
+- The server is **localhost-only** (`127.0.0.1`) and serves the built Vue SPA
+  from the package (`dist/dashboard/static`) — no dev tooling needed at runtime.
+- **Dev mode:** `cd web && npm run dev` (Vite on `:5173`, proxies `/api` →
+  `127.0.0.1:4100`).
 
 ---
 

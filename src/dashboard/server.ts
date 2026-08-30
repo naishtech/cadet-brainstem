@@ -1,6 +1,7 @@
 import http, { type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pkg from '../../package.json';
 import { getDefaultMetricsPath, MetricsStore, formatStats } from '../metrics';
 import { Router, sendJson } from './router';
@@ -306,4 +307,8 @@ export class DashboardServer {
   }
 }
 
-const DEFAULT_STATIC_DIR = join(process.cwd(), 'dist', 'dashboard', 'static');
+const DEFAULT_STATIC_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'dashboard',
+  'static',
+);

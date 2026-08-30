@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — build wiring and verification; no runtime logic.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §11 Packaging & Build, §12 Testing, §13 Milestones
 
@@ -26,7 +26,7 @@ Wire the Vue build into the npm package, add integration/frontend tests, and upd
 
 ## Acceptance Criteria
 
-- [ ] `npm run build` produces a package that serves the dashboard offline, no dev tooling.
-- [ ] Integration + unit tests pass; Playwright smoke passes.
-- [ ] Docs updated (port, lifecycle, `--stop`).
-- [ ] Full regression suite green.
+- [x] `npm run build` produces a package that serves the dashboard offline, no dev tooling.
+- [x] Integration + unit tests pass; Playwright smoke passes.
+- [x] Docs updated (port, lifecycle, `--stop`).
+- [x] Full regression suite green.
