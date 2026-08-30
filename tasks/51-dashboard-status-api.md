@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — additive status endpoint; reuses existing detection.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §5.5 Status, §5.4 SSE
 
@@ -23,6 +23,6 @@ broadcast changes via SSE.
 
 ## Acceptance Criteria
 
-- [ ] `GET /api/status` returns accurate availability + version detail per service.
-- [ ] Status re-checks on the configured interval and pushes SSE `status` events.
-- [ ] Graceful if a tool is missing (available:false + hint, no throw).
+- [x] `GET /api/status` returns accurate availability + version detail per service.
+- [x] Status re-checks on the configured interval and pushes SSE `status` events.
+- [x] Graceful if a tool is missing (available:false + hint, no throw).
