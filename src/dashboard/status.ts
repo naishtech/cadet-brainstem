@@ -61,6 +61,9 @@ export async function getServiceStatus(
     if (!present) {
       llmAvailable = false;
       llmDetail = `Ollama reachable but classifier model "${model}" not present`;
+    } else {
+      // Show the running model so the UI can render e.g. "LLM [qwen3:1.7b]".
+      llmDetail = model;
     }
   }
 

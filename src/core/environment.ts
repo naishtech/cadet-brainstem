@@ -2,8 +2,11 @@ import { exec as execCb, execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DEFAULT_OLLAMA_HOST, isOllamaAvailable } from '../classifier';
 import { LeanCtxAdapter } from '../integrations/leanctx';
+import { LEAN_CTX_BIN } from '../integrations/leanctx/adapter';
 import { RtkAdapter } from '../integrations/rtk';
+import { RTK_BIN } from '../integrations/rtk/adapter';
 import { SerenaAdapter } from '../integrations/serena';
+import { SERENA_BIN } from '../integrations/serena/adapter';
 import type { ContextOptimizer } from './context-optimizer';
 
 const exec = promisify(execCb);
@@ -45,6 +48,11 @@ export function detectPlatform(): Platform {
   }
 }
 
+/** Strip trailing parenthetical URL noise from a `--version` line (e.g. lean-ctx). */
+function cleanVersion(line: string): string {
+  return line.replace(/\s*\([^)]*https?:\/\/[^)]*\)/gi, '').trim();
+}
+
 /**
  * Best-effort `<bin> --version`; undefined when it cannot be read.
  * `shell` is required on Windows for `.cmd` shims (e.g. npm) — execFile
@@ -58,15 +66,27 @@ async function getVersion(bin: string, shell = false): Promise<string | undefine
       ? await exec(`${bin} --version`, { timeout: 5_000 })
       : await execFile(bin, ['--version'], { timeout: 5_000 });
     const line = stdout.split('\n')[0]?.trim();
-    return line !== undefined && line.length > 0 ? line : undefined;
+    return line !== undefined && line.length > 0 ? cleanVersion(line) : undefined;
   } catch {
     return undefined;
   }
 }
 
+/**
+ * Map adapter names to the CLI binary that reports their version. Some adapters'
+ * `name` differs from their binary (LeanCTX is `leanctx` but its CLI is
+ * `lean-ctx`), so probing `<name> --version` would miss the version.
+ */
+const VERSION_BIN: Record<string, string> = {
+  leanctx: LEAN_CTX_BIN,
+  rtk: RTK_BIN,
+  serena: SERENA_BIN,
+};
+
 async function detectTool(adapter: ContextOptimizer): Promise<ToolAvailability> {
   const available = await adapter.isAvailable();
-  const detail = available ? await getVersion(adapter.name) : undefined;
+  const bin = VERSION_BIN[adapter.name] ?? adapter.name;
+  const detail = available ? await getVersion(bin) : undefined;
   return {
     name: adapter.name,
     available,
