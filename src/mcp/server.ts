@@ -48,6 +48,7 @@ import {
 import { loadConfig, saveConfig } from '../config';
 import { getInstrumenter, type Instrumenter } from '../dashboard/instrument';
 import { getTraceSink } from '../dashboard/trace';
+import { startInProcessDashboard } from '../dashboard/auto-start';
 import {
   MemoryStore,
   getProjectMemoryPath,
@@ -1942,6 +1943,9 @@ export async function runMcpServer(deps: McpDeps = {}): Promise<number> {
   // classify doesn't pay the cold-load latency. Never blocks the server —
   // until ready, classify returns fast conservative defaults with a notice.
   void warmUpOnServerStart(resolved);
+  // Auto-start the in-process dashboard (design §9.2) so live classify/MCP
+  // events stream to it over the shared EventBus. Best-effort, non-blocking.
+  void startInProcessDashboard().catch(() => undefined);
   // Client disconnected — release the persistent Serena session (if any).
   await resolved.serena.close?.().catch(() => undefined);
   return 0;
