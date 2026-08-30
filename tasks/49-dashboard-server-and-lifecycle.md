@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — new local server; isolated from existing logic.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §5.1 Server, §9.2 Lifecycle, §10 Security
 
@@ -30,8 +30,8 @@ REST/SSE API, plus cross-platform browser open and the auto-start lifecycle.
 
 ## Acceptance Criteria
 
-- [ ] Server serves the SPA `index.html` and static assets on `127.0.0.1`.
-- [ ] Port auto-increments when the default is busy.
-- [ ] Browser opens on start when interactive; skipped in CI/no-TTY.
-- [ ] `stop()` shuts down cleanly; `start()` is idempotent.
-- [ ] SSE connection sends heartbeats and supports multiple subscribers.
+- [x] Server serves the SPA `index.html` and static assets on `127.0.0.1`.
+- [x] Port auto-increments when the default is busy.
+- [x] Browser opens on start when interactive; skipped in CI/no-TTY.
+- [x] `stop()` shuts down cleanly; `start()` is idempotent.
+- [x] SSE connection sends heartbeats and supports multiple subscribers.

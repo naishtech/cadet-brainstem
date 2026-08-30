@@ -62,8 +62,9 @@ describe('command routing', () => {
   });
 
   it('delegates each stub command to its own module', async () => {
-    // `init` (14), `doctor` (15), `stats` (17) and `dashboard` (47) are wired —
-    // covered in their own test files.
+    // `init` (14), `doctor` (15), `stats` (17), `dashboard` (47) and `config`
+    // are wired — covered in their own test files. `config` remains the only
+    // stub.
     for (const name of ['config']) {
       await expect(runCli([name])).resolves.toBe(0);
       expect(log).toHaveBeenCalledWith(
@@ -71,13 +72,6 @@ describe('command routing', () => {
       );
       log.mockClear();
     }
-  });
-
-  it('runs the wired dashboard command', async () => {
-    await expect(runCli(['dashboard'])).resolves.toBe(0);
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining('[cadet-brainstem] dashboard: not yet wired'),
-    );
   });
 
   it('shows command help for <command> --help', async () => {
