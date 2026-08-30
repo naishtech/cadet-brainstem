@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — additive endpoint; refactor of `runStats` is contained.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §5.2 REST, §5.6 Shared stats formatter
 
@@ -23,7 +23,7 @@ dashboard render identical numbers.
 
 ## Acceptance Criteria
 
-- [ ] `GET /api/stats` returns the full structured payload.
-- [ ] CLI `stats` output matches the `/api/stats` numbers (same source).
-- [ ] Estimated fields are flagged `estimated: true`.
-- [ ] Existing `stats` tests still pass after the refactor.
+- [x] `GET /api/stats` returns the full structured payload.
+- [x] CLI `stats` output matches the `/api/stats` numbers (same source).
+- [x] Estimated fields are flagged `estimated: true`.
+- [x] Existing `stats` tests still pass after the refactor.

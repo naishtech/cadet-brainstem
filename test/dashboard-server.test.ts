@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DashboardServer } from '../src/dashboard/server';
+import { MetricsStore } from '../src/metrics';
 
 const tempDirs: string[] = [];
 
@@ -97,8 +98,43 @@ describe('DashboardServer', () => {
   it('returns 501 for not-yet-wired api routes', async () => {
     const server = new DashboardServer({ port: 0 });
     const info = await server.start();
-    const res = await get(info.port, '/api/stats');
+    const res = await get(info.port, '/api/status');
     expect(res.status).toBe(501);
+    await server.stop();
+  });
+
+  it('serves /api/stats with the shared structured payload', async () => {
+    const dir = tempDir();
+    const metricsPath = join(dir, 'metrics.db');
+    const seed = new MetricsStore(metricsPath);
+    seed.record({
+      timestamp: new Date().toISOString(),
+      session_id: 's1',
+      task_type: 'investigation',
+      complexity: 'low',
+      risk: 'low',
+      tool: 'rtk',
+      operation: 'compress_command_output',
+      estimated_input_tokens: 1000,
+      estimated_output_tokens: 100,
+      estimated_tokens_saved: 900,
+      compression_ratio: 0.1,
+      optimisation_strategy: null,
+    });
+    seed.close();
+
+    const server = new DashboardServer({ port: 0, metricsPath });
+    const info = await server.start();
+    const res = await get(info.port, '/api/stats');
+    expect(res.status).toBe(200);
+    const payload = JSON.parse(res.body);
+    expect(payload.estimated).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.totals.eventCount).toBe(1);
+    expect(payload.totals.inputTokens).toBe(1000);
+    expect(payload.totals.reductionPct).toBe(90);
+    expect(Array.isArray(payload.savingsByTool)).toBe(true);
+    expect(Array.isArray(payload.mostExpensiveOperations)).toBe(true);
     await server.stop();
   });
 
