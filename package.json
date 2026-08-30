@@ -40,6 +40,7 @@
     "test:watch": "vitest",
     "lint": "eslint src test scripts --max-warnings 0",
     "classify:smoke": "tsx scripts/classify-smoke.ts",
+    "smoke:llm-trace": "tsx scripts/llm-trace-smoke.ts",
     "seed:procedures": "tsx scripts/seed-procedures.ts",
     "smoke:procedures": "tsx scripts/procedure-matcher-smoke.ts",
     "e2e:agent-loop": "tsx scripts/agent-loop-write-e2e.ts",

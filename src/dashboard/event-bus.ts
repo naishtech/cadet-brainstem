@@ -74,6 +74,8 @@ export class EventBus {
   private readonly emitter = new EventEmitter();
   private readonly options: EventBusOptions;
   private buffer: DashboardEvent[] = [];
+  /** Content keys of events already buffered/published (dedup for JSONL re-ingest). */
+  private readonly seen = new Set<string>();
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(options: EventBusOptions) {
@@ -90,14 +92,37 @@ export class EventBus {
 
   /** Publish an event: fan out to subscribers, buffer it, and persist. */
   publish(event: DashboardEvent): void {
-    this.buffer.push(event);
-    if (this.buffer.length > this.options.capacity) {
-      this.buffer.splice(0, this.buffer.length - this.options.capacity);
-    }
+    this.seen.add(this.keyOf(event));
+    this.push(event);
     this.emitter.emit('event', event);
     if (this.options.persistLogs) {
       this.enqueuePersist(event);
     }
+  }
+
+  /**
+   * Ingest an event read back from the persisted JSONL (written by another
+   * process, e.g. a short-lived Copilot hook). Adds it to the ring buffer and
+   * broadcasts it, but never re-persists it. Events this process already
+   * published are skipped (dedup) so its own persisted lines aren't doubled.
+   */
+  ingestExternal(event: DashboardEvent, broadcast = true): void {
+    const key = this.keyOf(event);
+    if (this.seen.has(key)) return;
+    this.seen.add(key);
+    this.push(event);
+    if (broadcast) this.emitter.emit('event', event);
+  }
+
+  private push(event: DashboardEvent): void {
+    this.buffer.push(event);
+    if (this.buffer.length > this.options.capacity) {
+      this.buffer.splice(0, this.buffer.length - this.options.capacity);
+    }
+  }
+
+  private keyOf(event: DashboardEvent): string {
+    return JSON.stringify(event);
   }
 
   /**
