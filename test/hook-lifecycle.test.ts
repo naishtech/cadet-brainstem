@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,6 +16,7 @@ import {
 } from '../src/cli/commands/hook-lifecycle';
 import { MemoryStore } from '../src/memory';
 import { MetricsStore } from '../src/metrics';
+import { ProcedureStore } from '../src/procedure';
 
 let dir: string;
 let metricsPath: string;
@@ -27,9 +28,20 @@ beforeEach(() => {
   metricsPath = join(dir, 'metrics.db');
   memoryPath = join(dir, 'memory.db');
   stateDir = join(dir, 'hooks');
+  // Isolate auto-build tests from any real user config: write a controlled
+  // config where the base model (qwen3:1.7b) is present and the derived
+  // fast-classifier is absent, so the auto-build path is exercised.
+  const cfgFile = join(dir, 'config.yaml');
+  writeFileSync(
+    cfgFile,
+    'classifier:\n  model: qwen3:1.7b\n  derived_model: fast-classifier:latest\n  auto_build: true\n',
+    'utf8',
+  );
+  process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
 });
 
 afterEach(() => {
+  delete process.env.CADET_BRAINSTEM_CONFIG;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -189,6 +201,50 @@ describe('runHookUserPrompt', () => {
     expect(out.continue).toBe(true);
     expect(out.hookSpecificOutput.additionalContext).toContain('Classified request');
     expect(out.hookSpecificOutput.additionalContext).toContain('find_relevant_symbols');
+  });
+
+  it('injects a matched procedure handoff into the context', async () => {
+    const procPath = join(dir, 'proc.db');
+    process.env.CADET_BRAINSTEM_PROCEDURES = procPath;
+    try {
+      const store = new ProcedureStore(procPath);
+      store.seedProcedure({
+        triggerPattern: 'Run diagnostics on a file',
+        keywords: ['diagnostics', 'lint', 'errors'],
+        steps: [{ service: 'serena', tool: 'get_diagnostics_for_file' }],
+        riskTier: 'auto_execute',
+        handoffShape:
+          'call get_diagnostics_for_file with { relative_path: "<path>" }',
+      });
+      store.close();
+      const { deps, outputs } = makeDeps(
+        sessionPayload('s1', { prompt: 'run diagnostics on the file' }),
+        {
+          classify: async () => ({
+            classification: {
+              task: 'review',
+              context_need: 'targeted',
+              complexity: 'low',
+              risk: 'low',
+              precision: 'normal',
+              entities: ['diagnostics', 'file'],
+              guidance: '',
+              tool_plan: { recommended_tools: [] },
+              response_policy: { directives: [] },
+            },
+            degraded: false,
+          }),
+        },
+      );
+      const exit = await runHookUserPrompt(deps);
+      expect(exit).toBe(0);
+      const out = JSON.parse(outputs[0]!);
+      expect(out.hookSpecificOutput.additionalContext).toContain('- procedures:');
+      expect(out.hookSpecificOutput.additionalContext).toContain('Run diagnostics on a file');
+      expect(out.hookSpecificOutput.additionalContext).toContain('get_diagnostics_for_file');
+    } finally {
+      delete process.env.CADET_BRAINSTEM_PROCEDURES;
+    }
   });
 
   it('is a no-op when no prompt is present', async () => {

@@ -1,0 +1,4 @@
+this document is about the project setup
+the build runs with npm run build
+to test you use npm test
+see the readme for more details

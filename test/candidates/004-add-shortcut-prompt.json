@@ -1,0 +1,15 @@
+{
+  "id": "cand-004",
+  "trigger_pattern": "Add a new keyboard-shortcut prompt mirroring an existing one",
+  "keywords": ["prompt", "shortcut", "extension", "server", "keybinding"],
+  "goal": "Add a new keyboard-shortcut prompt to the extension and server, mirroring an existing one",
+  "context": "The extension + server prompt/config files (existing ctrl+alt+b prompt)",
+  "constraints": ["Mirror the existing prompt structure", "Write action (requires_review): executed only in the test sandbox"],
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_read", "args": { "mode": "map" } },
+    { "service": "serena", "tool": "insert_lines", "args": {} }
+  ],
+  "source_conversation_id": "848d3cfa-fb63-4f8c-820f-01ec9157e824",
+  "difficulty": "medium",
+  "pass_fail": { "type": "contains", "path": "src/config.ts", "needle": "ctrl+alt+c", "expected": "a ctrl+alt+c handler exists in the source" }
+}

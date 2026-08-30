@@ -1,0 +1,27 @@
+{
+  "id": "cand-025",
+  "trigger_pattern": "Get a call graph via LeanCTX",
+  "keywords": ["callgraph", "callers", "callees", "symbol", "leanctx"],
+  "goal": "Use the LeanCTX ctx_callgraph tool to find the callers of the function 'add' in src/main.cpp",
+  "context": "The sandbox is the project root for the LeanCTX session; src/main.cpp defines add() and calls it from main(); the local LLM has the LeanCTX ctx_callgraph tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_callgraph tool",
+    "Provide the exact parameters: {action, symbol, file}",
+    "action = 'callers', symbol = 'add', file = 'src/main.cpp'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_callgraph",
+    "syntax": "{ \"action\": \"callers\", \"symbol\": \"<symbol>\", \"file\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_callgraph", "args": { "action": "callers", "symbol": "add", "file": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-leanctx-callgraph",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_callgraph tool executed without error"
+  }
+}

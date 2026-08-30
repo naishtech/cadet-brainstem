@@ -16,6 +16,9 @@ dist/
 *.sqlite
 *.sqlite3
 
+# Test sandbox artifacts (candidate run scratch dirs — cleaned after each run)
+test/artifacts/
+
 # npm pack output
 *.tgz
 

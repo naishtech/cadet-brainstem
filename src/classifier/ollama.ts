@@ -5,10 +5,13 @@ import {
   CLASSIFICATION_JSON_SCHEMA,
   Classification,
   ClassificationValidationError,
+  PROCEDURE_EXTRACTION_JSON_SCHEMA,
   TOOL_NAMES,
   parseClassification,
   parseContextAssessment,
+  parseProcedureExtraction,
   type ContextAssessment,
+  type ProcedureExtraction,
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
@@ -111,6 +114,53 @@ const ASSESSMENT_SHAPE = `{
   "reason": "<one short sentence>"
 }`;
 
+const PROCEDURE_EXTRACTION_SHAPE = `{
+  "is_procedural": false,
+  "trigger_pattern": "",
+  "keywords": [],
+  "steps": [],
+  "confidence": 0.1
+}`;
+
+/** Build the procedure-extraction prompt (task 45 mining Step 1.4). */
+export function buildExtractPrompt(conversationText: string): string {
+  return [
+    'You are mining a historical coding conversation for a repeatable,',
+    'mechanical task (e.g. "stage and commit", "run tests and fix a specific',
+    'failure", "scaffold a component from an existing pattern", or a Serena',
+    'edit such as replacing/deleting/inserting lines in a file) as opposed to',
+    'one-off creative/novel problem-solving. These tasks are executed with the',
+    'local tools: LeanCTX (context read/compress), Serena (symbol search and',
+    'file edits), RTK (command-output compression).',
+    '',
+    'Respond with exactly this JSON shape:',
+    PROCEDURE_EXTRACTION_SHAPE,
+    '',
+    'Rules (be CONSERVATIVE — most conversations are NOT procedural):',
+    '- The JSON above is ONLY a format reference showing an EMPTY, non-procedural',
+    '  result. Never copy its field values — analyze THIS conversation and output',
+    '  your own values.',
+    '- is_procedural: true ONLY when the conversation shows a clear, repeated,',
+    '  mechanical task with concrete, identifiable commands/actions. Default to',
+    '  false for one-off problem-solving, planning, debugging, or creative work.',
+    '- is_procedural must be false when you cannot identify concrete steps.',
+    '- trigger_pattern: a short imperative phrase describing the task; empty',
+    '  string when is_procedural is false. NEVER use an error message, a',
+    '  file:line reference, a test/method name, or a status note.',
+    '- steps: the concrete commands/actions taken; MUST be non-empty when',
+    '  is_procedural is true.',
+    '- keywords: 2-6 match terms for recognizing this task again.',
+    '- confidence: 0..1 for how sure you are. Be honest — low confidence means',
+    '  you should lean toward is_procedural false.',
+    '- classification/extraction only — do not write code, do not explain.',
+    '',
+    'Conversation:',
+    '"""',
+    conversationText,
+    '"""',
+  ].join('\n');
+}
+
 /** Build the context-assessment prompt: is the gathered signal sufficient? */
 export function buildAssessPrompt(taskText: string, inventoryText: string): string {
   const tools = TOOL_NAMES.join(', ');
@@ -175,6 +225,86 @@ export async function isModelAvailable(
   }
 }
 
+export interface WarmUpOptions {
+  host?: string;
+  /** Model to load (defaults to the configured classifier model). */
+  model?: string;
+  /** keep_alive for the warm request (defaults to config). */
+  keepAlive?: string | number;
+  /** Cap for the cold-load warm request (defaults to 5 minutes). */
+  timeoutMs?: number;
+  log?: (line: string) => void;
+}
+
+export interface WarmUpResult {
+  /** True when the model loaded successfully. */
+  ok: boolean;
+  /** Ollama server reachable. */
+  available: boolean;
+  /** Configured model present on the server. */
+  modelReady: boolean;
+  latencyMs: number;
+  /** Present when !ok. */
+  error?: string;
+}
+
+/**
+ * Force the local model to load so the first real classify call doesn't pay
+ * the cold-load latency (which can take minutes on a cold start). Pings the
+ * server, verifies the model is present, then issues a tiny throwaway chat
+ * request with a generous timeout. Never throws — returns a WarmUpResult.
+ */
+export async function warmUpOllama(options: WarmUpOptions = {}): Promise<WarmUpResult> {
+  const host = options.host ?? process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
+  const model = options.model ?? resolveBaseModel();
+  const keepAlive = options.keepAlive ?? resolveKeepAlive();
+  const timeoutMs = options.timeoutMs ?? 300_000;
+  const log = options.log ?? defaultLog;
+  const started = Date.now();
+  const latency = (): number => Date.now() - started;
+
+  const available = await isOllamaAvailable(host);
+  if (!available) {
+    const error = `Ollama not reachable at ${host}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: false, modelReady: false, latencyMs: latency(), error };
+  }
+
+  const modelReady = await isModelAvailable(model, host);
+  if (!modelReady) {
+    const error = `model "${model}" not present on ${host}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+  }
+
+  try {
+    const response = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        stream: false,
+        think: false,
+        keep_alive: keepAlive,
+        options: { temperature: 0, num_predict: 1 },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      const error = `warm request returned HTTP ${response.status} for model ${model}`;
+      log(`[cadet-brainstem] warm-up failed: ${error}`);
+      return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+    }
+    log(`[cadet-brainstem] warm-up complete (${latency()}ms) model=${model}`);
+    return { ok: true, available: true, modelReady: true, latencyMs: latency() };
+  } catch (err) {
+    const error = `warm request failed: ${(err as Error).message}`;
+    log(`[cadet-brainstem] warm-up failed: ${error}`);
+    return { ok: false, available: true, modelReady: false, latencyMs: latency(), error };
+  }
+}
+
 /**
  * Local Ollama classifier. Uses HTTP only — it never executes or constructs
  * shell commands (safety principle §14.4). Model and host come from config
@@ -184,7 +314,7 @@ export class OllamaClassifier {
   readonly model: string;
   readonly host: string;
   readonly timeoutMs: number;
-  readonly keepAlive: string;
+  readonly keepAlive: string | number;
   readonly log: (line: string) => void;
 
   constructor(options: ClassifierOptions = {}) {
@@ -209,6 +339,9 @@ export class OllamaClassifier {
     const prompt = isDerivedClassifierModel(this.model)
       ? taskText
       : buildPrompt(taskText);
+    // Structured output constrains enum values, so the model emits valid
+    // classification fields (previously this 400'd due to a string keep_alive
+    // and 404'd due to a default derived_model — both fixed elsewhere).
     return parseClassification(await this.chatJson(prompt, CLASSIFICATION_JSON_SCHEMA));
   }
 
@@ -219,6 +352,13 @@ export class OllamaClassifier {
   ): Promise<ContextAssessment> {
     return parseContextAssessment(
       await this.chatJson(buildAssessPrompt(taskText, inventoryText)),
+    );
+  }
+
+  /** Extract whether a conversation contains a repeatable procedure (mining). */
+  async extractProcedure(conversationText: string): Promise<ProcedureExtraction> {
+    return parseProcedureExtraction(
+      await this.chatJson(buildExtractPrompt(conversationText), PROCEDURE_EXTRACTION_JSON_SCHEMA),
     );
   }
 
@@ -249,7 +389,6 @@ export class OllamaClassifier {
           options: {
             temperature: 0,
             num_predict: DEFAULT_NUM_PREDICT,
-            num_ctx: DEFAULT_NUM_CTX,
           },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -316,6 +455,15 @@ export function isDerivedClassifierModel(model: string): boolean {
 }
 
 /**
+ * Resolve the BASE model (not the derived fast-classifier). The derived model
+ * carries a classification-only SYSTEM block that overrides extraction prompts,
+ * so extraction/mining tasks must use the base model instead.
+ */
+export function resolveBaseModel(): string {
+  return loadConfig().classifier.model || DERIVED_CLASSIFIER_MODEL;
+}
+
+/**
  * Default log sink for the classifier's latency instrumentation.
  *
  * IMPORTANT: this must write to STDERR, not stdout. When the classifier runs
@@ -338,9 +486,19 @@ function resolveTimeoutMs(override?: number): number {
   return fromConfig > 0 ? fromConfig : DEFAULT_CLASSIFIER_TIMEOUT_MS;
 }
 
-/** Resolve the keep_alive from configuration. */
-function resolveKeepAlive(): string {
-  return loadConfig().classifier.keep_alive;
+/**
+ * Resolve the keep_alive from configuration. Ollama accepts either a number
+ * (seconds, or -1 for indefinite) or a duration string WITH a unit (e.g.
+ * "30m"). A bare numeric STRING like "-1" has no unit and is rejected with
+ * HTTP 400 ("time: missing unit in duration "-1""), so coerce numeric strings
+ * to numbers.
+ */
+function resolveKeepAlive(): string | number {
+  const raw = loadConfig().classifier.keep_alive;
+  if (typeof raw === 'string' && raw.trim() !== '' && !Number.isNaN(Number(raw))) {
+    return Number(raw);
+  }
+  return raw;
 }
 
 /** Convenience function — constructs an {@link OllamaClassifier} and classifies. */
@@ -358,6 +516,20 @@ export function assess(
   options: ClassifierOptions = {},
 ): Promise<ContextAssessment> {
   return new OllamaClassifier(options).assess(taskText, inventoryText);
+}
+
+/** Convenience function — extract a repeatable procedure from a conversation. */
+export function extractProcedure(
+  conversationText: string,
+  options: ClassifierOptions = {},
+): Promise<ProcedureExtraction> {
+  // Extraction is a different task from fast classification: use the BASE model
+  // (not the derived fast-classifier), which has no classification-only SYSTEM
+  // block that would override the extraction prompt.
+  return new OllamaClassifier({
+    ...options,
+    model: options.model ?? resolveBaseModel(),
+  }).extractProcedure(conversationText);
 }
 
 // Re-export so callers can distinguish "unavailable" from "invalid output"

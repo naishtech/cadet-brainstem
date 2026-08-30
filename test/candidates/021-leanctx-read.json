@@ -1,0 +1,27 @@
+{
+  "id": "cand-021",
+  "trigger_pattern": "Read a file via LeanCTX",
+  "keywords": ["read", "file", "context", "leanctx"],
+  "goal": "Use the LeanCTX ctx_read tool to read src/main.cpp",
+  "context": "The sandbox is the project root for the LeanCTX session; src/main.cpp exists under it; the local LLM has the LeanCTX ctx_read tool",
+  "constraints": [
+    "Use ONLY the LeanCTX ctx_read tool",
+    "Provide the exact parameters: {path}",
+    "path = 'src/main.cpp'"
+  ],
+  "tool_template": {
+    "service": "leanctx",
+    "tool": "ctx_read",
+    "syntax": "{ \"path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_read", "args": { "path": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-leanctx-read",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the ctx_read tool executed without error"
+  }
+}

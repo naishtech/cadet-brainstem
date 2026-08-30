@@ -1,0 +1,28 @@
+{
+  "id": "cand-010",
+  "trigger_pattern": "Create a config file via Serena",
+  "keywords": ["create", "config", "json", "file", "serena"],
+  "goal": "Use the Serena create_text_file tool to create a file named config.json containing a simple JSON object",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has access to the Serena create_text_file tool",
+  "constraints": [
+    "Use ONLY the Serena create_text_file tool",
+    "Provide the exact parameters: {relative_path, content}",
+    "Create the file config.json with valid JSON content"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "create_text_file",
+    "syntax": "{ \"relative_path\": \"<path>\", \"content\": \"<text>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "create_text_file", "args": {} }
+  ],
+  "source_conversation_id": "manual-serena-create-config",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "file_exists",
+    "path": "config.json",
+    "expected": "config.json exists"
+  }
+}

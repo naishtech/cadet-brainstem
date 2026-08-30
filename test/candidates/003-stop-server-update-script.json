@@ -1,0 +1,15 @@
+{
+  "id": "cand-003",
+  "trigger_pattern": "Stop the running dev server and update a script",
+  "keywords": ["server", "stop", "script", "run", "restart"],
+  "goal": "Stop the running dev server and update the launch script",
+  "context": "The repository's scripts and any running dev process",
+  "constraints": ["Do not kill unrelated processes", "Write action (requires_review): executed only in the test sandbox"],
+  "steps": [
+    { "service": "rtk", "tool": "compress_command_output", "args": { "command": "<stop the dev server>" } },
+    { "service": "serena", "tool": "replace_lines", "args": {} }
+  ],
+  "source_conversation_id": "f341d5f6-b099-4498-9fc2-e97d9bccba21",
+  "difficulty": "medium",
+  "pass_fail": { "type": "shell", "command": "echo check", "expected": "no dev-server process remains running" }
+}

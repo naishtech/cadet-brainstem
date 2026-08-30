@@ -9,9 +9,16 @@ import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import {
   classifyWithFallback,
+  conservativeDefaultClassification,
   synthesizePlans,
   synthesizeToolPlan,
   type ClassificationOutcome,
+} from '../classifier';
+import {
+  LlmStatusTracker,
+  isOllamaAvailable,
+  warmUpOllama,
+  type LlmStatus,
 } from '../classifier';
 import {
   RESPONSE_POLICY_DIRECTIVES,
@@ -48,6 +55,15 @@ import {
   resolveProjectRootFor,
   type Memory,
 } from '../memory';
+import {
+  buildWriteDiff,
+  defaultFillArgs,
+  executeProcedure,
+  isWriteStep,
+  ProcedureStore,
+  type Procedure,
+  type ProcedureStep,
+} from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
 export const MCP_SESSION_ID = 'mcp';
@@ -258,11 +274,20 @@ export interface McpDeps {
   leanctx?: Partial<LeanCtxTools>;
   rtk?: Pick<RtkAdapter, 'optimize'>;
   serena?: Partial<SerenaTools>;
+  /** Local-LLM availability; drives the fast "warming up / down" degrade path. */
+  llmStatus?: LlmStatusTracker;
   metricsPath?: string;
   /** Injectable memory store; defaults to a live MemoryStore when omitted. */
   memory?: MemoryStore;
   /** Default project scope for memory operations (defaults to cwd-derived). */
   defaultProject?: string;
+  /** Injectable procedure store; defaults to a live ProcedureStore when omitted. */
+  procedureStore?: ProcedureStore;
+  /** Injectable arg-filler for procedure_apply (tests); defaults to the local LLM. */
+  procedureFillArgs?: (step: ProcedureStep, repo: string) => Promise<Record<string, unknown>>;
+  /** Injectable adapters for procedure_apply (tests); defaults to real ones. */
+  procedureSerena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
+  procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
 }
@@ -277,6 +302,7 @@ interface ResolvedDeps {
   leanctx: Partial<LeanCtxTools>;
   rtk: Pick<RtkAdapter, 'optimize'>;
   serena: Partial<SerenaTools>;
+  llmStatus: LlmStatusTracker;
   metricsPath: string;
   defaultProject: string;
   record: (event: OptimisationEvent) => void;
@@ -309,6 +335,8 @@ function defaultRecorder(metricsPath: string): (event: OptimisationEvent) => voi
 const sharedSerena = new SerenaAdapter();
 const sharedLeanctx = new LeanCtxAdapter();
 const sharedRtk = new RtkAdapter();
+/** Shared local-LLM availability, reset per MCP server process. */
+const sharedLlmStatus = new LlmStatusTracker();
 
 function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
@@ -321,6 +349,7 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
     leanctx: deps.leanctx ?? sharedLeanctx,
     rtk: deps.rtk ?? sharedRtk,
     serena: deps.serena ?? sharedSerena,
+    llmStatus: deps.llmStatus ?? sharedLlmStatus,
     metricsPath,
     defaultProject: deps.defaultProject ?? resolveProjectId(process.cwd()),
     record: deps.record ?? defaultRecorder(metricsPath),
@@ -333,6 +362,53 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
 /** Reuse a caller-supplied request id, or mint one. */
 function resolveRequestId(provided: string | undefined): string {
   return provided !== undefined && provided.length > 0 ? provided : randomUUID();
+}
+
+/**
+ * Build a fast, conservative ClassificationOutcome for the given LLM status,
+ * with a human-readable reason the cloud LLM can relay to the user.
+ */
+function conservativeOutcome(status: LlmStatus): ClassificationOutcome {
+  return {
+    classification: structuredClone(conservativeDefaultClassification),
+    degraded: true,
+    reason:
+      status === 'warming'
+        ? 'local LLM is warming up — returned conservative defaults; procedures cannot be executed yet'
+        : 'local LLM is down — returned conservative defaults; procedures cannot be executed yet',
+  };
+}
+
+/**
+ * Classify, but fail fast to conservative defaults while the local LLM is
+ * warming up or down — so the cloud LLM gets a fast response instead of
+ * stalling on a cold model load (which can take minutes).
+ *
+ * When the LLM is marked `down`, re-probes Ollama: if it has come back up
+ * (e.g. the container was started / the model was warmed externally), it flips
+ * to `warming` and kicks off a warm-up so later calls recover automatically
+ * instead of staying degraded forever. This call still returns fast defaults.
+ */
+function classifyOrDegrade(d: ResolvedDeps, task: string): Promise<ClassificationOutcome> {
+  const status = d.llmStatus.status;
+  // `ready` and the transient `unknown` (pre-warm-up / default tracker) call
+  // Ollama directly; only `warming`/`down` take the fast-degrade path.
+  if (status === 'ready' || status === 'unknown') {
+    return d.classify(task);
+  }
+  if (status === 'warming') {
+    return Promise.resolve(conservativeOutcome('warming'));
+  }
+  // down: Ollama may have come back since the server's warm-up failed. Probe
+  // cheaply and recover if it's reachable.
+  return isOllamaAvailable().then((available) => {
+    if (!available) {
+      return conservativeOutcome('down');
+    }
+    d.llmStatus.set('warming');
+    void warmUpOnServerStart(d);
+    return conservativeOutcome('warming');
+  });
 }
 
 export interface OptimizeContextArgs {
@@ -394,7 +470,7 @@ export async function optimizeContextTool(
   const d = resolveDeps(deps);
   const requestId = resolveRequestId(args.request_id);
   const classifyStart = performance.now();
-  const outcome = await d.classify(args.task);
+  const outcome = await classifyOrDegrade(d, args.task);
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
@@ -468,6 +544,167 @@ export interface ClassifyArgs {
   request_id?: string;
 }
 
+export interface ProcedureReviewArgs {
+  procedure_id: string;
+  repo: string;
+  step_index?: number;
+}
+
+export interface ProcedureApplyArgs {
+  procedure_id: string;
+  repo: string;
+  /** Must be true to apply write steps — this IS the review-gate approval. */
+  approved: boolean;
+  /** Optional per-tool arg overrides, e.g. { "create_text_file": {...} }. */
+  args?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * `procedure_review` — build a concrete, reviewable diff for the write step(s)
+ * of a matched procedure against a real repo, WITHOUT applying anything. The
+ * cloud LLM reviews this before approving a write (task 49).
+ */
+export async function procedureReviewTool(
+  args: ProcedureReviewArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.procedure_id !== 'string' || typeof args.repo !== 'string') {
+    throw new Error('procedure_review requires string "procedure_id" and "repo"');
+  }
+  const store = deps.procedureStore ?? new ProcedureStore();
+  try {
+    const procedure = store.get(args.procedure_id);
+    if (procedure === null) {
+      return { procedure_id: args.procedure_id, error: `no procedure with id "${args.procedure_id}"` };
+    }
+    const writeSteps = procedure.steps
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => isWriteStep(s));
+    const targets =
+      args.step_index !== undefined
+        ? writeSteps.filter(({ i }) => i === args.step_index)
+        : writeSteps;
+    const reviews: Array<Record<string, unknown>> = [];
+    for (const { s } of targets) {
+      try {
+        const filled = await defaultFillArgs(s, args.repo);
+        const proposal = buildWriteDiff(s, filled, args.repo);
+        reviews.push({
+          service: s.service,
+          tool: s.tool,
+          args: filled,
+          path: proposal.path,
+          kind: proposal.kind,
+          unsupported: proposal.unsupported,
+          ...(proposal.unsupported ? {} : { diff: proposal.diff, before: proposal.before, after: proposal.after }),
+        });
+      } catch (err) {
+        reviews.push({ service: s.service, tool: s.tool, error: (err as Error).message });
+      }
+    }
+    return { procedure_id: args.procedure_id, repo: args.repo, reviews };
+  } finally {
+    if (deps.procedureStore === undefined) {
+      try {
+        store.close();
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+}
+
+/**
+ * `procedure_apply` — approve + apply a reviewed write procedure in-agent. This
+ * tool IS the review-gate approval: it refuses unless `approved: true` is
+ * passed explicitly. Runs the procedure's steps against the real repo via the
+ * execution bridge and records the outcome.
+ */
+export async function procedureApplyTool(
+  args: ProcedureApplyArgs,
+  deps: McpDeps = {},
+): Promise<Record<string, unknown>> {
+  if (typeof args.procedure_id !== 'string' || typeof args.repo !== 'string') {
+    throw new Error('procedure_apply requires string "procedure_id" and "repo"');
+  }
+  if (args.approved !== true) {
+    return {
+      procedure_id: args.procedure_id,
+      ok: false,
+      error: 'approved must be true to apply writes (review gate)',
+    };
+  }
+  const store = deps.procedureStore ?? new ProcedureStore();
+  try {
+    const procedure = store.get(args.procedure_id);
+    if (procedure === null) {
+      return { procedure_id: args.procedure_id, ok: false, error: `no procedure with id "${args.procedure_id}"` };
+    }
+    const fillArgs =
+      deps.procedureFillArgs ??
+      (args.args !== undefined
+        ? async (step: ProcedureStep, repo: string) =>
+            args.args![step.tool] !== undefined ? args.args![step.tool]! : defaultFillArgs(step, repo)
+        : undefined);
+    // Reuse the process-lifetime shared adapters. Previously `executeProcedure`
+    // lazily created a fresh `new SerenaAdapter()` (and LeanCtx) whenever none
+    // was injected, so every procedure_apply spawned its own
+    // `serena start-mcp-server` process — accumulating one instance per call.
+    const serenaAdapter = deps.procedureSerena ?? sharedSerena;
+    const leanctxAdapter = deps.procedureLeanctx ?? sharedLeanctx;
+    const result = await executeProcedure(procedure, {
+      repoPath: args.repo,
+      store,
+      approve: async () => true, // this tool IS the explicit approval
+      ...(fillArgs !== undefined ? { fillArgs } : {}),
+      ...(serenaAdapter !== undefined ? { serena: serenaAdapter } : {}),
+      ...(leanctxAdapter !== undefined ? { leanctx: leanctxAdapter } : {}),
+    });
+    return {
+      procedure_id: args.procedure_id,
+      ok: result.ok,
+      allExecuted: result.allExecuted,
+      results: result.results.map((r) => ({
+        service: r.service,
+        tool: r.tool,
+        write: r.write,
+        verdict: r.verdict,
+        executed: r.executed,
+        approved: r.approved,
+        output: r.output,
+        error: r.error,
+        ...(r.verified !== undefined ? { verified: r.verified } : {}),
+        ...(r.verifyNote !== undefined ? { verifyNote: r.verifyNote } : {}),
+      })),
+    };
+  } finally {
+    if (deps.procedureStore === undefined) {
+      try {
+        store.close();
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+}
+
+/**
+ * Review guidance for matched procedures that mutate the repo (task 49). The
+ * cloud LLM must not auto-execute these — it should present the change for
+ * approval via the review gate.
+ */
+function compileProcedureReviews(
+  procedures: Procedure[],
+): Array<{ triggerPattern: string; steps: Procedure['steps']; note: string }> {
+  return procedures
+    .filter((p) => p.riskTier === 'requires_review' || p.steps.some((s) => isWriteStep(s)))
+    .map((p) => ({
+      triggerPattern: p.triggerPattern,
+      steps: p.steps,
+      note: 'Mutates the repo. Do NOT auto-execute — present the proposed change for user approval before running (review gate).',
+    }));
+}
+
 /** `classify` — classify a task with the local LLM, pick the strategy. */
 export async function classifyTool(
   args: ClassifyArgs,
@@ -519,13 +756,39 @@ export async function classifyTool(
   }
   const requestId = resolveRequestId(args.request_id);
   const classifyStart = performance.now();
-  const outcome = await d.classify(args.task);
+  const outcome = await classifyOrDegrade(d, args.task);
   const classifyLatencyMs = Math.round(performance.now() - classifyStart);
+  // Capture status after classification so a down->recovering request reports
+  // `warming` (its fast default + notice) rather than the stale pre-call `down`.
+  const llmStatus = d.llmStatus.status;
+  const llmUnavailable = d.llmStatus.isUnavailable();
   // The model only classifies + extracts entities; synthesize the token-saving
   // fields (tool_plan / evidence_plan / response_policy / reminders) in code.
   const classification = synthesizePlans(outcome.classification);
   const strategy = d.getStrategy(outcome.classification);
   recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  // Procedure handoff: match routine, read-only tasks against the local LLM's
+  // procedures so the cloud LLM can hand off execution instead of doing it
+  // itself. Best-effort — never breaks classification if the store is missing.
+  let procedures: Procedure[] | undefined;
+  try {
+    const store =
+      deps.procedureStore ??
+      new ProcedureStore();
+    try {
+      procedures = store.findMatches(classification.entities, args.task);
+    } finally {
+      if (deps.procedureStore === undefined) {
+        try {
+          store.close();
+        } catch (e) {
+          void e;
+        }
+      }
+    }
+  } catch (err) {
+    d.log(`procedure lookup skipped: ${(err as Error).message}`);
+  }
   return {
     // Token-saving steering fields first so the cloud LLM reads them first.
     response_policy: compileResponsePolicy(classification.response_policy),
@@ -545,7 +808,12 @@ export async function classifyTool(
       classification.memory?.use ?? toolPlanUses(classification.tool_plan, 'chat_memory_store'),
     ),
     degraded: outcome.degraded,
+    llm_status: llmStatus,
+    ...(llmUnavailable ? { notice: outcome.reason } : {}),
+    ...(llmUnavailable ? { procedures_unavailable: true } : {}),
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
+    ...(procedures !== undefined ? { procedures } : {}),
+    ...(procedures !== undefined ? { procedures_review: compileProcedureReviews(procedures) } : {}),
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };
@@ -1233,6 +1501,37 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: 'procedure_review',
+    description:
+      'Build a concrete, reviewable diff for the write step(s) of a matched procedure against a real repo, WITHOUT applying anything. ' +
+      'Use before approving a write procedure so the user sees exactly what will change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        procedure_id: { type: 'string', description: 'The procedure id to review.' },
+        repo: { type: 'string', description: 'Absolute repo path to review against.' },
+        step_index: { type: 'number', description: 'Optional 0-based write-step index; omit to review all write steps.' },
+      },
+      required: ['procedure_id', 'repo'],
+    },
+  },
+  {
+    name: 'procedure_apply',
+    description:
+      'Approve + apply a reviewed write procedure in-agent. Requires approved:true (this tool is the review gate). ' +
+      'Runs the procedure steps against the real repo and records the outcome.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        procedure_id: { type: 'string', description: 'The procedure id to apply.' },
+        repo: { type: 'string', description: 'Absolute repo path to apply against.' },
+        approved: { type: 'boolean', description: 'Must be true to apply write steps.' },
+        args: { type: 'object', description: 'Optional per-tool arg overrides, e.g. { "create_text_file": {...} }.' },
+      },
+      required: ['procedure_id', 'repo', 'approved'],
+    },
+  },
+  {
     name: 'optimize_context',
     description:
       'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
@@ -1528,6 +1827,15 @@ export async function handleToolCall(
       case 'classify':
         result = await classifyTool(args as unknown as ClassifyArgs, deps);
         break;
+      case 'procedure_review':
+        result = await procedureReviewTool(
+          args as unknown as ProcedureReviewArgs,
+          deps,
+        );
+        break;
+      case 'procedure_apply':
+        result = await procedureApplyTool(args as unknown as ProcedureApplyArgs, deps);
+        break;
       case 'optimize_context':
         result = await optimizeContextTool(
           args as unknown as OptimizeContextArgs,
@@ -1615,7 +1923,27 @@ export async function runMcpServer(deps: McpDeps = {}): Promise<number> {
   const server = createMcpServer(resolved);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // Fire-and-forget: warm the local LLM in the background so the first
+  // classify doesn't pay the cold-load latency. Never blocks the server —
+  // until ready, classify returns fast conservative defaults with a notice.
+  void warmUpOnServerStart(resolved);
   // Client disconnected — release the persistent Serena session (if any).
   await resolved.serena.close?.().catch(() => undefined);
   return 0;
+}
+
+/**
+ * Kick off the local-LLM warm-up and drive the availability state machine.
+ * Runs detached (fire-and-forget) from the MCP server lifecycle.
+ */
+async function warmUpOnServerStart(d: ResolvedDeps): Promise<void> {
+  d.llmStatus.set('warming');
+  const result = await warmUpOllama({ log: d.log });
+  if (result.ok) {
+    d.llmStatus.set('ready');
+    d.log(`[cadet-brainstem] local LLM ready (warm-up ${result.latencyMs}ms)`);
+  } else {
+    d.llmStatus.set('down');
+    d.log(`[cadet-brainstem] local LLM down after warm-up: ${result.error ?? 'unknown error'}`);
+  }
 }

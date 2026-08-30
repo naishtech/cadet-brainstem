@@ -9,12 +9,26 @@ export {
   OllamaClassifier,
   assess,
   buildAssessPrompt,
+  buildExtractPrompt,
   buildPrompt,
   classify,
+  extractProcedure,
   isDerivedClassifierModel,
   isModelAvailable,
   isOllamaAvailable,
+  resolveBaseModel,
+  warmUpOllama,
 } from './ollama';
+export type {
+  WarmUpOptions,
+  WarmUpResult,
+} from './ollama';
+export {
+  LlmStatusTracker,
+} from './llm-status';
+export type {
+  LlmStatus,
+} from './llm-status';
 export {
   CLASSIFICATION_JSON_SCHEMA,
   ClassificationValidationError,
@@ -22,6 +36,7 @@ export {
   DEFAULT_TOOL_PLAN,
   LANGUAGE_STANDARD_DESCRIPTIONS,
   LANGUAGE_STANDARDS,
+  PROCEDURE_EXTRACTION_JSON_SCHEMA,
   RECOMMENDED_TOOL_INTENTS,
   RESPONSE_POLICY_DIRECTIVES,
   RESPONSE_POLICY_KEYS,
@@ -34,7 +49,9 @@ export {
   languageStandardSchema,
   parseClassification,
   parseContextAssessment,
+  parseProcedureExtraction,
   precisionSchema,
+  procedureExtractionSchema,
   responsePolicyKeySchema,
   riskSchema,
   taskTypeSchema,
@@ -79,4 +96,5 @@ export type {
   ToolName,
   ToolPlan,
   Verdict,
+  ProcedureExtraction,
 } from './schema';

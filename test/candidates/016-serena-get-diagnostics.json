@@ -1,0 +1,27 @@
+{
+  "id": "cand-016",
+  "trigger_pattern": "Get diagnostics for a file via Serena",
+  "keywords": ["diagnostics", "errors", "file", "serena", "inspect"],
+  "goal": "Use the Serena get_diagnostics_for_file tool to retrieve diagnostics for src/main.cpp in the project",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has the Serena get_diagnostics_for_file tool",
+  "constraints": [
+    "Use ONLY the Serena get_diagnostics_for_file tool",
+    "Provide the exact parameters: {relative_path}",
+    "relative_path = 'src/main.cpp'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "get_diagnostics_for_file",
+    "syntax": "{ \"relative_path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "get_diagnostics_for_file", "args": { "relative_path": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-serena-get-diagnostics",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the get_diagnostics_for_file tool executed without error"
+  }
+}

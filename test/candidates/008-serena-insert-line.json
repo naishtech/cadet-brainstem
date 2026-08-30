@@ -1,0 +1,29 @@
+{
+  "id": "cand-008",
+  "trigger_pattern": "Insert a line into a file via Serena",
+  "keywords": ["insert", "line", "serena", "edit", "file"],
+  "goal": "Add a second greeting line to Program.cs using the Serena replace_content tool",
+  "context": "The fixture C++/C# project copied into the sandbox; the sandbox is a registered Serena project; the local LLM has access to the Serena replace_content tool",
+  "constraints": [
+    "Use ONLY the Serena replace_content tool",
+    "Provide the exact parameters: {file, old_string, new_string}",
+    "Add the line 'System.Console.WriteLine(\"Inserted!\");' after the existing WriteLine"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "replace_content",
+    "syntax": "{ \"file\": \"<relative path>\", \"old_string\": \"<text to match>\", \"new_string\": \"<replacement text>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "replace_content", "args": {} }
+  ],
+  "source_conversation_id": "manual-serena-template",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "contains",
+    "path": "serena-project/src/Program.cs",
+    "needle": "Inserted!",
+    "expected": "Program.cs contains the inserted line"
+  }
+}

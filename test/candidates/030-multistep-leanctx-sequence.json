@@ -1,0 +1,22 @@
+{
+  "id": "cand-030",
+  "trigger_pattern": "Tree, read, then compose (LeanCTX multi-step)",
+  "keywords": ["multi-step", "tree", "read", "compose", "sequence", "leanctx", "task list"],
+  "goal": "Perform these operations in order: 1) ctx_tree of '.', 2) ctx_read of 'src/main.cpp', 3) ctx_compose to summarize the project",
+  "context": "The sandbox is the project root for the LeanCTX session; the local LLM has the LeanCTX tools ctx_tree, ctx_read, and ctx_compose; execute each step in the given order",
+  "constraints": [
+    "Follow the steps in exact order",
+    "Step 1: ctx_tree {path:'.'}",
+    "Step 2: ctx_read {path:'src/main.cpp'}",
+    "Step 3: ctx_compose {task:'summarize the functions in this project', path:'.'}"
+  ],
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "leanctx", "tool": "ctx_tree", "tool_template": { "service": "leanctx", "tool": "ctx_tree", "syntax": "{ \"path\": \"<dir>\" }" }, "args": { "path": "." } },
+    { "service": "leanctx", "tool": "ctx_read", "tool_template": { "service": "leanctx", "tool": "ctx_read", "syntax": "{ \"path\": \"<path>\" }" }, "args": { "path": "src/main.cpp" } },
+    { "service": "leanctx", "tool": "ctx_compose", "tool_template": { "service": "leanctx", "tool": "ctx_compose", "syntax": "{ \"task\": \"<task>\", \"path\": \"<dir>\" }" }, "args": { "task": "summarize the functions in this project", "path": "." } }
+  ],
+  "source_conversation_id": "manual-multistep-leanctx-sequence",
+  "difficulty": "medium",
+  "pass_fail": { "type": "step_ok", "expected": "all three LeanCTX steps executed without error" }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "cand-018",
+  "trigger_pattern": "Search for a pattern via Serena",
+  "keywords": ["search", "pattern", "regex", "find", "serena"],
+  "goal": "Use the Serena search_for_pattern tool to search for the pattern 'add' in src/main.cpp",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has the Serena search_for_pattern tool",
+  "constraints": [
+    "Use ONLY the Serena search_for_pattern tool",
+    "Provide the exact parameters: {substring_pattern, relative_path}",
+    "substring_pattern = 'add', relative_path = 'src/main.cpp'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "search_for_pattern",
+    "syntax": "{ \"substring_pattern\": \"<regex>\", \"relative_path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "search_for_pattern", "args": { "substring_pattern": "add", "relative_path": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-serena-search-pattern",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the search_for_pattern tool executed without error"
+  }
+}

@@ -16,6 +16,7 @@ import {
 } from '../../classifier';
 import { loadConfig } from '../../config';
 import { createFastClassifierCli } from '../../core/installers';
+import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
 import type { CliCommand } from '../types';
 
 /**
@@ -344,6 +345,32 @@ export async function runHookUserPrompt(
   }
   if (degraded) {
     ctx += `- (classifier degraded — conservative defaults applied)\n`;
+  }
+  // Procedure handoff: match routine, read-only tasks against the local LLM's
+  // procedures so the cloud LLM knows it can hand off execution to the local
+  // LLM (mirrors the MCP classifyTool `procedures` field). Best effort — never
+  // breaks classification if the store is missing or empty.
+  try {
+    const store = new ProcedureStore(
+      process.env.CADET_BRAINSTEM_PROCEDURES ?? getDefaultProcedurePath(),
+    );
+    try {
+      const procedures = store.findMatches(synthesized.entities ?? [], prompt);
+      if (procedures.length > 0) {
+        const lines = procedures.map((p) => {
+          const steps = p.steps.map((s) => `${s.service}:${s.tool}`).join(' -> ');
+          const handoff = p.handoffShape
+            ? `\n    handoff: ${p.handoffShape}`
+            : '';
+          return `  - [${p.riskTier}] ${p.id} ${p.triggerPattern}\n    steps: ${steps}${handoff}`;
+        });
+        ctx += `- procedures:\n${lines.join('\n')}\n`;
+      }
+    } finally {
+      store.close();
+    }
+  } catch {
+    // best-effort — procedure lookup must never break the hook
   }
 
   writeOut(deps, {

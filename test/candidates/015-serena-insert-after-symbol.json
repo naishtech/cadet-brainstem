@@ -1,0 +1,30 @@
+{
+  "id": "cand-015",
+  "trigger_pattern": "Insert a function after a symbol via Serena",
+  "keywords": ["insert", "function", "symbol", "edit", "serena"],
+  "goal": "Use the Serena insert_after_symbol tool to insert a new function sub() immediately after the add() function in src/main.cpp",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); src/main.cpp defines int add(int a, int b); the local LLM has the Serena insert_after_symbol tool",
+  "constraints": [
+    "Use ONLY the Serena insert_after_symbol tool",
+    "Provide the exact parameters: {name_path, relative_path, body}",
+    "name_path = 'add', relative_path = 'src/main.cpp'",
+    "body = 'int sub(int a, int b) {\\n    return a - b;\\n}'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "insert_after_symbol",
+    "syntax": "{ \"name_path\": \"<symbol>\", \"relative_path\": \"<path>\", \"body\": \"<text>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "insert_after_symbol", "args": { "name_path": "add", "relative_path": "src/main.cpp", "body": "int sub(int a, int b) {\n    return a - b;\n}" } }
+  ],
+  "source_conversation_id": "manual-serena-insert-after-symbol",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "contains",
+    "path": "src/main.cpp",
+    "needle": "int sub",
+    "expected": "src/main.cpp contains the inserted sub() function"
+  }
+}

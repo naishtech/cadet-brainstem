@@ -1,0 +1,27 @@
+{
+  "id": "cand-011",
+  "trigger_pattern": "Read a file via Serena",
+  "keywords": ["read", "file", "serena", "content"],
+  "goal": "Use the Serena read_file tool to read the file Program.cs in the sandbox project",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has access to the Serena read_file tool",
+  "constraints": [
+    "Use ONLY the Serena read_file tool",
+    "Provide the exact parameters: {relative_path}",
+    "The file to read is src/Program.cs (relative to the project root)"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "read_file",
+    "syntax": "{ \"relative_path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "read_file", "args": { "relative_path": "src/Program.cs" } }
+  ],
+  "source_conversation_id": "manual-serena-read",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the read_file tool executed without error"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "cand-019",
+  "trigger_pattern": "Replace content in a file via Serena",
+  "keywords": ["replace", "content", "edit", "literal", "serena"],
+  "goal": "Use the Serena replace_content tool to replace the literal 'return a + b;' with 'return a + b + 1;' in src/main.cpp",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); src/main.cpp contains the line 'return a + b;' inside add(); the local LLM has the Serena replace_content tool",
+  "constraints": [
+    "Use ONLY the Serena replace_content tool",
+    "Provide the exact parameters: {relative_path, needle, repl, mode}",
+    "relative_path = 'src/main.cpp', needle = 'return a + b;', repl = 'return a + b + 1;', mode = 'literal'"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "replace_content",
+    "syntax": "{ \"relative_path\": \"<path>\", \"needle\": \"<text>\", \"repl\": \"<text>\", \"mode\": \"literal\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "replace_content", "args": { "relative_path": "src/main.cpp", "needle": "return a + b;", "repl": "return a + b + 1;", "mode": "literal" } }
+  ],
+  "source_conversation_id": "manual-serena-replace-content",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "contains",
+    "path": "src/main.cpp",
+    "needle": "a + b + 1",
+    "expected": "src/main.cpp contains the replacement 'a + b + 1'"
+  }
+}

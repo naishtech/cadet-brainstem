@@ -1,0 +1,27 @@
+{
+  "id": "cand-013",
+  "trigger_pattern": "Find references to a symbol via Serena",
+  "keywords": ["find", "references", "usages", "symbol", "serena"],
+  "goal": "Use the Serena find_referencing_symbols tool to locate all references to the function 'add' in the project",
+  "context": "The sandbox is a registered Serena project (C++/C# fixture); the local LLM has access to the Serena find_referencing_symbols tool",
+  "constraints": [
+    "Use ONLY the Serena find_referencing_symbols tool",
+    "Provide the exact parameters: {name_path, relative_path}",
+    "Search for references to the symbol 'add', which is defined in src/main.cpp (relative_path = the file containing the symbol)"
+  ],
+  "tool_template": {
+    "service": "serena",
+    "tool": "find_referencing_symbols",
+    "syntax": "{ \"name_path\": \"<symbol>\", \"relative_path\": \"<path>\" }"
+  },
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "find_referencing_symbols", "args": { "name_path": "add", "relative_path": "src/main.cpp" } }
+  ],
+  "source_conversation_id": "manual-serena-find-references",
+  "difficulty": "easy",
+  "pass_fail": {
+    "type": "step_ok",
+    "expected": "the find_referencing_symbols tool executed without error"
+  }
+}

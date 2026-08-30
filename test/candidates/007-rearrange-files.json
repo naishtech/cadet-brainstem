@@ -1,0 +1,19 @@
+{
+  "id": "cand-007",
+  "trigger_pattern": "Rearrange files into a new directory structure",
+  "keywords": ["move", "copy", "directory", "rearrange", "flatten", "mv"],
+  "goal": "Move every .txt file from the fixture tree into a single flattened/ directory",
+  "context": "The fixture directory tree copied into the sandbox (root.txt, sub1/alpha.txt, sub1/beta.txt, sub2/gamma.txt)",
+  "constraints": ["Operate only inside the sandbox", "Move (not delete) all .txt files into a top-level flattened/ directory", "Use shell commands via the rtk tool"],
+  "fixture": "test/fixtures/tree",
+  "steps": [
+    { "service": "rtk", "tool": "compress_command_output", "args": { "command": "<move all .txt files into flattened/>" } }
+  ],
+  "source_conversation_id": "manual-file-rearrange",
+  "difficulty": "medium",
+  "pass_fail": {
+    "type": "all_exist",
+    "paths": ["flattened/root.txt", "flattened/alpha.txt", "flattened/beta.txt", "flattened/gamma.txt"],
+    "expected": "all four .txt files exist inside flattened/"
+  }
+}

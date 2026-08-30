@@ -36,7 +36,6 @@ describe('default config', () => {
       classifier: {
         provider: 'ollama',
         model: 'qwen3:1.7b',
-        derived_model: 'fast-classifier',
         auto_build: true,
         timeout_ms: 60000,
         keep_alive: '30m',
@@ -70,7 +69,6 @@ describe('loadConfig', () => {
     expect(cfg.classifier).toEqual({
       provider: 'ollama',
       model: 'llama3',
-      derived_model: 'fast-classifier',
       auto_build: true,
       timeout_ms: 60000,
       keep_alive: '30m',

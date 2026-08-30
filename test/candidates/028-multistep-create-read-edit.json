@@ -1,0 +1,22 @@
+{
+  "id": "cand-028",
+  "trigger_pattern": "Create, read, then edit a file (multi-step)",
+  "keywords": ["multi-step", "create", "read", "edit", "sequence", "serena", "task list"],
+  "goal": "Perform these operations in order on the same file: 1) create notes.md with content 'alpha\\nbeta', 2) read notes.md, 3) replace 'beta' with 'gamma' in notes.md",
+  "context": "The sandbox is a registered Serena project; the local LLM has the Serena tools create_text_file, read_file, and replace_content; execute each step in the given order, building on the previous step's output",
+  "constraints": [
+    "Follow the steps in exact order",
+    "Step 1: create_text_file {relative_path:'notes.md', content:'alpha\\nbeta'}",
+    "Step 2: read_file {relative_path:'notes.md'}",
+    "Step 3: replace_content {relative_path:'notes.md', needle:'beta', repl:'gamma', mode:'literal'}"
+  ],
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "create_text_file", "tool_template": { "service": "serena", "tool": "create_text_file", "syntax": "{ \"relative_path\": \"<path>\", \"content\": \"<text>\" }" }, "args": { "relative_path": "notes.md", "content": "alpha\nbeta" } },
+    { "service": "serena", "tool": "read_file", "tool_template": { "service": "serena", "tool": "read_file", "syntax": "{ \"relative_path\": \"<path>\" }" }, "args": { "relative_path": "notes.md" } },
+    { "service": "serena", "tool": "replace_content", "tool_template": { "service": "serena", "tool": "replace_content", "syntax": "{ \"relative_path\": \"<path>\", \"needle\": \"<text>\", \"repl\": \"<text>\", \"mode\": \"literal\" }" }, "args": { "relative_path": "notes.md", "needle": "beta", "repl": "gamma", "mode": "literal" } }
+  ],
+  "source_conversation_id": "manual-multistep-create-read-edit",
+  "difficulty": "medium",
+  "pass_fail": { "type": "contains", "path": "notes.md", "needle": "gamma", "expected": "notes.md contains 'gamma' after the edit" }
+}

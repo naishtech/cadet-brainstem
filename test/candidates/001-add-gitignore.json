@@ -1,0 +1,15 @@
+{
+  "id": "cand-001",
+  "trigger_pattern": "Add a .gitignore for a project type",
+  "keywords": ["gitignore", "ignore", "git", "project"],
+  "goal": "Create or update a .gitignore file appropriate for the project type",
+  "context": "The current repository root and its git status",
+  "constraints": ["Do not ignore files needed for the build", "Write action (requires_review): executed only in the test sandbox"],
+  "steps": [
+    { "service": "rtk", "tool": "compress_command_output", "args": { "command": "git status --short" } },
+    { "service": "serena", "tool": "insert_lines", "args": {} }
+  ],
+  "source_conversation_id": "f3cb196b-9a1f-499e-bb80-fd30efeb445f",
+  "difficulty": "easy",
+  "pass_fail": { "type": "file_exists", "path": ".gitignore", "expected": "a .gitignore file exists" }
+}

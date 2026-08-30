@@ -75,6 +75,11 @@ describe('parseHooksArgs', () => {
     expect(parseHooksArgs(['--tool', 'x', '--pretool'])).toEqual({ tool: 'x', pretool: true });
   });
 
+  it('parses --remind flag', () => {
+    expect(parseHooksArgs(['--remind'])).toEqual({ remind: true });
+    expect(parseHooksArgs(['--tool', 'x', '--remind'])).toEqual({ tool: 'x', remind: true });
+  });
+
   it('returns empty when nothing provided', () => {
     expect(parseHooksArgs([])).toEqual({});
   });
@@ -100,6 +105,17 @@ describe('buildHooksConfig', () => {
     expect(config.hooks.PreToolUse?.[1]!.command).toContain(
       'hook-remind --tool find_relevant_symbols',
     );
+  });
+
+  it('installs ONLY hook-remind (no redirect) when remind is true', () => {
+    const config = buildHooksConfig('find_relevant_symbols', { remind: true });
+    expect(config.hooks.PreToolUse).toHaveLength(1);
+    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-remind --tool find_relevant_symbols');
+    expect(config.hooks.PreToolUse?.[0]!.command).not.toContain('hook-redirect');
+  });
+
+  it('leaves PreToolUse undefined when neither pretool nor remind is set', () => {
+    expect(buildHooksConfig('find_relevant_symbols').hooks.PreToolUse).toBeUndefined();
   });
 });
 

@@ -5,6 +5,7 @@ import { configCommand } from './commands/config';
 import { dashboardCommand } from './commands/dashboard';
 import { doctorCommand } from './commands/doctor';
 import { hookRemindCommand } from './commands/hook-remind';
+import { hookProcedureReviewCommand } from './commands/hook-procedure-review';
 import { hookRedirectCommand } from './commands/hook-redirect';
 import {
   hookPostToolCommand,
@@ -19,8 +20,11 @@ import { hooksCommand } from './commands/hooks';
 import { initCommand } from './commands/init';
 import { mcpCommand } from './commands/mcp';
 import { memoryCommand } from './commands/memory';
+import { mineCommand } from './commands/mine';
+import { procedureCommand } from './commands/procedure';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
+import { warmCommand } from './commands/warm';
 import { wrapCommand } from './commands/wrap';
 
 export const VERSION: string = pkg.version;
@@ -28,13 +32,17 @@ export const VERSION: string = pkg.version;
 export const COMMANDS: readonly CliCommand[] = [
   initCommand,
   doctorCommand,
+  warmCommand,
   statsCommand,
   memoryCommand,
+  mineCommand,
+  procedureCommand,
   dashboardCommand,
   configCommand,
   telemetryCommand,
   hooksCommand,
   hookRemindCommand,
+  hookProcedureReviewCommand,
   hookRedirectCommand,
   hookSessionStartCommand,
   hookUserPromptCommand,

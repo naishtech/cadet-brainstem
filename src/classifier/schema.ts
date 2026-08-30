@@ -294,6 +294,50 @@ export const classificationSchema = z.object({
   needs_more_context: z.unknown().optional(),
 });
 
+/**
+ * Procedure-extraction output (task 45 mining Step 1.4): does a conversation
+ * contain a repeatable, mechanical task, and if so what are its trigger,
+ * keywords and steps? Classification/extraction — not synthesis.
+ */
+export const procedureExtractionSchema = z.object({
+  is_procedural: z.boolean(),
+  trigger_pattern: z.string().default(''),
+  keywords: z.array(z.string()).default([]),
+  steps: z.array(z.string()).default([]),
+  confidence: z.number().default(0),
+});
+export type ProcedureExtraction = z.infer<typeof procedureExtractionSchema>;
+
+export const PROCEDURE_EXTRACTION_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    is_procedural: { type: 'boolean' },
+    trigger_pattern: { type: 'string' },
+    keywords: { type: 'array', items: { type: 'string' } },
+    steps: { type: 'array', items: { type: 'string' } },
+    confidence: { type: 'number' },
+  },
+  required: ['is_procedural', 'trigger_pattern', 'keywords', 'steps', 'confidence'],
+  additionalProperties: false,
+} as const;
+
+/** Parse and validate local-LLM procedure-extraction output. */
+export function parseProcedureExtraction(raw: unknown): ProcedureExtraction {
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      parsed = raw;
+    }
+  }
+  const result = procedureExtractionSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ClassificationValidationError('invalid procedure extraction output');
+  }
+  return result.data;
+}
+
 export interface Classification {
   task: TaskType;
   complexity: Complexity;

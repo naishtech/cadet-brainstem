@@ -1,0 +1,21 @@
+{
+  "id": "cand-032",
+  "trigger_pattern": "Plan a multi-step task list yourself (task-48 option 2)",
+  "keywords": ["plan", "task-list", "sequence", "create", "edit", "self-plan", "serena"],
+  "goal": "Create a file notes.md containing 'alpha\\nbeta', then change 'beta' to 'gamma' in it. You must decide the order of the tool calls yourself.",
+  "context": "The sandbox is a registered Serena project. You have the tools create_text_file and replace_content. Figure out the correct sequence of calls to accomplish the task, then emit them as an ordered plan.",
+  "constraints": [
+    "You must issue a SEQUENCE of tool calls in the right order",
+    "You may only use the listed tools: create_text_file, replace_content",
+    "The final notes.md must contain 'gamma'"
+  ],
+  "plan_task_list": true,
+  "fixture": "test/fixtures/serena-project",
+  "steps": [
+    { "service": "serena", "tool": "create_text_file", "tool_template": { "service": "serena", "tool": "create_text_file", "syntax": "{ \"relative_path\": \"<path>\", \"content\": \"<text>\" }" }, "args": { "relative_path": "notes.md", "content": "alpha\nbeta" } },
+    { "service": "serena", "tool": "replace_content", "tool_template": { "service": "serena", "tool": "replace_content", "syntax": "{ \"relative_path\": \"<path>\", \"needle\": \"<text>\", \"repl\": \"<text>\", \"mode\": \"literal\" }" }, "args": { "relative_path": "notes.md", "needle": "beta", "repl": "gamma", "mode": "literal" } }
+  ],
+  "source_conversation_id": "manual-plan-create-edit",
+  "difficulty": "hard",
+  "pass_fail": { "type": "contains", "path": "notes.md", "needle": "gamma", "expected": "notes.md contains 'gamma' after the planned sequence" }
+}
