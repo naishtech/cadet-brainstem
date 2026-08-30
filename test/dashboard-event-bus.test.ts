@@ -92,7 +92,7 @@ describe('EventBus', () => {
     bus.requestStarted({ id: '1', tool: 'rtk', operation: 'compress' });
     bus.responded({ id: '1', ok: true, latencyMs: 5 });
     bus.status([{ name: 'ollama', available: true, detail: '0.5.1' }]);
-    bus.traceStart({ id: 't1', model: 'qwen3:1.7b', request: 'hi' });
+    bus.traceStart({ id: 't1', model: 'qwen3:4b', request: 'hi' });
     bus.traceToken({ id: 't1', delta: 'think' });
     bus.traceComplete({ id: 't1', usage: { inputTokens: 10, outputTokens: 2 } });
     bus.statsUpdated();

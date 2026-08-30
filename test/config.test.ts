@@ -59,8 +59,7 @@ describe('default config', () => {
     expect(defaultConfig).toEqual({
       classifier: {
         provider: 'ollama',
-        model: 'qwen3:1.7b',
-        auto_build: true,
+        model: 'qwen3:4b',
         timeout_ms: 60000,
         keep_alive: '30m',
       },
@@ -158,7 +157,6 @@ describe('loadConfig', () => {
     expect(cfg.classifier).toEqual({
       provider: 'ollama',
       model: 'llama3',
-      auto_build: true,
       timeout_ms: 60000,
       keep_alive: '30m',
     });
@@ -190,8 +188,6 @@ describe('saveConfig + round-trip', () => {
       classifier: {
         provider: 'ollama' as const,
         model: 'custom-model',
-        derived_model: 'custom-model',
-        auto_build: true,
         timeout_ms: 45000,
         keep_alive: '15m',
       },
@@ -204,7 +200,7 @@ describe('saveConfig + round-trip', () => {
 
 describe('value access helpers', () => {
   it('reads individual values by dot path', () => {
-    expect(getConfigValue(defaultConfig, 'classifier.model')).toBe('qwen3:1.7b');
+    expect(getConfigValue(defaultConfig, 'classifier.model')).toBe('qwen3:4b');
     expect(getConfigValue(defaultConfig, 'session.max_turns')).toBe(30);
     expect(getConfigValue(defaultConfig, 'tools.rtk')).toBe(true);
     expect(getConfigValue(defaultConfig, 'nope.missing')).toBeUndefined();

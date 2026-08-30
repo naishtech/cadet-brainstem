@@ -130,12 +130,11 @@ describe('runDoctor', () => {
     expect(out).toContain('lean-ctx-x86_64-pc-windows-msvc.zip');
   });
 
-  it('warns with a build hint when the derived model is not present', async () => {
+  it('warns with a pull hint when the model is not present', async () => {
     const { configPath, metricsPath } = paths();
     saveConfig(
       {
         ...defaultConfig,
-        classifier: { ...defaultConfig.classifier, derived_model: 'fast-classifier' },
       },
       configPath,
     );
@@ -146,8 +145,8 @@ describe('runDoctor', () => {
 
     expect(exit).toBe(0);
     expect(isModelAvailableMock).toHaveBeenCalled();
-    expect(out).toContain('"fast-classifier" not pulled');
-    expect(out).toContain('ollama create fast-classifier -f Modelfile');
+    expect(out).toContain('"qwen3:4b" not pulled');
+    expect(out).toContain('ollama pull qwen3:4b');
   });
 
   it('exits 1 when Node.js is unavailable (critical)', async () => {

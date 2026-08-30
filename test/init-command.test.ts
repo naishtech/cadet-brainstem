@@ -8,13 +8,11 @@ import { MetricsStore } from '../src/metrics';
 import { runInit } from '../src/cli/commands/init';
 
 const {
-  createFastClassifierMock,
   downloadAndExtractZipMock,
   isModelAvailableMock,
   pullOllamaModelMock,
   startOllamaDockerMock,
 } = vi.hoisted(() => ({
-  createFastClassifierMock: vi.fn(),
   downloadAndExtractZipMock: vi.fn(),
   isModelAvailableMock: vi.fn(),
   pullOllamaModelMock: vi.fn(),
@@ -22,10 +20,9 @@ const {
 }));
 
 vi.mock('../src/core/installers', () => ({
-  OLLAMA_MODEL: 'qwen3:1.7b',
+  OLLAMA_MODEL: 'qwen3:4b',
   RTK_WINDOWS_URL: 'https://example.com/rtk.zip',
   LEANCTX_WINDOWS_URL: 'https://example.com/leanctx.zip',
-  createFastClassifier: createFastClassifierMock,
   downloadAndExtractZip: downloadAndExtractZipMock,
   pullOllamaModel: pullOllamaModelMock,
   startOllamaDocker: startOllamaDockerMock,
@@ -57,7 +54,6 @@ let dir: string;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cts-init-'));
-  createFastClassifierMock.mockReset();
   downloadAndExtractZipMock.mockReset();
   isModelAvailableMock.mockReset();
   isModelAvailableMock.mockResolvedValue(false); // model missing by default
@@ -86,7 +82,7 @@ describe('runInit', () => {
     expect(exit).toBe(0);
     expect(existsSync(configPath)).toBe(true);
     expect(existsSync(metricsPath)).toBe(true);
-    expect(loadConfig(configPath).classifier.model).toBe('qwen3:1.7b');
+    expect(loadConfig(configPath).classifier.model).toBe('qwen3:4b');
     const out = lines.join('\n');
     expect(out).toContain('config created');
     expect(out).toContain('metrics database ready');
@@ -107,7 +103,7 @@ describe('runInit', () => {
     await runInit(deps);
     await runInit(deps);
 
-    expect(loadConfig(configPath).classifier.model).toBe('qwen3:1.7b');
+    expect(loadConfig(configPath).classifier.model).toBe('qwen3:4b');
     const store = new MetricsStore(metricsPath);
     expect(store.count()).toBe(0);
     store.close();

@@ -12,7 +12,7 @@ What you need installed to run Cadet Brainstem and its integrations.
 - **Ollama** — local LLM server used by the classifier.
   - Native install: https://ollama.com
   - Or Docker: `docker run -d --name ollama -v ollama:/root/.ollama -p 11434:11434 --restart unless-stopped ollama/ollama`
-- **Model (default):** `qwen3:1.7b` — pull with: `ollama pull qwen3:1.7b`
+- **Model (default):** `qwen3:4b` — pull with: `ollama pull qwen3:4b`
 
 ## Integration tools
 

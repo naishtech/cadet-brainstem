@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  autoBuildClassifier,
   cleanupSessionState,
   runHookPostTool,
   runHookPreCompact,
@@ -28,15 +27,9 @@ beforeEach(() => {
   metricsPath = join(dir, 'metrics.db');
   memoryPath = join(dir, 'memory.db');
   stateDir = join(dir, 'hooks');
-  // Isolate auto-build tests from any real user config: write a controlled
-  // config where the base model (qwen3:1.7b) is present and the derived
-  // fast-classifier is absent, so the auto-build path is exercised.
+  // Write a controlled config so tests never touch the real user config.
   const cfgFile = join(dir, 'config.yaml');
-  writeFileSync(
-    cfgFile,
-    'classifier:\n  model: qwen3:1.7b\n  derived_model: fast-classifier:latest\n  auto_build: true\n',
-    'utf8',
-  );
+  writeFileSync(cfgFile, 'classifier:\n  model: qwen3:4b\n', 'utf8');
   process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
 });
 
@@ -57,8 +50,6 @@ function makeDeps(
     memoryPath,
     stateDir,
     resolveProject: (cwd) => cwd,
-    // Skip the auto-build by default so unit tests never touch Ollama/config.
-    autoBuild: false,
     ...overrides,
   };
   return { deps, outputs };
@@ -77,96 +68,6 @@ describe('runHookSessionStart', () => {
     expect(out.continue).toBe(true);
     expect(out.hookSpecificOutput.additionalContext).toContain('find_relevant_symbols');
     expect(out.hookSpecificOutput.additionalContext).toContain('Session start');
-  });
-
-  it('runs the auto-build and still emits the primer', async () => {
-    const built: string[] = [];
-    const { deps, outputs } = makeDeps(sessionPayload(), {
-      autoBuild: true,
-      classifierAvailable: async (model) => model === 'qwen3:1.7b',
-      buildClassifier: async (base) => {
-        built.push(base);
-        return { ok: true };
-      },
-    });
-    const exit = await runHookSessionStart(deps, 'find_relevant_symbols');
-    expect(exit).toBe(0);
-    expect(built).toEqual(['qwen3:1.7b']);
-    const out = JSON.parse(outputs[0]!);
-    expect(out.hookSpecificOutput.additionalContext).toContain('Session start');
-  });
-});
-
-describe('autoBuildClassifier', () => {
-  it('builds the derived classifier when missing and the base model is present', async () => {
-    const calls: string[] = [];
-    const { deps } = makeDeps(sessionPayload(), {
-      autoBuild: true,
-      // derived (fast-classifier) missing, base (qwen3:1.7b) present
-      classifierAvailable: async (model) => model === 'qwen3:1.7b',
-      buildClassifier: async (base) => {
-        calls.push(base);
-        return { ok: true };
-      },
-    });
-    await autoBuildClassifier(deps);
-    expect(calls).toEqual(['qwen3:1.7b']);
-  });
-
-  it('skips the build when the derived classifier is already present', async () => {
-    const calls: string[] = [];
-    const { deps } = makeDeps(sessionPayload(), {
-      autoBuild: true,
-      classifierAvailable: async () => true,
-      buildClassifier: async (base) => {
-        calls.push(base);
-        return { ok: true };
-      },
-    });
-    await autoBuildClassifier(deps);
-    expect(calls).toEqual([]);
-  });
-
-  it('skips the build when the base model is absent', async () => {
-    const calls: string[] = [];
-    const { deps } = makeDeps(sessionPayload(), {
-      autoBuild: true,
-      classifierAvailable: async () => false,
-      buildClassifier: async (base) => {
-        calls.push(base);
-        return { ok: true };
-      },
-    });
-    await autoBuildClassifier(deps);
-    expect(calls).toEqual([]);
-  });
-
-  it('does nothing when autoBuild is disabled', async () => {
-    const calls: string[] = [];
-    const { deps } = makeDeps(sessionPayload(), {
-      autoBuild: false,
-      classifierAvailable: async () => {
-        calls.push('available-check');
-        return false;
-      },
-      buildClassifier: async (base) => {
-        calls.push(base);
-        return { ok: true };
-      },
-    });
-    await autoBuildClassifier(deps);
-    expect(calls).toEqual([]);
-  });
-
-  it('never throws when the build fails', async () => {
-    const { deps } = makeDeps(sessionPayload(), {
-      autoBuild: true,
-      classifierAvailable: async (model) => model === 'qwen3:1.7b',
-      buildClassifier: async () => {
-        throw new Error('boom');
-      },
-    });
-    await expect(autoBuildClassifier(deps)).resolves.toBeUndefined();
   });
 });
 

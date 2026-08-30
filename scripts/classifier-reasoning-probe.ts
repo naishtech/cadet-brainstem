@@ -15,7 +15,7 @@
  *
  * Usage (from repo root):
  *   npx tsx scripts/classifier-reasoning-probe.ts                 # full battery
- *   npx tsx scripts/classifier-reasoning-probe.ts --model qwen3:1.7b
+ *   npx tsx scripts/classifier-reasoning-probe.ts --model qwen3:4b
  *   PROBE_REQUESTS=1,3,5 PROBE_LEVELS=0,2,4 npx tsx scripts/classifier-reasoning-probe.ts
  *
  * Output: a per-(request × schema-level) table to stdout, plus a full JSON
@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { CLASSIFICATION_JSON_SCHEMA } from '../src/classifier/schema';
 
 const HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-const MODEL = parseArg('--model', process.env.PROBE_MODEL ?? 'qwen3:1.7b');
+const MODEL = parseArg('--model', process.env.PROBE_MODEL ?? 'qwen3:4b');
 const TIMEOUT_MS = Number(process.env.PROBE_TIMEOUT_MS ?? 90_000);
 const NUM_PREDICT = Number(process.env.PROBE_NUM_PREDICT ?? 800);
 // When set (--schema-file <path>), probe all selected requests with this single

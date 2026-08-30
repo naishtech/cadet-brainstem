@@ -451,7 +451,7 @@ describe('classify', () => {
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(
       cfgFile,
-      'classifier:\n  model: config-model\n  derived_model: derived-model\n',
+      'classifier:\n  model: config-model\n',
       'utf8',
     );
     process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
@@ -461,7 +461,7 @@ describe('classify', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
       await classify('hello', { host: 'http://localhost:11434' });
-      expect(requestBodyOf(fetchMock).model).toBe('derived-model');
+      expect(requestBodyOf(fetchMock).model).toBe('config-model');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -472,7 +472,7 @@ describe('classify', () => {
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(
       cfgFile,
-      'classifier:\n  model: config-model\n  derived_model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
+      'classifier:\n  model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
       'utf8',
     );
     process.env.CADET_BRAINSTEM_CONFIG = cfgFile;

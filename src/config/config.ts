@@ -18,11 +18,6 @@ export class ConfigError extends Error {
 const classifierSchema = z.object({
   provider: z.enum(['ollama']),
   model: z.string().min(1, 'model must be a non-empty string'),
-  derived_model: z
-    .string()
-    .min(1, 'derived_model must be a non-empty string')
-    .optional(),
-  auto_build: z.boolean().optional(),
   timeout_ms: z
     .number()
     .int('timeout_ms must be an integer')
@@ -100,20 +95,16 @@ export type Config = z.infer<typeof configSchema>;
  * Single source of truth for defaults — partial configs are deep-merged on top
  * of this before validation.
  *
- * Note: the default classifier model is qwen3:1.7b (not §13's qwen3:4b) — a
- * smaller, faster model that classifies well within the latency budget on
- * CPU. Thinking is disabled in the Ollama adapter (see classifier/ollama.ts),
- * and keep_alive keeps the model warm between calls so a cold model reload
- * doesn't blow the timeout (see classifier/ollama.ts).
+ * The default classifier model is qwen3:4b, matching the model pulled for
+ * the project (see src/core/installers.ts). Thinking is disabled in the
+ * Ollama adapter (see classifier/ollama.ts), and keep_alive keeps the model
+ * warm between calls so a cold model reload doesn't blow the timeout (see
+ * classifier/ollama.ts).
  */
 export const defaultConfig: Config = {
   classifier: {
     provider: 'ollama',
-    model: 'qwen3:1.7b',
-    // No derived_model by default: only used when explicitly configured (the
-    // Modelfile-derived classifier). Defaulting it to a model that isn't
-    // pulled makes classify fail with 404, so it is opt-in.
-    auto_build: true,
+    model: 'qwen3:4b',
     timeout_ms: 60_000,
     keep_alive: '30m',
   },

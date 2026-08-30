@@ -21,8 +21,6 @@ export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000;
 /** How long the model is kept loaded between calls (Ollama keep_alive). */
 export const DEFAULT_KEEP_ALIVE = '30m';
 
-/** Modelfile-derived classifier model (built via `ollama create`). */
-export const DERIVED_CLASSIFIER_MODEL = 'fast-classifier';
 /** Max tokens to generate for a classification decision. */
 export const DEFAULT_NUM_PREDICT = 400;
 /** Context window sized to the actual prompt+schema length. */
@@ -359,15 +357,11 @@ export class OllamaClassifier {
   }
 
   async classify(taskText: string): Promise<Classification> {
-    // The Modelfile-derived classifier carries the static instructions in its
-    // SYSTEM block, so the request prompt contains ONLY the user's text. The
-    // base model still needs the full prompt template with the field defs.
-    const prompt = isDerivedClassifierModel(this.model)
-      ? taskText
-      : buildPrompt(taskText);
+    // Always send the full prompt template with the field defs (there is no
+    // derived fast-classifier model anymore).
+    const prompt = buildPrompt(taskText);
     // Structured output constrains enum values, so the model emits valid
-    // classification fields (previously this 400'd due to a string keep_alive
-    // and 404'd due to a default derived_model — both fixed elsewhere).
+    // classification fields.
     return parseClassification(await this.chatJson(prompt, CLASSIFICATION_JSON_SCHEMA));
   }
 
@@ -586,25 +580,12 @@ function resolveModel(override?: string): string {
     return override;
   }
   const classifier = loadConfig().classifier;
-  // Prefer the Modelfile-derived model at runtime; fall back to the pulled
-  // base model when no derived model is configured.
-  return classifier.derived_model && classifier.derived_model.length > 0
-    ? classifier.derived_model
-    : classifier.model;
+  return classifier.model;
 }
 
-/** True when the model is a Modelfile-derived classifier (static SYSTEM block). */
-export function isDerivedClassifierModel(model: string): boolean {
-  return model === DERIVED_CLASSIFIER_MODEL || model.endsWith('-classifier');
-}
-
-/**
- * Resolve the BASE model (not the derived fast-classifier). The derived model
- * carries a classification-only SYSTEM block that overrides extraction prompts,
- * so extraction/mining tasks must use the base model instead.
- */
+/** Resolve the classifier model (plain model; no derived fast-classifier). */
 export function resolveBaseModel(): string {
-  return loadConfig().classifier.model || DERIVED_CLASSIFIER_MODEL;
+  return loadConfig().classifier.model;
 }
 
 /**
@@ -667,9 +648,6 @@ export function extractProcedure(
   conversationText: string,
   options: ClassifierOptions = {},
 ): Promise<ProcedureExtraction> {
-  // Extraction is a different task from fast classification: use the BASE model
-  // (not the derived fast-classifier), which has no classification-only SYSTEM
-  // block that would override the extraction prompt.
   return new OllamaClassifier({
     ...options,
     model: options.model ?? resolveBaseModel(),

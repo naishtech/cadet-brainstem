@@ -10,12 +10,10 @@ import {
 import { DEFAULT_RECOMMENDED_TOOL } from './hooks';
 import {
   classifyWithFallback,
-  isModelAvailable,
   synthesizePlans,
   type Classification,
 } from '../../classifier';
-import { loadConfig } from '../../config';
-import { createFastClassifierCli } from '../../core/installers';
+
 import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
 import type { CliCommand } from '../types';
 
@@ -61,16 +59,6 @@ export interface HookLifecycleDeps {
     classification: Classification;
     degraded: boolean;
   }>;
-  /**
-   * Enable/disable the automatic derived-classifier build on SessionStart.
-   * Defaults to config `classifier.auto_build` (true). Set false in tests to
-   * skip the build (and the config read).
-   */
-  autoBuild?: boolean;
-  /** Override the Ollama model-presence check (tests). Defaults to isModelAvailable. */
-  classifierAvailable?: (model: string, host?: string) => Promise<boolean>;
-  /** Override the classifier build (tests). Defaults to createFastClassifierCli. */
-  buildClassifier?: (base: string, host?: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /** The output envelope VS Code Copilot Chat Hooks accept on stdout. */
@@ -225,43 +213,8 @@ export function cleanupSessionState(
 }
 
 /**
- * Auto-build the Modelfile-derived classifier on SessionStart if it is missing
- * and the base model is present. Best-effort and guarded: never throws, never
- * prompts, and skips when the derived model already exists, the base model is
- * absent, or `classifier.auto_build` is false. Builds via `createFastClassifierCli`
- * (the `ollama create` CLI / docker), which bakes the SYSTEM block and verifies
- * it — never the broken HTTP `/api/create` path that silently drops SYSTEM.
- */
-export async function autoBuildClassifier(
-  deps: HookLifecycleDeps = {},
-): Promise<void> {
-  try {
-    const enabled = deps.autoBuild ?? loadConfig().classifier.auto_build;
-    if (!enabled) {
-      return;
-    }
-    const cfg = loadConfig().classifier;
-    const derived = cfg.derived_model ?? cfg.model;
-    const base = cfg.model;
-    const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-    const isAvailable = deps.classifierAvailable ?? isModelAvailable;
-    if (await isAvailable(derived, host)) {
-      return; // already present
-    }
-    if (!(await isAvailable(base, host))) {
-      return; // cannot build without the base model
-    }
-    const build = deps.buildClassifier ?? createFastClassifierCli;
-    await build(base, host);
-  } catch {
-    // best-effort — never break the session-start hook
-  }
-}
-
-/**
  * SessionStart handler: prime the session by injecting a compact primer with
  * memory hints + the recommended tool, so the agent doesn't re-discover state.
- * Also auto-builds the derived classifier if missing (best-effort, ~seconds).
  */
 export async function runHookSessionStart(
   deps: HookLifecycleDeps = {},
@@ -275,8 +228,6 @@ export async function runHookSessionStart(
   const sessionId = payload.session_id ?? payload.sessionId ?? 'unknown';
   const project = projectFor(payload, deps);
   const hints = searchMemory(deps, project, 'session context', 5);
-
-  await autoBuildClassifier(deps);
 
   let primer = `Session start. Recommended tool: ${recommendedTool}. `;
   primer += `Prefer it over raw grep/read for code-centric exploration.`;
