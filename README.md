@@ -36,7 +36,7 @@ npm link
 npm i -g cadet-brainstem   # then: npx cadet-brainstem
 ```
 
-Then install the integration tools — see [docs/requirements.md](docs/requirements.md): **Ollama** (with the `qwen3:1.7b` model), **RTK**, **Serena**, **LeanCTX**.
+Then install the integration tools — see [docs/requirements.md](docs/requirements.md): **Ollama** (with the `qwen3:4b` model), **RTK**, **Serena**, **LeanCTX**.
 
 ### 2. First run
 
@@ -224,12 +224,36 @@ Cadet Brainstem is a local CLI built around one decision: **what context does th
 task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised context + metrics.db
 ```
 
-- **Classifier** — a local Ollama model (`qwen3:1.7b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
+- **Classifier** — a local Ollama model (`qwen3:4b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
 - **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
 - **Procedures** — reusable, intent-grounded operation sequences (`service: leanctx | serena | rtk`, tool, args) that the local model can execute against a real repo on the cloud agent's behalf. Read-only steps run automatically; write steps are gated behind a reviewable diff and explicit approval (`procedure_review` → `procedure_apply`). New candidates are discovered by mining historical conversations (`mine`).
 - **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-brainstem/metrics.db`), fully offline, with estimates clearly labelled.
 - **Memory** — a local SQLite memory store (`~/.cadet-brainstem/memory.db`) lets the agent persist facts that are expensive to rediscover and retrieve them across sessions via `chat_memory_store`, scoped per project (`activate_project`).
+
+### What the local LLM does
+
+The local LLM is a **routing classifier**, not a code generator. It reads a short restatement of the request and answers one question: *what does this task need?* Its job is classification and entity extraction only — it never decides how to optimise, and it never invokes tools.
+
+For each request it returns, as strict JSON:
+
+- **Task type** — one of 13 types (question, coding_new, coding_fix, debug, refactor, test, review, architecture, documentation, investigation, planning, search, configuration).
+- **Complexity** — low, medium, or high.
+- **Risk** — low, medium, or high.
+- **Context need** — minimal, targeted, broad, or exhaustive.
+- **Entities** — the key nouns and keywords pulled from the request (for example "checkout page", "blueprint", "X300").
+- **Confidence** — how sure the model is of this classification.
+- **Needs more context** — true only when the request is insufficient on its own.
+
+The output is deterministic and cheap: temperature is zero, thinking is disabled, and the JSON schema is enforced by the caller. The classification feeds the **policy engine**, which deterministically maps it to the token-saving strategy (LeanCTX mode, search approach, compression). Because the model only classifies, it stays small, fast, and low-cost.
+
+The same model also powers supporting tasks:
+
+- **`assess_context`** — decides whether the context gathered so far is sufficient, or what to gather next.
+- **Procedure mining** — extracts reusable, repeatable operation sequences from past conversations (`mine`).
+- **Curated procedures** — lets you run basic, repeatable tasks from the procedure store (for example read a file, or create-then-edit a file). Read-only steps run automatically; write steps are gated behind a reviewable diff and explicit approval (`procedure_review` → `procedure_apply`).
+
+If Ollama is unavailable, the system degrades to conservative defaults instead of failing. The classifier then returns a safe, generic classification and the rest of the pipeline continues normally.
 
 ### Project layout
 

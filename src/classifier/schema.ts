@@ -238,7 +238,7 @@ export interface ResponsePolicy {
  * Keeping the model's job small makes it fast AND specific (entities are pulled
  * verbatim from the request, not invented).
  *
- * Kept in sync with the Modelfile SYSTEM block. `additionalProperties: false`
+ * Kept in sync with the classifier SYSTEM block. `additionalProperties: false`
  * enforces the shape at every level.
  */
 export const CLASSIFICATION_JSON_SCHEMA = {

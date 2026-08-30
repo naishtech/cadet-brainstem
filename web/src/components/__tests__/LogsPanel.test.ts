@@ -10,7 +10,7 @@ describe('LogsPanel', () => {
         type: 'status',
         ts: 0,
         services: [
-          { name: 'ollama', kind: 'llm', available: true, detail: 'qwen3:1.7b' },
+          { name: 'ollama', kind: 'llm', available: true, detail: 'qwen3:4b' },
           { name: 'rtk', kind: 'rtk', available: false },
         ],
       },

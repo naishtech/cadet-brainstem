@@ -26,7 +26,7 @@ function report(
 describe('getServiceStatus', () => {
   it('reports all four services with kinds', async () => {
     const status = await getServiceStatus({
-      model: 'qwen3:1.7b',
+      model: 'qwen3:4b',
       detect: async () => report(),
       modelAvailable: async () => true,
     });
@@ -35,7 +35,7 @@ describe('getServiceStatus', () => {
     expect(status.find((s) => s.name === 'ollama')).toMatchObject({
       available: true,
       kind: 'llm',
-      detail: 'qwen3:1.7b',
+      detail: 'qwen3:4b',
     });
     expect(status.find((s) => s.name === 'rtk')?.available).toBe(false);
     expect(status.find((s) => s.name === 'serena')?.detail).toBe('1.0.0');
@@ -43,7 +43,7 @@ describe('getServiceStatus', () => {
 
   it('flags llm unavailable when the classifier model is missing', async () => {
     const status = await getServiceStatus({
-      model: 'qwen3:1.7b',
+      model: 'qwen3:4b',
       detect: async () => report(),
       modelAvailable: async () => false,
     });

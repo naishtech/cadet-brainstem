@@ -4,6 +4,7 @@ import { useDashboardStore } from './store';
 import StatusIcons from './components/StatusIcons.vue';
 import StatsGrid from './components/StatsGrid.vue';
 import LogsPanel from './components/LogsPanel.vue';
+import logo from './images/logo_64x64.png';
 
 const store = useDashboardStore();
 
@@ -13,7 +14,10 @@ onMounted(() => store.connect());
 <template>
   <div class="min-h-screen bg-zinc-950 text-zinc-100 p-6">
     <header class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-semibold">cadet-brainstem</h1>
+      <div class="flex items-center gap-3">
+        <img :src="logo" alt="cadet-brainstem logo" class="h-8 w-8" />
+        <h1 class="text-xl font-semibold">cadet-brainstem</h1>
+      </div>
       <span v-if="store.connected" class="text-xs text-emerald-400">live</span>
     </header>
 

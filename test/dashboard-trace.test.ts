@@ -13,7 +13,7 @@ describe('getTraceSink', () => {
     bus.subscribe((event) => types.push(event.type));
 
     const sink = getTraceSink(bus);
-    sink.start({ id: 't1', model: 'qwen3:1.7b', request: 'hi' });
+    sink.start({ id: 't1', model: 'qwen3:4b', request: 'hi' });
     sink.token({ id: 't1', delta: 'think' });
     sink.complete({ id: 't1', usage: { inputTokens: 5, outputTokens: 3 } });
 

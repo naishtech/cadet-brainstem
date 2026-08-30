@@ -147,13 +147,8 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
     );
   }
 
-  // Classifier model (only checkable when Ollama is reachable). Prefer the
-  // Modelfile-derived model actually used at runtime, falling back to the
-  // pulled base model.
-  const model =
-    deps.model ??
-    (config.classifier.derived_model || config.classifier.model);
-  const derived = model === config.classifier.derived_model;
+  // Classifier model (only checkable when Ollama is reachable).
+  const model = deps.model ?? config.classifier.model;
   if (ollama.available) {
     const modelOk = await isModelAvailable(model, host);
     checks.push(
@@ -162,11 +157,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
         ok: modelOk,
         critical: false,
         detail: modelOk ? model : `"${model}" not pulled`,
-        hint: modelOk
-          ? undefined
-          : derived
-            ? `Build it: ollama create ${model} -f Modelfile`
-            : `Pull it: ollama pull ${model}`,
+        hint: modelOk ? undefined : `Pull it: ollama pull ${model}`,
       }),
     );
   } else {
@@ -176,9 +167,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
         ok: false,
         critical: false,
         detail: 'cannot check (Ollama down)',
-        hint: derived
-          ? `Start Ollama, then: ollama create ${model} -f Modelfile`
-          : `Start Ollama, then: ollama pull ${model}`,
+        hint: `Start Ollama, then: ollama pull ${model}`,
       }),
     );
   }
