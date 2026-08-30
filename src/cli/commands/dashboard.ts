@@ -1,4 +1,7 @@
 import { loadConfig } from '../../config';
+import { DashboardServer } from '../../dashboard/server';
+import { openBrowser, isNonInteractive } from '../../dashboard/open-browser';
+import { writePidFile, stopByPidFile } from '../../dashboard/lifecycle';
 import type { CliCommand } from '../types';
 
 export interface DashboardDeps {
@@ -79,11 +82,14 @@ function fromConfig(config: ReturnType<typeof loadConfig>): DashboardOptions {
 
 /**
  * Resolve effective dashboard settings from config + CLI flags and start/stop
- * the dashboard. The server binding (Task 49) is not wired yet, so the start
- * path reports the resolved settings; `--stop` is a no-op until the instance
- * registry lands.
+ * the dashboard (design doc §9.1). `--stop` terminates a running instance via
+ * its PID file; the start path binds the server, opens the browser when
+ * interactive, and blocks until the process is terminated.
  */
-export function runDashboard(args: readonly string[], deps: DashboardDeps = {}): number {
+export async function runDashboard(
+  args: readonly string[],
+  deps: DashboardDeps = {},
+): Promise<number> {
   const load = deps.load ?? loadConfig;
   const log = deps.log ?? ((line: string) => console.log(line));
 
@@ -103,10 +109,8 @@ export function runDashboard(args: readonly string[], deps: DashboardDeps = {}):
   }
 
   if (stop) {
-    // Task 49 wires the instance registry; nothing is running yet.
-    log(
-      '[cadet-brainstem] dashboard: no running instance to stop (server not wired yet — Task 49).',
-    );
+    const { message } = stopByPidFile();
+    log(`[cadet-brainstem] dashboard: ${message}`);
     return 0;
   }
 
@@ -115,20 +119,36 @@ export function runDashboard(args: readonly string[], deps: DashboardDeps = {}):
     return 0;
   }
 
-  // Server binding lands in Task 49. Report the resolved settings so the CLI
-  // interface is real and testable ahead of the server.
-  log(
-    `[cadet-brainstem] dashboard: not yet wired (Task 49). Would serve on http://${options.host}:${options.port}`,
-  );
-  log(`  auto-open: ${options.autoOpen}`);
-  return 0;
+  const server = new DashboardServer({ host: options.host, port: options.port, log });
+  try {
+    const info = await server.start();
+    writePidFile();
+    log(`[cadet-brainstem] dashboard: serving at ${info.url}`);
+
+    if (options.autoOpen) {
+      const opened = await openBrowser(info.url, {
+        nonInteractive: isNonInteractive() || options.autoOpenNonInteractive,
+      });
+      if (!opened) {
+        log('[cadet-brainstem] dashboard: browser open skipped (non-interactive).');
+      }
+    }
+  } catch (err) {
+    log(`[cadet-brainstem] dashboard: ${(err as Error).message}`);
+    return 1;
+  }
+
+  // Block until the process is terminated (e.g. `dashboard --stop`).
+  return new Promise<number>(() => {
+    /* keeps the server alive */
+  });
 }
 
 export const dashboardCommand: CliCommand = {
   name: 'dashboard',
   description: 'Open the local metrics dashboard',
   usage: 'cadet-brainstem dashboard [--no-open] [--port <port>] [--stop]',
-  run(args: readonly string[]): number {
+  run(args: readonly string[]): Promise<number> {
     return runDashboard(args);
   },
 };
