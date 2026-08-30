@@ -35,6 +35,7 @@ describe('getServiceStatus', () => {
     expect(status.find((s) => s.name === 'ollama')).toMatchObject({
       available: true,
       kind: 'llm',
+      detail: 'qwen3:1.7b',
     });
     expect(status.find((s) => s.name === 'rtk')?.available).toBe(false);
     expect(status.find((s) => s.name === 'serena')?.detail).toBe('1.0.0');

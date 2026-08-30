@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — isolated SPA; no impact on backend.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §6 Frontend Design
 
@@ -28,7 +28,7 @@ LLM Trace), fed by REST + SSE.
 
 ## Acceptance Criteria
 
-- [ ] Single page shows status icons, stats grid, and logs panel.
-- [ ] Live updates flow from SSE without page reload.
-- [ ] LLM trace cards render streamed reasoning; ESTIMATES labelled.
-- [ ] Component tests (Vitest + Vue Test Utils) pass.
+- [x] Single page shows status icons, stats grid, and logs panel.
+- [x] Live updates flow from SSE without page reload.
+- [x] LLM trace cards render streamed reasoning; ESTIMATES labelled.
+- [x] Component tests (Vitest + Vue Test Utils) pass.
