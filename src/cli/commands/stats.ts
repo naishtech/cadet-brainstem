@@ -1,4 +1,4 @@
-import { getDefaultMetricsPath, MetricsStore } from '../../metrics';
+import { formatStats, getDefaultMetricsPath, MetricsStore } from '../../metrics';
 import type { CliCommand } from '../types';
 import { askYesNo } from './init';
 
@@ -39,13 +39,13 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
   }
 
   try {
-    const count = store.count();
+    const payload = formatStats(store);
     log('');
     log('Cadet Brainstem Stats');
     log('-----------------------');
     log(`Metrics database: ${metricsPath}`);
 
-    if (count === 0) {
+    if (payload.count === 0) {
       log('');
       log('No optimisation events recorded yet.');
       log(
@@ -54,24 +54,20 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
       return 0;
     }
 
-    const totals = store.getTotals();
-    const byTool = store.getSavingsByTool();
-    const byTask = store.getSavingsByTaskType();
-    const sessions = store.getSessionSummary();
-    const avgCompression = store.getAverageCompressionRatio();
-    const expensive = store.getMostExpensiveOperations(5);
-    const callStats = store.getCallStatsByTool();
-
-    const reductionPct =
-      totals.estimatedInputTokens > 0
-        ? Math.round((totals.estimatedTokensSaved / totals.estimatedInputTokens) * 100)
-        : 0;
+    const totals = payload.totals;
+    const byTool = payload.savingsByTool;
+    const byTask = payload.savingsByTaskType;
+    const sessions = payload.sessions;
+    const avgCompression = totals.avgCompressionRatio;
+    const expensive = payload.mostExpensiveOperations;
+    const callStats = payload.callStats;
+    const reductionPct = totals.reductionPct;
 
     log('');
     log(`Events:            ${formatTokens(totals.eventCount)}`);
-    log(`Input tokens:      ${formatTokens(totals.estimatedInputTokens)}   (estimate)`);
-    log(`Output tokens:     ${formatTokens(totals.estimatedOutputTokens)}   (estimate)`);
-    log(`Tokens saved:      ${formatTokens(totals.estimatedTokensSaved)}   (estimate)`);
+    log(`Input tokens:      ${formatTokens(totals.inputTokens)}   (estimate)`);
+    log(`Output tokens:     ${formatTokens(totals.outputTokens)}   (estimate)`);
+    log(`Tokens saved:      ${formatTokens(totals.tokensSaved)}   (estimate)`);
     log(`Reduction:         ${reductionPct}%   (estimate)`);
     log(
       `Avg compression:   ${
@@ -121,7 +117,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
 
     log('');
     log('Classify calls by origin:');
-    const classifyByOrigin = store.getClassifyCallsByOrigin();
+    const classifyByOrigin = payload.classifyByOrigin;
     if (classifyByOrigin.length === 0) {
       log('  (none yet — classify is not being invoked via hook or MCP)');
     } else {
@@ -135,7 +131,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
 
     log('');
     log('Recommended vs invoked (adoption):');
-    const recommended = store.getRecommendedByTool();
+    const recommended = payload.recommendedByTool;
     const recMap = new Map(recommended.map((r) => [r.tool, r.calls]));
     const toolSet = new Set<string>([...recMap.keys(), ...callStatMap.keys()]);
     if (toolSet.size === 0) {

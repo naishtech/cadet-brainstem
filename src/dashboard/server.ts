@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type Server as HttpServer, type ServerRespo
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import pkg from '../../package.json';
+import { getDefaultMetricsPath, MetricsStore, formatStats } from '../metrics';
 import { Router, sendJson } from './router';
 import { openSse, type SseConnection } from './stream';
 
@@ -34,6 +35,8 @@ export interface DashboardServerOptions {
   port?: number;
   /** Directory of built Vue static assets. Defaults to dist/dashboard/static. */
   staticDir?: string;
+  /** Metrics database path for /api/stats. Defaults to the standard path. */
+  metricsPath?: string;
   /** Optional log sink. */
   log?: (line: string) => void;
 }
@@ -139,8 +142,23 @@ export class DashboardServer {
       sendJson(res, 200, { ok: true, version: pkg.version });
     });
 
-    // Placeholders; wired by Tasks 50-52.
-    for (const path of ['/api/stats', '/api/status', '/api/logs']) {
+    this.router.get('/api/stats', (_req, res) => {
+      let store: MetricsStore;
+      try {
+        store = new MetricsStore(this.options.metricsPath ?? getDefaultMetricsPath());
+      } catch (err) {
+        sendJson(res, 500, { error: (err as Error).message });
+        return;
+      }
+      try {
+        sendJson(res, 200, formatStats(store));
+      } finally {
+        store.close();
+      }
+    });
+
+    // Placeholders; wired by Tasks 51-52.
+    for (const path of ['/api/status', '/api/logs']) {
       this.router.get(path, (_req, res) => {
         sendJson(res, 501, { error: 'not implemented yet' });
       });
