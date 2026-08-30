@@ -3,7 +3,7 @@
 **Risk rationale:** Medium — adds instrumentation into existing code paths; must stay non-blocking
 and degrade gracefully.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §5.4 SSE, §7, §9.2
 
@@ -26,7 +26,7 @@ appear live.
 
 ## Acceptance Criteria
 
-- [ ] `GET /api/events` streams live `log`/`request`/`response`/`status`/`stats.updated`.
-- [ ] All four sources emit events without throwing or blocking.
-- [ ] `captureFull: false` truncates hints.
-- [ ] `GET /api/logs` returns recent buffered events.
+- [x] `GET /api/events` streams live `log`/`request`/`response`/`status`/`stats.updated`.
+- [x] All four sources emit events without throwing or blocking.
+- [x] `captureFull: false` truncates hints.
+- [x] `GET /api/logs` returns recent buffered events.

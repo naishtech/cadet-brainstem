@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DashboardServer } from '../src/dashboard/server';
+import { EventBus } from '../src/dashboard/event-bus';
 import { MetricsStore } from '../src/metrics';
 import type { ToolStatus } from '../src/dashboard/status';
 
@@ -113,11 +114,45 @@ describe('DashboardServer', () => {
     await server.stop();
   });
 
-  it('returns 501 for /api/logs until Task 52', async () => {
-    const server = makeServer({ port: 0 });
+  it('serves /api/logs from the event bus ring buffer', async () => {
+    const bus = new EventBus({
+      capacity: 10,
+      persistLogs: false,
+      persistPath: join(tempDir(), 'x.log'),
+    });
+    bus.log('info', 'test', 'hello');
+
+    const server = makeServer({ port: 0, eventBus: bus });
     const info = await server.start();
-    const res = await get(info.port, '/api/logs');
-    expect(res.status).toBe(501);
+    const res = await get(info.port, '/api/logs?limit=10');
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(Array.isArray(body.events)).toBe(true);
+    const logEvents = (body.events as Array<{ type: string; message: string }>).filter(
+      (event) => event.type === 'log',
+    );
+    expect(logEvents).toHaveLength(1);
+    expect(logEvents[0]!.message).toBe('hello');
+    await server.stop();
+  });
+
+  it('SSE replays recent events then forwards live ones', async () => {
+    const bus = new EventBus({
+      capacity: 10,
+      persistLogs: false,
+      persistPath: join(tempDir(), 'x.log'),
+    });
+    bus.log('info', 'test', 'replay-me');
+
+    const server = makeServer({ port: 0, eventBus: bus });
+    const info = await server.start();
+    const body = await openSseClient(info.port);
+    expect(body).toContain('event: log');
+    expect(body).toContain('replay-me');
+
+    // live events after connect are forwarded to the same connection
+    bus.log('info', 'test', 'live-me');
+    await new Promise((resolve) => setTimeout(resolve, 50));
     await server.stop();
   });
 

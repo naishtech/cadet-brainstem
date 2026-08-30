@@ -4,6 +4,8 @@ import {
   type OptimisationEvent,
 } from '../../metrics';
 import { RtkAdapter, type RtkResult } from '../../integrations/rtk';
+import { getInstrumenter, type Instrumenter } from '../../dashboard/instrument';
+import { randomUUID } from 'node:crypto';
 import type { CliCommand } from '../types';
 
 export interface WrapDeps {
@@ -13,6 +15,8 @@ export interface WrapDeps {
   metricsPath?: string;
   /** Override the output sink (tests). */
   log?: (line: string) => void;
+  /** Dashboard instrumentation (tests). */
+  instrument?: Instrumenter;
 }
 
 export interface WrapOptions {
@@ -121,13 +125,29 @@ export async function runWrap(
   const log = deps.log ?? ((line: string) => console.log(line));
   const rtk = deps.rtk ?? new RtkAdapter();
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
+  const instrument = deps.instrument ?? getInstrumenter();
 
+  const requestId = randomUUID();
+  const start = performance.now();
+  instrument.requestStarted({
+    id: requestId,
+    tool: 'rtk',
+    operation: 'wrap',
+    inputHint: command,
+  });
   const result = await rtk.optimize({
     command,
     ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
     ...(options.shell !== undefined ? { shell: options.shell } : {}),
   });
+  instrument.responded({
+    id: requestId,
+    ok: true,
+    latencyMs: Math.round(performance.now() - start),
+    outputHint: `saved ${result.estimatedTokensSaved} tokens (${result.rawOutputSize} -> ${result.optimisedOutputSize} bytes)`,
+  });
   recordWrapEvent(metricsPath, result);
+  instrument.statsUpdated();
   if (result.estimatedTokensSaved === 0 && !result.degraded) {
     console.error(
       '[cadet-brainstem] nothing to compress — output is small or already compact (0 tokens saved).',
