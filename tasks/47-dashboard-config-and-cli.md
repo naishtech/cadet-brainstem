@@ -2,7 +2,7 @@
 
 **Risk rationale:** Low — additive config fields and a CLI command; no existing behaviour changes.
 
-**Status:** Not started
+**Status:** Done (config + CLI flags; server bind deferred to Task 49)
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §8 Configuration, §9.1 CLI command
 **Supersedes:** `tasks/18-dashboard-command.md` (old terminal-only plan)
@@ -42,7 +42,7 @@ dashboard:
 
 ## Acceptance Criteria
 
-- [ ] `configSchema` validates the new `dashboard.*` fields; defaults match the design exactly.
-- [ ] Env overrides for port/enabled work.
-- [ ] `dashboard` starts the server, `--port`/`--no-open` respected, `--stop` stops it.
-- [ ] Invalid config produces clear errors.
+- [x] `configSchema` validates the new `dashboard.*` fields; defaults match the design exactly.
+- [x] Env overrides for port/enabled work.
+- [ ] `dashboard` starts the server, `--port`/`--no-open` respected, `--stop` stops it. *(Option parsing done; server binding + `--stop` registry land with Task 49.)*
+- [x] Invalid config produces clear errors.
