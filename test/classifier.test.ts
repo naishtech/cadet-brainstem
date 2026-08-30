@@ -420,21 +420,30 @@ describe('classify', () => {
   });
 
   it('sends the configured model and requests JSON format', async () => {
-    const fetchMock = mockFetchJson({
-      message: { content: JSON.stringify(validClassification) },
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    await classify('debug flaky test', {
-      model: 'custom-model',
-      host: 'http://localhost:11434',
-    });
-    const body = requestBodyOf(fetchMock);
-    expect(body.model).toBe('custom-model');
-    expect(body.format).toEqual(CLASSIFICATION_JSON_SCHEMA);
-    expect(body.stream).toBe(false);
-    expect(body.think).toBe(false);
-    expect(body.keep_alive).toBe('30m');
-    expect((body.options as { temperature?: number; num_predict?: number; num_ctx?: number }).temperature).toBe(0);
+    // Isolate from the real user config so keep_alive is deterministic.
+    const cfgDir = mkdtempSync(join(tmpdir(), 'to-class-'));
+    const cfgFile = join(cfgDir, 'config.yaml');
+    writeFileSync(cfgFile, 'classifier:\n  model: default-model\n  keep_alive: 30m\n', 'utf8');
+    process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
+    try {
+      const fetchMock = mockFetchJson({
+        message: { content: JSON.stringify(validClassification) },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await classify('debug flaky test', {
+        model: 'custom-model',
+        host: 'http://localhost:11434',
+      });
+      const body = requestBodyOf(fetchMock);
+      expect(body.model).toBe('custom-model');
+      expect(body.format).toEqual(CLASSIFICATION_JSON_SCHEMA);
+      expect(body.stream).toBe(false);
+      expect(body.think).toBe(false);
+      expect(body.keep_alive).toBe('30m');
+      expect((body.options as { temperature?: number; num_predict?: number; num_ctx?: number }).temperature).toBe(0);
+    } finally {
+      rmSync(cfgDir, { recursive: true, force: true });
+    }
   });
 
   it('reads the model from config when not provided', async () => {
