@@ -1,6 +1,6 @@
 {
   "name": "cadet-brainstem",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cadet Brainstem — an orchestration + measurement layer that reduces AI-agent context consumption.",
   "keywords": [
     "cli",
