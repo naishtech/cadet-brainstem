@@ -24,7 +24,6 @@ import {
   RESPONSE_POLICY_DIRECTIVES,
   assessWithFallback,
   type ContextAssessmentOutcome,
-  type EvidencePlan,
   type LanguageStandard,
   type RecommendedTool,
   type Reminder,
@@ -48,6 +47,7 @@ import {
 } from '../metrics';
 import { loadConfig, saveConfig } from '../config';
 import { getInstrumenter, type Instrumenter } from '../dashboard/instrument';
+import { getTraceSink } from '../dashboard/trace';
 import {
   MemoryStore,
   getProjectMemoryPath,
@@ -152,67 +152,6 @@ function toolPlanUses(plan: ToolPlan | undefined, name: ToolName): boolean {
   return (plan?.recommended_tools ?? []).some((t) => t.name === name);
 }
 
-export interface CompiledEvidencePlan {
-  prioritized_queries: Array<{
-    id: string;
-    query: string;
-    reason?: string;
-    sources: string[];
-    cost_estimate?: string;
-    fallback?: string[];
-  }>;
-  scope?: string;
-}
-
-/**
- * Surface the prioritized, source-tagged evidence plan. Prefers the new
- * `evidence_plan`; falls back to the legacy `retrieval` alias (transition).
- */
-export function compileEvidencePlan(
-  evidencePlan: EvidencePlan | undefined,
-  retrieval: RetrievalPlan | undefined,
-): CompiledEvidencePlan | null {
-  const plan =
-    evidencePlan ??
-    (retrieval !== undefined
-      ? {
-          prioritized_queries: retrieval.queries.map((query, i) => ({
-            id: `q${i + 1}`,
-            query,
-            sources: ['serena', 'file_search'],
-            cost_estimate: 'cheap',
-          })),
-          ...(retrieval.scope !== undefined ? { scope: retrieval.scope } : {}),
-        }
-      : undefined);
-  if (plan === undefined) {
-    return null;
-  }
-  const result: CompiledEvidencePlan = {
-    prioritized_queries: plan.prioritized_queries,
-  };
-  if (plan.scope !== undefined) {
-    result.scope = plan.scope;
-  }
-  return result;
-}
-
-/** A one-line advisory; from guidance, else the first reminder, else synthesized. */
-export function compileGuidance(
-  classification: Classification,
-  task: string,
-): string {
-  if (classification.guidance !== undefined && classification.guidance.trim().length > 0) {
-    return classification.guidance;
-  }
-  const firstReminder = classification.reminders?.[0]?.message;
-  if (firstReminder !== undefined && firstReminder.trim().length > 0) {
-    return firstReminder;
-  }
-  const subject = task.trim().length > 0 ? task.trim() : 'unspecified task';
-  return `Advisory: classify and route this request (${subject}); verify facts against the project before concluding.`;
-}
-
 /** Tool-anchored reminders the cloud LLM should honor (replaces guidance). */
 export function compileReminders(classification: Classification): Reminder[] {
   return classification.reminders ?? [];
@@ -248,6 +187,35 @@ export function memoryPolicyFor(usesMemory: boolean | 'if_necessary' | undefined
     return 'Check memory if it helps: consult `chat_memory_store` when it may reduce work, but verify retrieved facts before acting.';
   // Default: memory is optional evidence (never authoritative). Do not suggest skipping memory.
   return MEMORY_POLICY;
+}
+
+/**
+ * Serialized strategy for the cloud LLM — omits `context_need`, which always
+ * duplicates `classification.context_need` (the policy engine copies it).
+ */
+function serializeStrategy(
+  strategy: OptimisationStrategy,
+): Omit<OptimisationStrategy, 'context_need'> {
+  return {
+    compression: strategy.compression,
+    code_search: strategy.code_search,
+    terminal_output: strategy.terminal_output,
+    leanctx_mode: strategy.leanctx_mode,
+    ...(strategy.leanctx_budget !== undefined
+      ? { leanctx_budget: strategy.leanctx_budget }
+      : {}),
+  };
+}
+
+/** Slim a matched procedure to the handoff fields the cloud LLM needs. */
+function slimProcedure(p: Procedure) {
+  return {
+    id: p.id,
+    triggerPattern: p.triggerPattern,
+    steps: p.steps,
+    riskTier: p.riskTier,
+    handoffShape: p.handoffShape,
+  };
 }
 
 export interface SerenaTools {
@@ -345,7 +313,8 @@ const sharedLlmStatus = new LlmStatusTracker();
 function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
   return {
-    classify: deps.classify ?? classifyWithFallback,
+    classify: deps.classify ??
+      ((taskText) => classifyWithFallback(taskText, { trace: getTraceSink() })),
     getStrategy:
       deps.getStrategy ??
       ((classification) => new PolicyEngine().getStrategy(classification)),
@@ -525,33 +494,35 @@ export async function optimizeContextTool(
       : undefined;
 
   const classification = synthesizePlans(outcome.classification);
+  const usesMemory =
+    classification.memory?.use ??
+    toolPlanUses(classification.tool_plan, 'chat_memory_store');
   return {
-    // Token-saving steering fields first so the cloud LLM reads them first.
+    // Most important directions first (response_policy -> ... -> request_id).
     response_policy: compileResponsePolicy(classification.response_policy),
-    reminders: compileReminders(classification),
     tool_plan: compileToolPlan(classification.tool_plan),
+    reminders: compileReminders(classification),
     classification: coreClassification(classification),
     entities: classification.entities,
-    strategy,
-    guidance: compileGuidance(classification, args.task),
+    strategy: serializeStrategy(strategy),
+    memory_hints: compileMemoryHints(classification),
+    ...(usesMemory === 'if_necessary'
+      ? { memory_policy: memoryPolicyFor(usesMemory) }
+      : {}),
     ...(compileSubtasks(classification) !== undefined
       ? { subtasks: compileSubtasks(classification) }
       : {}),
-    evidence_plan: compileEvidencePlan(classification.evidence_plan, classification.retrieval),
-    retrieval: compileRetrieval(classification.retrieval),
+    ...(compileRetrieval(classification.retrieval) !== null
+      ? { retrieval: compileRetrieval(classification.retrieval) }
+      : {}),
+    degraded: result.degraded,
     context: result.context,
     mode: result.mode,
     sourceSize: result.sourceSize,
     returnedSize: result.returnedSize,
     estimatedTokensSaved: result.estimatedTokensSaved,
-    degraded: result.degraded,
-    request_id: requestId,
-    memory_hints: compileMemoryHints(classification),
-    memory_policy: memoryPolicyFor(
-      classification.memory?.use ??
-        toolPlanUses(classification.tool_plan, 'chat_memory_store'),
-    ),
     ...(note !== undefined ? { note } : {}),
+    request_id: requestId,
   };
 }
 
@@ -711,12 +682,12 @@ export async function procedureApplyTool(
  */
 function compileProcedureReviews(
   procedures: Procedure[],
-): Array<{ triggerPattern: string; steps: Procedure['steps']; note: string }> {
+): Array<{ id: string; triggerPattern: string; note: string }> {
   return procedures
     .filter((p) => p.riskTier === 'requires_review' || p.steps.some((s) => isWriteStep(s)))
     .map((p) => ({
+      id: p.id,
       triggerPattern: p.triggerPattern,
-      steps: p.steps,
       note: 'Mutates the repo. Do NOT auto-execute — present the proposed change for user approval before running (review gate).',
     }));
 }
@@ -805,31 +776,37 @@ export async function classifyTool(
   } catch (err) {
     d.log(`procedure lookup skipped: ${(err as Error).message}`);
   }
+  const usesMemory =
+    classification.memory?.use ??
+    toolPlanUses(classification.tool_plan, 'chat_memory_store');
+  const slimProcedures = procedures?.map(slimProcedure);
   return {
-    // Token-saving steering fields first so the cloud LLM reads them first.
+    // Most important directions first (response_policy -> ... -> request_id).
     response_policy: compileResponsePolicy(classification.response_policy),
-    reminders: compileReminders(classification),
     tool_plan: compileToolPlan(classification.tool_plan),
+    reminders: compileReminders(classification),
     classification: coreClassification(classification),
     entities: classification.entities,
-    strategy,
-    guidance: compileGuidance(classification, args.task),
+    strategy: serializeStrategy(strategy),
+    memory_hints: compileMemoryHints(classification),
+    ...(usesMemory === 'if_necessary'
+      ? { memory_policy: memoryPolicyFor(usesMemory) }
+      : {}),
     ...(compileSubtasks(classification) !== undefined
       ? { subtasks: compileSubtasks(classification) }
       : {}),
-    evidence_plan: compileEvidencePlan(classification.evidence_plan, classification.retrieval),
-    retrieval: compileRetrieval(classification.retrieval),
-    memory_hints: compileMemoryHints(classification),
-    memory_policy: memoryPolicyFor(
-      classification.memory?.use ?? toolPlanUses(classification.tool_plan, 'chat_memory_store'),
-    ),
+    ...(compileRetrieval(classification.retrieval) !== null
+      ? { retrieval: compileRetrieval(classification.retrieval) }
+      : {}),
     degraded: outcome.degraded,
     llm_status: llmStatus,
     ...(llmUnavailable ? { notice: outcome.reason } : {}),
     ...(llmUnavailable ? { procedures_unavailable: true } : {}),
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
-    ...(procedures !== undefined ? { procedures } : {}),
-    ...(procedures !== undefined ? { procedures_review: compileProcedureReviews(procedures) } : {}),
+    ...(slimProcedures !== undefined ? { procedures: slimProcedures } : {}),
+    ...(slimProcedures !== undefined
+      ? { procedures_review: compileProcedureReviews(procedures!) }
+      : {}),
     request_id: requestId,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
   };

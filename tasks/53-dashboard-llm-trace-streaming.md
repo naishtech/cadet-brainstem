@@ -3,7 +3,7 @@
 **Risk rationale:** Medium — changes the classifier's Ollama call to streaming; must keep a
 non-streaming fallback.
 
-**Status:** Not started
+**Status:** Done
 **Phase:** Dashboard
 **Source:** `docs/plans/dashboard.md` — §7 Streaming the LLM Trace
 
@@ -25,7 +25,7 @@ Stream the LLM's reasoning to the dashboard in real time using Ollama's streamin
 
 ## Acceptance Criteria
 
-- [ ] Reasoning tokens stream live as `llm.trace.token` events.
-- [ ] `llm.trace.start`/`complete` bracket each classification.
-- [ ] Streaming failure falls back to non-streaming without breaking classification.
-- [ ] No regression in existing classifier tests.
+- [x] Reasoning tokens stream live as `llm.trace.token` events.
+- [x] `llm.trace.start`/`complete` bracket each classification.
+- [x] Streaming failure falls back to non-streaming without breaking classification.
+- [x] No regression in existing classifier tests.

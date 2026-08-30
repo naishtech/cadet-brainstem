@@ -69,6 +69,11 @@ Apply removals in `src/mcp/server.ts` inside the return objects of `classifyTool
 slim the helper too. Use **conditional spread** (already the pattern in this file) so empty
 or unset values are omitted rather than emitted as `null`.
 
+**Ordering is part of the change (see §5.8):** because `JSON.stringify` (used in
+`handleToolCall`) preserves object key insertion order, the order of keys in the returned
+object literal *is* the order the cloud LLM reads them. The retained fields must be
+re-ordered so the most important directions come first.
+
 ---
 
 ## 5. Detailed Changes
@@ -150,6 +155,36 @@ or unset values are omitted rather than emitted as `null`.
   other bookkeeping fields. `successCount`/`failureCount`/`lastUsedAt`/`lastOutcome`/
   `source`/`createdAt`/`updatedAt` are not needed for the handoff.
 
+### 5.8 Prioritize field order — most important directions first
+
+`JSON.stringify` (in `handleToolCall`) preserves key insertion order, so the cloud LLM reads
+the payload **top-down in the order the object is built**. Order the return object of
+`classifyTool` and `optimizeContextTool` by descending importance to the cloud LLM:
+
+**Recommended final field order (both tools):**
+
+1. `response_policy` — behavioral directives + `language_standard` (how to compose the reply)
+2. `tool_plan` — tools to use/skip (the immediate next action)
+3. `reminders` — concrete tool-anchored directives
+4. `classification` — task / complexity / risk / context_need / precision / confidence
+5. `entities` — search nouns/keywords
+6. `strategy` — compression / search / LeanCTX approach
+7. `memory_hints` — advisory memory usage
+8. `degraded` — classification quality signal
+9. `llm_status` — local-LLM availability
+10. `procedures` / `procedures_review` — handoff (only when present)
+11. `request_id` — internal correlation id (last)
+
+**Rationale:** directives and action-steering that change the cloud LLM's behaviour and next
+steps come first (1–3); the task understanding that guides retrieval (4–6) follows;
+operational status and handoff plumbing (7–11) are last. This keeps the highest-signal tokens
+earliest in the context window. `subtasks`, `relevant_memories`, `notice`, `reason`, and
+`procedures_unavailable` (all conditional) sit at their natural place among 7–11.
+
+Apply the same ordering to `optimizeContextTool`'s shared prefix, with its tool-specific
+fields (`context`, `mode`, `sourceSize`, `returnedSize`, `estimatedTokensSaved`, `note`)
+placed after the shared steering fields and before `request_id`.
+
 ---
 
 ## 6. Test Updates
@@ -181,16 +216,20 @@ Add one regression test asserting the redundant keys are **not present** in the 
 
 ## 8. Rollout / Verification
 
-1. Implement 5.1–5.7 in `src/mcp/server.ts` (+ `src/policy/*` for 5.3).
+1. Implement 5.1–5.8 in `src/mcp/server.ts` (+ `src/policy/*` for 5.3).
 2. Update tests per §6.
 3. Run `npm test` (or the repo's test command) — all suites must pass.
 4. Run `npm run build` (tsup) — confirm no type errors from removed helpers/fields.
 5. Manually call `classify` (e.g. `cadet-brainstem wrap -- classify` or the MCP tool) and
    diff the output against the pre-change shape to confirm each of the seven redundancies is
-   gone while `entities`, `reminders`, `tool_plan`, `response_policy` remain.
+   gone while `entities`, `reminders`, `tool_plan`, `response_policy` remain, and that the
+   retained fields appear in the §5.8 priority order (`response_policy` → … → `request_id`).
 6. Confirm `assess_context` and `chat_memory_store` outputs are unchanged.
 
 **Expected outcome:** the `classify` payload drops the redundant `guidance`, empty
 `retrieval:null`, `strategy.context_need`, the `evidence_plan` block, the duplicated
 `procedures_review.steps`, the constant `memory_policy`, and the `procedures` bookkeeping —
-reducing tokens sent to the cloud LLM without losing steering information.
+reducing tokens sent to the cloud LLM without losing steering information. The retained
+fields are re-ordered most-important-first so the cloud LLM reads the highest-signal
+directions (`response_policy`, `tool_plan`, `reminders`) before task context and status
+plumbing.
