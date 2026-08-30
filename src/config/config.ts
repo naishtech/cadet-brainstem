@@ -60,12 +60,35 @@ const memorySchema = z.object({
   projects: z.record(z.string(), z.string()).optional(),
 });
 
+const dashboardSchema = z.object({
+  enabled: z.boolean(),
+  host: z.string().min(1, 'host must be a non-empty string'),
+  port: z
+    .number()
+    .int('port must be an integer')
+    .min(1, 'port must be >= 1')
+    .max(65535, 'port must be <= 65535'),
+  autoOpen: z.boolean(),
+  autoOpenNonInteractive: z.boolean(),
+  statusIntervalSec: z
+    .number()
+    .int('statusIntervalSec must be an integer')
+    .positive('statusIntervalSec must be positive'),
+  logRetention: z
+    .number()
+    .int('logRetention must be an integer')
+    .positive('logRetention must be positive'),
+  persistLogs: z.boolean(),
+  captureFull: z.boolean(),
+});
+
 export const configSchema = z.object({
   classifier: classifierSchema,
   session: sessionSchema,
   optimisation: optimisationSchema,
   telemetry: telemetrySchema,
   tools: toolsSchema,
+  dashboard: dashboardSchema,
   memory: memorySchema,
   policies: policiesSchema,
 });
@@ -98,6 +121,17 @@ export const defaultConfig: Config = {
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },
   tools: { rtk: true, serena: true, leanctx: true },
+  dashboard: {
+    enabled: true,
+    host: '127.0.0.1',
+    port: 4100,
+    autoOpen: true,
+    autoOpenNonInteractive: false,
+    statusIntervalSec: 30,
+    logRetention: 500,
+    persistLogs: true,
+    captureFull: true,
+  },
   memory: {},
   policies: defaultPolicies,
 };
@@ -120,32 +154,90 @@ export function getConfigPath(): string {
 
 // ── Load / save ───────────────────────────────────────────────────────────
 
+/**
+ * Apply `CADET_BRAINSTEM_DASHBOARD_*` environment overrides on top of the loaded
+ * config (design doc §8). Mirrors the existing `CADET_BRAINSTEM_CONFIG` /
+ * `CADET_BRAINSTEM_METRICS` conventions. Overrides are applied before
+ * validation so malformed values surface as clear `ConfigError`s.
+ */
+function applyDashboardEnvOverrides(config: Config): Config {
+  const env = process.env;
+  const d = { ...config.dashboard };
+
+  const enabled = parseEnvBool(env.CADET_BRAINSTEM_DASHBOARD_ENABLED);
+  if (enabled !== undefined) d.enabled = enabled;
+
+  const host = env.CADET_BRAINSTEM_DASHBOARD_HOST;
+  if (host !== undefined && host.length > 0) d.host = host;
+
+  const port = parseEnvInt(env.CADET_BRAINSTEM_DASHBOARD_PORT);
+  if (port !== undefined) d.port = port;
+
+  const autoOpen = parseEnvBool(env.CADET_BRAINSTEM_DASHBOARD_AUTO_OPEN);
+  if (autoOpen !== undefined) d.autoOpen = autoOpen;
+
+  const autoOpenNonInteractive = parseEnvBool(
+    env.CADET_BRAINSTEM_DASHBOARD_AUTO_OPEN_NON_INTERACTIVE,
+  );
+  if (autoOpenNonInteractive !== undefined) d.autoOpenNonInteractive = autoOpenNonInteractive;
+
+  const statusIntervalSec = parseEnvInt(env.CADET_BRAINSTEM_DASHBOARD_STATUS_INTERVAL_SEC);
+  if (statusIntervalSec !== undefined) d.statusIntervalSec = statusIntervalSec;
+
+  const logRetention = parseEnvInt(env.CADET_BRAINSTEM_DASHBOARD_LOG_RETENTION);
+  if (logRetention !== undefined) d.logRetention = logRetention;
+
+  const persistLogs = parseEnvBool(env.CADET_BRAINSTEM_DASHBOARD_PERSIST_LOGS);
+  if (persistLogs !== undefined) d.persistLogs = persistLogs;
+
+  const captureFull = parseEnvBool(env.CADET_BRAINSTEM_DASHBOARD_CAPTURE_FULL);
+  if (captureFull !== undefined) d.captureFull = captureFull;
+
+  return { ...config, dashboard: d };
+}
+
+function parseEnvBool(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const v = value.trim().toLowerCase();
+  if (v === '1' || v === 'true' || v === 'yes' || v === 'on') return true;
+  if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+  throw new ConfigError(`Invalid boolean env value: "${value}"`);
+}
+
+function parseEnvInt(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n)) {
+    throw new ConfigError(`Invalid integer env value: "${value}"`);
+  }
+  return n;
+}
+
 /** Load config from disk, filling in defaults for any missing fields. */
 export function loadConfig(filePath = getConfigPath()): Config {
-  if (!existsSync(filePath)) {
-    return structuredClone(defaultConfig);
+  let base: unknown = defaultConfig;
+
+  if (existsSync(filePath)) {
+    let parsed: unknown;
+    try {
+      parsed = parseYaml(readFileSync(filePath, 'utf8'));
+    } catch (err) {
+      throw new ConfigError(
+        `Could not parse config YAML at ${filePath}: ${(err as Error).message}`,
+      );
+    }
+
+    // An empty file (YAML parses to null/undefined) is treated as "use all defaults".
+    if (parsed !== null && parsed !== undefined) {
+      if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new ConfigError(`Config file must contain a YAML object: ${filePath}`);
+      }
+      base = deepMerge(defaultConfig, parsed);
+    }
   }
 
-  let parsed: unknown;
-  try {
-    parsed = parseYaml(readFileSync(filePath, 'utf8'));
-  } catch (err) {
-    throw new ConfigError(
-      `Could not parse config YAML at ${filePath}: ${(err as Error).message}`,
-    );
-  }
-
-  // An empty file (YAML parses to null/undefined) is treated as "use all defaults".
-  if (parsed === null || parsed === undefined) {
-    return structuredClone(defaultConfig);
-  }
-
-  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new ConfigError(`Config file must contain a YAML object: ${filePath}`);
-  }
-
-  const merged = deepMerge(defaultConfig, parsed);
-  const result = configSchema.safeParse(merged);
+  const withEnv = applyDashboardEnvOverrides(base as Config);
+  const result = configSchema.safeParse(withEnv);
   if (!result.success) {
     throw new ConfigError(formatIssues(result.error, filePath));
   }

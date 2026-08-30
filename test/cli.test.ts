@@ -62,15 +62,22 @@ describe('command routing', () => {
   });
 
   it('delegates each stub command to its own module', async () => {
-    // `init` (14), `doctor` (15) and `stats` (17) are wired — covered in their
-    // own test files.
-    for (const name of ['dashboard', 'config']) {
+    // `init` (14), `doctor` (15), `stats` (17) and `dashboard` (47) are wired —
+    // covered in their own test files.
+    for (const name of ['config']) {
       await expect(runCli([name])).resolves.toBe(0);
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining(`[cadet-brainstem] ${name}: not implemented yet`),
       );
       log.mockClear();
     }
+  });
+
+  it('runs the wired dashboard command', async () => {
+    await expect(runCli(['dashboard'])).resolves.toBe(0);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[cadet-brainstem] dashboard: not yet wired'),
+    );
   });
 
   it('shows command help for <command> --help', async () => {

@@ -30,6 +30,30 @@ afterEach(() => {
   }
 });
 
+/** Run `fn` with a temporary set of env vars, restoring the originals after. */
+function withEnv(env: Record<string, string | undefined>, fn: () => void): void {
+  const saved: Record<string, string | undefined> = {};
+  for (const key of Object.keys(env)) {
+    saved[key] = process.env[key];
+    if (env[key] === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = env[key];
+    }
+  }
+  try {
+    fn();
+  } finally {
+    for (const key of Object.keys(saved)) {
+      if (saved[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[key];
+      }
+    }
+  }
+}
+
 describe('default config', () => {
   it('matches the design doc §13 defaults', () => {
     expect(defaultConfig).toEqual({
@@ -44,9 +68,74 @@ describe('default config', () => {
       optimisation: { enabled: true, default_budget: 12000 },
       telemetry: { enabled: false },
       tools: { rtk: true, serena: true, leanctx: true },
+      dashboard: {
+        enabled: true,
+        host: '127.0.0.1',
+        port: 4100,
+        autoOpen: true,
+        autoOpenNonInteractive: false,
+        statusIntervalSec: 30,
+        logRetention: 500,
+        persistLogs: true,
+        captureFull: true,
+      },
       memory: {},
       policies: defaultPolicies,
     });
+  });
+});
+
+describe('dashboard config', () => {
+  it('defaults match the design doc §8', () => {
+    const dir = makeTempDir();
+    const cfg = loadConfig(configPath(dir));
+    expect(cfg.dashboard).toEqual({
+      enabled: true,
+      host: '127.0.0.1',
+      port: 4100,
+      autoOpen: true,
+      autoOpenNonInteractive: false,
+      statusIntervalSec: 30,
+      logRetention: 500,
+      persistLogs: true,
+      captureFull: true,
+    });
+  });
+
+  it('applies CADET_BRAINSTEM_DASHBOARD_* env overrides', () => {
+    const dir = makeTempDir();
+    withEnv(
+      {
+        CADET_BRAINSTEM_DASHBOARD_PORT: '4400',
+        CADET_BRAINSTEM_DASHBOARD_ENABLED: 'false',
+        CADET_BRAINSTEM_DASHBOARD_HOST: '0.0.0.0',
+      },
+      () => {
+        const cfg = loadConfig(configPath(dir));
+        expect(cfg.dashboard.port).toBe(4400);
+        expect(cfg.dashboard.enabled).toBe(false);
+        expect(cfg.dashboard.host).toBe('0.0.0.0');
+      },
+    );
+  });
+
+  it('rejects an invalid env override value', () => {
+    const dir = makeTempDir();
+    withEnv({ CADET_BRAINSTEM_DASHBOARD_PORT: 'not-a-port' }, () => {
+      expect(() => loadConfig(configPath(dir))).toThrow(ConfigError);
+    });
+  });
+
+  it('throws a clear error for an invalid dashboard config', () => {
+    const dir = makeTempDir();
+    writeFileSync(configPath(dir), 'dashboard:\n  port: "abc"\n', 'utf8');
+    expect(() => loadConfig(configPath(dir))).toThrow(ConfigError);
+    expect(() => loadConfig(configPath(dir))).toThrow(/Invalid config/);
+  });
+
+  it('reads dashboard values by dot path', () => {
+    expect(getConfigValue(defaultConfig, 'dashboard.port')).toBe(4100);
+    expect(getConfigValue(defaultConfig, 'dashboard.enabled')).toBe(true);
   });
 });
 
