@@ -185,8 +185,12 @@ export class DashboardServer {
     });
 
     // Placeholder; wired by Task 52.
-    this.router.get('/api/logs', (_req, res) => {
-      sendJson(res, 501, { error: 'not implemented yet' });
+    this.router.get('/api/logs', (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const limit = Number(url.searchParams.get('limit') ?? '100') || 100;
+      const sinceRaw = url.searchParams.get('since');
+      const since = sinceRaw !== null && sinceRaw.length > 0 ? Number(sinceRaw) : undefined;
+      sendJson(res, 200, { events: this.eventBus.recent(limit, since) });
     });
 
     this.router.get('/api/events', (req, res) => {
@@ -201,6 +205,11 @@ export class DashboardServer {
     res.on('close', () => {
       this.sseConnections.delete(conn);
     });
+    // Replay recent buffered events, then live events flow via the broadcast.
+    for (const event of this.eventBus.recent(100)) {
+      const { type, ...data } = event;
+      conn.write(type, data);
+    }
     // Initial comment so the client sees the stream open immediately.
     conn.comment('connected');
   }

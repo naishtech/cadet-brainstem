@@ -47,6 +47,7 @@ import {
   type RequestEvent,
 } from '../metrics';
 import { loadConfig, saveConfig } from '../config';
+import { getInstrumenter, type Instrumenter } from '../dashboard/instrument';
 import {
   MemoryStore,
   getProjectMemoryPath,
@@ -290,6 +291,8 @@ export interface McpDeps {
   procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
+  /** Dashboard instrumentation (defaults to a config-aware singleton). */
+  instrument?: Instrumenter;
 }
 
 interface ResolvedDeps {
@@ -307,6 +310,7 @@ interface ResolvedDeps {
   defaultProject: string;
   record: (event: OptimisationEvent) => void;
   log: (line: string) => void;
+  instrument: Instrumenter;
 }
 
 /** Best-effort metrics recording — a failure never fails the tool call. */
@@ -354,6 +358,7 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
     defaultProject: deps.defaultProject ?? resolveProjectId(process.cwd()),
     record: deps.record ?? defaultRecorder(metricsPath),
     log: deps.log ?? ((line: string) => console.error(line)),
+    instrument: deps.instrument ?? getInstrumenter(),
   };
 }
 
@@ -362,6 +367,17 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
 /** Reuse a caller-supplied request id, or mint one. */
 function resolveRequestId(provided: string | undefined): string {
   return provided !== undefined && provided.length > 0 ? provided : randomUUID();
+}
+
+/** Bounded summary hint for dashboard instrumentation (avoids huge SSE frames). */
+function hintText(value: unknown, max = 400): string {
+  let text: string;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    text = String(value);
+  }
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /**
@@ -1820,7 +1836,16 @@ export async function handleToolCall(
   rawArgs: unknown,
   deps: McpDeps = {},
 ): Promise<ToolResult> {
+  const instrument = deps.instrument ?? getInstrumenter();
   const args = (rawArgs ?? {}) as Record<string, unknown>;
+  const requestId = randomUUID();
+  const start = performance.now();
+  instrument.requestStarted({
+    id: requestId,
+    tool: 'mcp',
+    operation: name,
+    inputHint: hintText(args),
+  });
   try {
     let result: Record<string, unknown>;
     switch (name) {
@@ -1889,8 +1914,21 @@ export async function handleToolCall(
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
+    instrument.responded({
+      id: requestId,
+      ok: true,
+      latencyMs: Math.round(performance.now() - start),
+      outputHint: hintText(result),
+    });
+    // Metric-affecting ops -> tell the UI to re-fetch stats.
+    instrument.statsUpdated();
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
+    instrument.responded({
+      id: requestId,
+      ok: false,
+      latencyMs: Math.round(performance.now() - start),
+    });
     return {
       content: [{ type: 'text', text: `Error: ${(err as Error).message}` }],
       isError: true,
