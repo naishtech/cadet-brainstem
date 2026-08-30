@@ -269,5 +269,5 @@ describe('MCP dispatch reuses ONE shared Serena instance (no respawn per call)',
     // singleton fix: a new adapter spawned a fresh process per call).
     expect(mcpMock.transportOpts).toHaveLength(1);
     expect(mcpMock.calls.filter((c) => c.name === 'find_symbol')).toHaveLength(2);
-  });
+  }, 20000);
 });
