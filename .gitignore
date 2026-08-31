@@ -28,6 +28,15 @@ npm-debug.log*
 
 # OS / editor
 .DS_Store
+
+# Stray symbol-name files accidentally created by a broken rename codemod
+# (task 59). Ignored so they can never be re-added to the repo.
+OllamaSteerer,
+steerOrDegrade,
+steerTool,
+steerWithFallback,
+steering
+getSteeringCallsByOrigin
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json

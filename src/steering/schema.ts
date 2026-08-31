@@ -94,6 +94,8 @@ export const RECOMMENDED_TOOL_INTENTS: Record<ToolName, string> = {
   leanctx_call:
     'invoke a LeanCTX tool, e.g. ctx_shell for aggressive shell-output compression',
   leanctx_list_tools: 'discover the tools the LeanCTX MCP server exposes',
+  procedure_review: 'preview a matched procedure against the repo before applying it',
+  procedure_apply: 'execute a matched procedure against the repo',
 };
 
 /** A single recommended tool paired with its intent and priority. */

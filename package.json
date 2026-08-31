@@ -1,6 +1,6 @@
 {
   "name": "cadet-brainstem",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Cadet Brainstem — an orchestration + measurement layer that reduces AI-agent context consumption.",
   "keywords": [
     "cli",
@@ -47,6 +47,7 @@
     "benchmark:shell": "tsx scripts/benchmark-shell-compression.ts",
     "mcp:smoke": "npm run build && tsx scripts/mcp-steer-e2e.ts",
     "postinstall": "node -e \"console.log('cadet-brainstem v' + (process.env.npm_package_version || 'unknown') + ' installed')\"",
+    "release": "bash scripts/bump-version.sh patch && npm publish",
     "prepublishOnly": "npm run build && npm run typecheck && npm run lint && npm test"
   },
   "publishConfig": {
