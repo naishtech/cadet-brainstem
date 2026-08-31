@@ -131,8 +131,16 @@ export async function defaultFillArgs(
 ): Promise<Record<string, unknown>> {
   const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
   // Lazily import to avoid a hard classifier dependency at module load.
-  const { resolveBaseModel } = await import('../classifier');
+  const [{ resolveBaseModel }, { loadConfig }] = await Promise.all([
+    import('../classifier'),
+    import('../config'),
+  ]);
+  const think = loadConfig().classifier.think ?? false;
   const hints = argHintsFor(step.tool);
+  const traceId = `procedure-fill-${Date.now()}`;
+  const sink = think
+    ? (await import('../dashboard/trace')).getTraceSink()
+    : undefined;
   const response = await fetch(`${host}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -154,12 +162,20 @@ export async function defaultFillArgs(
       ],
       stream: false,
       format: { type: 'object', properties: { arguments: { type: 'object' } }, required: ['arguments'] },
-      think: false,
+      think,
       options: { temperature: 0, num_predict: 600 },
     }),
   });
   if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
-  const data = (await response.json()) as { message?: { content?: string } };
+  const data = (await response.json()) as {
+    message?: { content?: string; reasoning_content?: string };
+  };
+  const reasoning = data.message?.reasoning_content ?? '';
+  if (sink && think && reasoning.length > 0) {
+    sink.thinkStart?.({ id: traceId });
+    sink.thinkToken?.({ id: traceId, delta: reasoning });
+    sink.thinkComplete?.({ id: traceId });
+  }
   return (JSON.parse(data.message?.content ?? '{}') as { arguments?: Record<string, unknown> }).arguments ?? {};
 }
 

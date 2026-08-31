@@ -52,6 +52,12 @@ export interface TraceSink {
   token(info: { id: string; delta: string }): void;
   /** Emitted after the model call (the non-streaming fallback emits this too). */
   complete(info: { id: string; usage?: LlmUsage }): void;
+  /** Optional: reasoning started (thinking trace). */
+  thinkStart?(info: { id: string }): void;
+  /** Optional: per reasoning delta (thinking trace). */
+  thinkToken?(info: { id: string; delta: string }): void;
+  /** Optional: reasoning finished (thinking trace). */
+  thinkComplete?(info: { id: string }): void;
 }
 
 export interface ClassifierOptions {
@@ -64,6 +70,8 @@ export interface ClassifierOptions {
   log?: (line: string) => void;
   /** Optional LLM trace sink (dashboard live streaming). */
   trace?: TraceSink;
+  /** Stream the model's internal reasoning (thinking) to the trace. */
+  think?: boolean;
 }
 
 const CLASSIFICATION_SHAPE = `{
@@ -338,6 +346,7 @@ export class OllamaClassifier {
   readonly keepAlive: string | number;
   readonly log: (line: string) => void;
   readonly trace: TraceSink | undefined;
+  readonly thinkEnabled: boolean;
   private lastUsage: LlmUsage | undefined;
 
   constructor(options: ClassifierOptions = {}) {
@@ -350,6 +359,7 @@ export class OllamaClassifier {
     this.keepAlive = resolveKeepAlive();
     this.log = options.log ?? defaultLog;
     this.trace = options.trace;
+    this.thinkEnabled = options.think ?? loadConfig().classifier.think ?? false;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -395,9 +405,9 @@ export class OllamaClassifier {
       // emits valid JSON matching the classification shape. Assess keeps
       // plain JSON mode (no schema).
       format,
-      // Disable qwen3 reasoning/thinking — we only need a short structured
-      // decision, so thinking wastes tokens and latency.
-      think: false,
+      // Reasoning is off by default (routing is cheap); enable only when the
+      // user opts in to the thinking trace (e.g. procedure execution).
+      think: this.thinkEnabled,
       // Keep the model warm between calls so a cold reload (which can take
       // ~10s on CPU) doesn't blow the timeout.
       keep_alive: this.keepAlive,
@@ -518,6 +528,7 @@ export class OllamaClassifier {
     }
 
     let accumulated = '';
+    let thought = false;
     let usage: LlmUsage | undefined;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -533,7 +544,7 @@ export class OllamaClassifier {
           const trimmed = line.trim();
           if (trimmed.length === 0) continue;
           let data: {
-            message?: { content?: string };
+            message?: { content?: string; reasoning_content?: string; thinking?: string };
             prompt_eval_count?: number;
             eval_count?: number;
           };
@@ -556,6 +567,14 @@ export class OllamaClassifier {
             accumulated += delta;
             this.trace?.token({ id, delta });
           }
+          const think = data.message?.reasoning_content ?? data.message?.thinking ?? '';
+          if (think.length > 0) {
+            if (!thought) {
+              this.trace?.thinkStart?.({ id });
+              thought = true;
+            }
+            this.trace?.thinkToken?.({ id, delta: think });
+          }
         }
       }
     } finally {
@@ -564,6 +583,10 @@ export class OllamaClassifier {
       } catch {
         /* already released */
       }
+    }
+
+    if (thought) {
+      this.trace?.thinkComplete?.({ id });
     }
 
     if (accumulated.length === 0) {
