@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { getDefaultMetricsPath, MetricsStore } from '../../metrics';
 import {
   getDefaultMemoryPath,
@@ -16,6 +17,7 @@ import {
 
 import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
 import { getTraceSink } from '../../dashboard/trace';
+import { getEventBus, type DashboardEvent } from '../../dashboard/event-bus';
 import type { CliCommand } from '../types';
 
 /**
@@ -60,6 +62,8 @@ export interface HookLifecycleDeps {
     classification: Classification;
     degraded: boolean;
   }>;
+  /** Override the dashboard event publisher (tests). Defaults to the shared EventBus. */
+  publishEvents?: (events: readonly DashboardEvent[]) => Promise<void>;
 }
 
 /** The output envelope VS Code Copilot Chat Hooks accept on stdout. */
@@ -98,6 +102,26 @@ export async function readPayload(
 function writeOut(deps: HookLifecycleDeps, output: LifecycleOutput): void {
   const w = deps.writeOut ?? ((line: string) => process.stdout.write(line));
   w(JSON.stringify(output));
+}
+
+/**
+ * Best-effort: publish live dashboard events so hook-driven tool activity
+ * (request/response + stats refresh) shows up on the running dashboard. Events
+ * go to the process EventBus, which persists to the shared dashboard.log that
+ * the dashboard tails (JSONL bridge). Never throws — the hook must not fail
+ * when the dashboard is down.
+ */
+function publishEvents(
+  deps: HookLifecycleDeps,
+  events: readonly DashboardEvent[],
+): void {
+  const fn =
+    deps.publishEvents ??
+    (async (evs: readonly DashboardEvent[]) => {
+      const bus = getEventBus();
+      for (const event of evs) bus.publish(event);
+    });
+  void fn(events).catch(() => undefined);
 }
 
 function projectFor(
@@ -275,6 +299,19 @@ export async function runHookUserPrompt(
     return 0;
   }
 
+  const requestTs = Date.now();
+  const requestId = randomUUID();
+  publishEvents(deps, [
+    {
+      type: 'request',
+      ts: requestTs,
+      id: requestId,
+      tool: 'classify',
+      operation: 'user_prompt',
+      inputHint: prompt.slice(0, 500),
+    },
+  ]);
+
   const { classification, degraded } = await (deps.classify ??
     classifyWithFallback)(prompt, { trace: getTraceSink() });
   // The model only classifies + extracts entities; synthesize the steering
@@ -340,6 +377,16 @@ export async function runHookUserPrompt(
     estimatedOutputTokens: 0,
     estimatedTokensSaved: 0,
   });
+  publishEvents(deps, [
+    {
+      type: 'response',
+      ts: Date.now(),
+      id: requestId,
+      ok: true,
+      latencyMs: Date.now() - requestTs,
+    },
+    { type: 'stats.updated', ts: Date.now() },
+  ]);
   return 0;
 }
 
@@ -370,6 +417,25 @@ export async function runHookPostTool(
     estimatedOutputTokens,
     estimatedTokensSaved: 0,
   });
+  const requestTs = Date.now();
+  const requestId = randomUUID();
+  publishEvents(deps, [
+    {
+      type: 'request',
+      ts: requestTs,
+      id: requestId,
+      tool: toolName,
+      operation: 'post_tool_use',
+    },
+    {
+      type: 'response',
+      ts: Date.now(),
+      id: requestId,
+      ok: true,
+      latencyMs: Date.now() - requestTs,
+    },
+    { type: 'stats.updated', ts: Date.now() },
+  ]);
   writeOut(deps, { continue: true });
   return 0;
 }
