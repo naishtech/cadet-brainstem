@@ -70,8 +70,6 @@ export interface ClassifierOptions {
   log?: (line: string) => void;
   /** Optional LLM trace sink (dashboard live streaming). */
   trace?: TraceSink;
-  /** Stream the model's internal reasoning (thinking) to the trace. */
-  think?: boolean;
 }
 
 const CLASSIFICATION_SHAPE = `{
@@ -346,7 +344,6 @@ export class OllamaClassifier {
   readonly keepAlive: string | number;
   readonly log: (line: string) => void;
   readonly trace: TraceSink | undefined;
-  readonly thinkEnabled: boolean;
   private lastUsage: LlmUsage | undefined;
 
   constructor(options: ClassifierOptions = {}) {
@@ -359,7 +356,6 @@ export class OllamaClassifier {
     this.keepAlive = resolveKeepAlive();
     this.log = options.log ?? defaultLog;
     this.trace = options.trace;
-    this.thinkEnabled = options.think ?? loadConfig().classifier.think ?? false;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -405,9 +401,8 @@ export class OllamaClassifier {
       // emits valid JSON matching the classification shape. Assess keeps
       // plain JSON mode (no schema).
       format,
-      // Reasoning is off by default (routing is cheap); enable only when the
-      // user opts in to the thinking trace (e.g. procedure execution).
-      think: this.thinkEnabled,
+      // Routing (classify/assess) never reasons — it is a cheap decision.
+      think: false,
       // Keep the model warm between calls so a cold reload (which can take
       // ~10s on CPU) doesn't blow the timeout.
       keep_alive: this.keepAlive,

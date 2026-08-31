@@ -27,6 +27,9 @@ const EVENT_NAMES = [
   'llm.trace.start',
   'llm.trace.token',
   'llm.trace.complete',
+  'llm.trace.think.start',
+  'llm.trace.think.token',
+  'llm.trace.think.complete',
   'stats.updated',
 ] as const;
 
