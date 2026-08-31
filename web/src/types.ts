@@ -34,6 +34,8 @@ export interface StatsPayload {
   }>;
 }
 
+export type EventCategory = 'steering' | 'procedures' | 'system';
+
 export type DashboardEvent =
   | { type: 'log'; level: string; ts: number; source: string; message: string }
   | { type: 'request'; ts: number; id: string; tool: string; operation: string; inputHint?: string }
@@ -47,4 +49,7 @@ export type DashboardEvent =
       id: string;
       usage?: { inputTokens: number; outputTokens: number };
     }
+  | { type: 'llm.trace.think.start'; ts: number; id: string }
+  | { type: 'llm.trace.think.token'; ts: number; id: string; delta: string }
+  | { type: 'llm.trace.think.complete'; ts: number; id: string }
   | { type: 'stats.updated'; ts: number };

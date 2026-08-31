@@ -23,6 +23,13 @@ onMounted(() => store.connect());
 
     <StatusIcons :services="store.status" />
     <StatsGrid :stats="store.stats" />
-    <LogsPanel :logs="store.logs" :traces="store.traces" />
+    <LogsPanel
+      :logs="store.logs"
+      :traces="store.traces"
+      :steering-logs="store.steeringLogs"
+      :procedure-logs="store.procedureLogs"
+      :steering-traces="store.steeringTraces"
+      :procedure-traces="store.procedureTraces"
+    />
   </div>
 </template>

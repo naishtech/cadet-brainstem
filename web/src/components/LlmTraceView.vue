@@ -27,7 +27,7 @@ defineProps<{
           {{ trace.complete ? 'done' : 'thinking…' }}
         </span>
       </summary>
-      <details v-if="trace.thinking" class="mt-1">
+      <details v-if="trace.thinking" class="mt-1" open>
         <summary class="cursor-pointer text-xs text-amber-400/70 uppercase tracking-wide">
           Thinking
         </summary>

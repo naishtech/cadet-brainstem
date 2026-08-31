@@ -4,21 +4,45 @@ import type { DashboardEvent } from '../types';
 import type { Trace } from '../store';
 import LlmTraceView from './LlmTraceView.vue';
 
-const props = defineProps<{ logs: DashboardEvent[]; traces: Trace[] }>();
+const props = defineProps<{
+  logs: DashboardEvent[];
+  traces: Trace[];
+  steeringLogs: DashboardEvent[];
+  procedureLogs: DashboardEvent[];
+  steeringTraces: Trace[];
+  procedureTraces: Trace[];
+}>();
 
-type Tab = 'all' | 'request' | 'response' | 'llm';
+type Tab = 'all' | 'steering' | 'procedures';
 
-const tabs: Tab[] = ['all', 'request', 'response', 'llm'];
+const tabs: Tab[] = ['all', 'steering', 'procedures'];
 const tab = ref<Tab>('all');
 const paused = ref(false);
 const scroller = ref<HTMLElement | null>(null);
 
-const visible = computed<DashboardEvent[]>(() => {
-  if (tab.value === 'all') return props.logs;
-  return props.logs.filter((event) => event.type === tab.value);
+const visibleLogs = computed<DashboardEvent[]>(() => {
+  switch (tab.value) {
+    case 'steering':
+      return props.steeringLogs;
+    case 'procedures':
+      return props.procedureLogs;
+    default:
+      return props.logs;
+  }
 });
 
-watch(visible, async () => {
+const visibleTraces = computed<Trace[]>(() => {
+  switch (tab.value) {
+    case 'steering':
+      return props.steeringTraces;
+    case 'procedures':
+      return props.procedureTraces;
+    default:
+      return props.traces;
+  }
+});
+
+watch([visibleLogs, visibleTraces], async () => {
   if (!paused.value) {
     await nextTick();
     if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
@@ -59,13 +83,10 @@ function statusSummary(
       ref="scroller"
       class="h-64 overflow-y-auto bg-zinc-900 rounded p-3 text-xs font-mono"
     >
-      <LlmTraceView v-if="tab === 'llm'" :traces="traces" />
-      <template v-else>
-        <div v-if="visible.length === 0" class="text-zinc-500">
-          No {{ tab }} events yet.
-        </div>
+      <LlmTraceView v-if="visibleTraces.length > 0" :traces="visibleTraces" />
+      <template v-if="visibleLogs.length > 0">
         <div
-          v-for="(event, index) in visible"
+          v-for="(event, index) in visibleLogs"
           :key="index"
           class="py-1 border-b border-zinc-800"
         >
@@ -127,6 +148,12 @@ function statusSummary(
           </template>
         </div>
       </template>
+      <div
+        v-if="visibleLogs.length === 0 && visibleTraces.length === 0"
+        class="text-zinc-500"
+      >
+        No {{ tab }} events yet.
+      </div>
     </div>
   </section>
 </template>
