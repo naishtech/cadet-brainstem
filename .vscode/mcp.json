@@ -3,13 +3,7 @@
     "cadet-brainstem": {
       "type": "stdio",
       "command": "cadet-brainstem",
-      "args": ["mcp"],
-      "autoApprove": [
-        "steering",
-        "find_relevant_symbols",
-        "optimize_context",
-        "compress_command_output"
-      ]
+      "args": ["mcp"]
     }
   }
 }

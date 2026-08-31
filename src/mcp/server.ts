@@ -791,6 +791,24 @@ export async function steerTool(
   const usesMemory =
     steering.memory?.use ??
     toolPlanUses(steering.tool_plan, 'chat_memory_store');
+  // Option B: when a procedure matches the task, add a `procedure_apply`
+  // directive to the tool_plan so the cloud LLM hands off via the steering it
+  // already follows (rather than doing the work manually). Best-effort.
+  if (procedures !== undefined && procedures.length > 0) {
+    const best = procedures[0]!;
+    const plan = steering.tool_plan ?? { recommended_tools: [] };
+    if (!(plan.recommended_tools ?? []).some((t) => t.name === 'procedure_apply')) {
+      plan.recommended_tools = [
+        ...(plan.recommended_tools ?? []),
+        {
+          name: 'procedure_apply',
+          intent: `Hand off to the matched procedure "${best.triggerPattern}" (id ${best.id}) — call procedure_review first to preview it, then procedure_apply with approved:true. Use this instead of doing the work manually.`,
+          priority: 1,
+        },
+      ];
+    }
+    steering.tool_plan = plan;
+  }
   const slimProcedures = procedures?.map(slimProcedure);
   return {
     // Most important directions first (response_policy -> ... -> request_id).
