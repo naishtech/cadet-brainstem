@@ -98,6 +98,32 @@ describe('procedure matcher (repeatable)', () => {
     store.close();
   });
 
+  it('steerTool adds a procedure_apply directive to the tool_plan when a procedure matches', async () => {
+    const store = seededStore();
+    const result = (await steerTool(
+      { task: 'gather and compress the relevant context for this file' },
+      { steer: stubSteer(['context', 'compress', 'file']) as any, procedureStore: store },
+    )) as any;
+
+    const rec = result.tool_plan.recommended_tools ?? [];
+    const pa = rec.find((t: any) => t.name === 'procedure_apply');
+    expect(pa).toBeDefined();
+    expect(pa.intent).toContain('Gather and compress relevant context');
+    store.close();
+  });
+
+  it('steerTool does not add procedure_apply when no procedure matches', async () => {
+    const store = seededStore();
+    const result = (await steerTool(
+      { task: 'deploy the website to production' },
+      { steer: stubSteer(['deploy', 'website']) as any, procedureStore: store },
+    )) as any;
+
+    const rec = result.tool_plan.recommended_tools ?? [];
+    expect(rec.some((t: any) => t.name === 'procedure_apply')).toBe(false);
+    store.close();
+  });
+
   it('steerTool returns no procedures when nothing matches', async () => {
     const store = seededStore();
     const result = (await steerTool(

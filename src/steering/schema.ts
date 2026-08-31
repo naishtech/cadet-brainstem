@@ -73,6 +73,8 @@ export const TOOL_NAMES = [
   'chat_memory_store',
   'leanctx_call',
   'leanctx_list_tools',
+  'procedure_review',
+  'procedure_apply',
 ] as const;
 
 export const toolNameSchema = z.enum(TOOL_NAMES);
