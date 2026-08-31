@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -155,6 +155,42 @@ describe('runHooks', () => {
     const exit = runHooks({ tool: '  ' }, deps);
     expect(exit).toBe(1);
     expect(errors[0]).toContain('tool name must not be empty');
+  });
+
+  it('skips writing when --if-missing and the file already exists', () => {
+    const r = makeHooksDeps();
+    const outDir = join(dir, 'hooks');
+    mkdirSync(outDir, { recursive: true });
+    const filePath = join(outDir, DEFAULT_HOOKS_FILENAME);
+    writeFileSync(filePath, '{"existing":true}\n', 'utf8');
+
+    const exit = runHooks({ outDir, ifMissing: true }, r.deps);
+
+    expect(exit).toBe(0);
+    expect(r.written).toBe(''); // deps.write was never called
+    expect(r.lines.some((l) => l.includes('already exists'))).toBe(true);
+  });
+
+  it('writes when --if-missing and the file does not exist', () => {
+    const r = makeHooksDeps();
+    const outDir = join(dir, 'hooks-absent');
+
+    const exit = runHooks({ outDir, ifMissing: true }, r.deps);
+
+    expect(exit).toBe(0);
+    expect(r.written).toContain('hook-user-prompt');
+  });
+
+  it('overwrites an existing file when --force is set', () => {
+    const r = makeHooksDeps();
+    const outDir = join(dir, 'hooks-force');
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, DEFAULT_HOOKS_FILENAME), '{"hooks":{"Stop":[]}}', 'utf8');
+
+    const exit = runHooks({ outDir, force: true }, r.deps);
+
+    expect(exit).toBe(0);
+    expect(r.written).toContain('hook-user-prompt');
   });
 });
 

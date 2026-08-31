@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import os from 'node:os';
 import type { CliCommand } from '../types';
@@ -69,6 +69,18 @@ export interface HooksOptions {
    * tool after repeated raw calls. Enable with `--remind`.
    */
   remind?: boolean;
+  /**
+   * Only write the config if the hooks file does not already exist. Used by the
+   * install-time auto-setup so we never clobber a user's customized (e.g.
+   * `--pretool`) hooks config. Enable with `--if-missing`.
+   */
+  ifMissing?: boolean;
+  /**
+   * Overwrite the hooks config even if it already exists (e.g. to pick up the
+   * hooks from a newly installed version). Enable with `--force`. Takes
+   * precedence over `--if-missing`.
+   */
+  force?: boolean;
 }
 
 export interface ParsedHooksArgs {
@@ -76,6 +88,8 @@ export interface ParsedHooksArgs {
   outDir?: string;
   pretool?: boolean;
   remind?: boolean;
+  ifMissing?: boolean;
+  force?: boolean;
 }
 
 /** Supported default recommended tool when none is provided. */
@@ -97,6 +111,8 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
   let outDir: string | undefined;
   let pretool = false;
   let remind = false;
+  let ifMissing = false;
+  let force = false;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -127,6 +143,14 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
       remind = true;
       continue;
     }
+    if (arg === '--if-missing') {
+      ifMissing = true;
+      continue;
+    }
+    if (arg === '--force') {
+      force = true;
+      continue;
+    }
     positional.push(arg);
   }
   if (tool === undefined && positional.length > 0) {
@@ -137,6 +161,8 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
     ...(outDir !== undefined ? { outDir } : {}),
     ...(pretool ? { pretool: true } : {}),
     ...(remind ? { remind: true } : {}),
+    ...(ifMissing ? { ifMissing: true } : {}),
+    ...(force ? { force: true } : {}),
   };
 }
 
@@ -247,11 +273,20 @@ export function runHooks(
     return 1;
   }
 
+  const filePath = resolve(defaultHooksFilePath(outDir));
+  const exists = existsSync(filePath);
+  if (options.force === true) {
+    // Force overwrite: proceed to write below.
+  } else if (options.ifMissing === true && exists) {
+    log(`[cadet-brainstem] hooks: ${filePath} already exists — leaving it unchanged.`);
+    log('  To overwrite with the current defaults, run: cadet-brainstem hooks --force');
+    return 0;
+  }
+
   const config = buildHooksConfig(tool, {
     ...(options.pretool !== undefined ? { pretool: options.pretool } : {}),
     ...(options.remind !== undefined ? { remind: options.remind } : {}),
   });
-  const filePath = resolve(defaultHooksFilePath(outDir));
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   try {
@@ -277,14 +312,16 @@ export function runHooks(
 export const hooksCommand: CliCommand = {
   name: 'hooks',
   description: 'Install VS Code Copilot Chat Hooks lifecycle events (default ~/.copilot/hooks/cadet-brainstem.json; PreToolUse is opt-in via --pretool, remind-only via --remind)',
-  usage: 'cadet-brainstem hooks [tool] [--tool <name>] [--out <dir>] [--pretool] [--remind]',
+  usage: 'cadet-brainstem hooks [tool] [--tool <name>] [--out <dir>] [--pretool] [--remind] [--if-missing] [--force]',
   run(args: readonly string[]): number {
-    const { tool, outDir, pretool, remind } = parseHooksArgs(args);
+    const { tool, outDir, pretool, remind, ifMissing, force } = parseHooksArgs(args);
     return runHooks({
       ...(tool !== undefined ? { tool } : {}),
       ...(outDir !== undefined ? { outDir } : {}),
       ...(pretool !== undefined ? { pretool } : {}),
       ...(remind !== undefined ? { remind } : {}),
+      ...(ifMissing !== undefined ? { ifMissing } : {}),
+      ...(force !== undefined ? { force } : {}),
     });
   },
 };
