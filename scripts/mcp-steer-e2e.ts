@@ -1,5 +1,5 @@
 // MCP smoke test (npm run mcp:smoke): spawn the built server, verify the
-// `classify` tool is listed and works (returns classification + strategy)
+// `steer` tool is listed and works (returns steering + strategy)
 // against the live local LLM. Requires `npm run build` first (see script).
 import { spawn } from 'node:child_process';
 import readline from 'node:readline/promises';
@@ -67,11 +67,11 @@ async function main(): Promise<void> {
   const listed = await request('tools/list', {});
   const names = listed.result?.tools?.map((t) => t.name) ?? [];
   console.log('tools:', names.join(', '));
-  if (!names.includes('classify')) {
-    throw new Error('classify NOT listed');
+  if (!names.includes('steering')) {
+    throw new Error('steer NOT listed');
   }
 
-  // Store a short memory for the project so classify can pick it up.
+  // Store a short memory for the project so steer can pick it up.
   const memStore = await request('tools/call', {
     name: 'chat_memory_store',
     arguments: {
@@ -84,21 +84,21 @@ async function main(): Promise<void> {
   console.log('memory stored, isError:', memStore.result?.isError);
 
   const call = await request('tools/call', {
-    name: 'classify',
+    name: 'steering',
     arguments: { task: 'loader' },
   });
   console.log('isError:', call.result?.isError);
   console.log(call.result?.content?.[0]?.text);
 
-  // Verify the classify response contains relevant_memories
+  // Verify the steer response contains relevant_memories
   try {
     const text = call.result?.content?.[0]?.text;
     if (!text) {
-      throw new Error('no classify text');
+      throw new Error('no steer text');
     }
     const parsed = JSON.parse(text) as Record<string, unknown>;
     if ((parsed.relevant_memories as unknown[]) === undefined) {
-      console.error('no relevant_memories in classify response');
+      console.error('no relevant_memories in steer response');
       child.kill();
       process.exit(2);
     }
@@ -108,13 +108,13 @@ async function main(): Promise<void> {
       typeof parsed.guidance !== 'string' ||
       parsed.guidance.trim().length === 0
     ) {
-      console.error('no non-empty guidance in classify response');
+      console.error('no non-empty guidance in steer response');
       child.kill();
       process.exit(2);
     }
     const ep = parsed.evidence_plan as { prioritized_queries?: unknown[] } | null;
     if (ep === null || typeof ep !== 'object' || !Array.isArray(ep.prioritized_queries)) {
-      console.error('no evidence_plan.prioritized_queries in classify response');
+      console.error('no evidence_plan.prioritized_queries in steer response');
       child.kill();
       process.exit(2);
     }
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
       ep.prioritized_queries.length,
     );
   } catch (err) {
-    console.error('failed to validate classify response:', (err as Error).message);
+    console.error('failed to validate steer response:', (err as Error).message);
     child.kill();
     process.exit(2);
   }

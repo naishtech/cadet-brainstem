@@ -116,12 +116,12 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     }
 
     log('');
-    log('Classify calls by origin:');
-    const classifyByOrigin = payload.classifyByOrigin;
-    if (classifyByOrigin.length === 0) {
-      log('  (none yet — classify is not being invoked via hook or MCP)');
+    log('Steer calls by origin:');
+    const steerByOrigin = payload.steerByOrigin;
+    if (steerByOrigin.length === 0) {
+      log('  (none yet — steer is not being invoked via hook or MCP)');
     } else {
-      for (const row of classifyByOrigin) {
+      for (const row of steerByOrigin) {
         const degradedNote = row.degraded > 0 ? ` · ${row.degraded} degraded` : '';
         log(
           `  ${row.origin.padEnd(8)} ${row.calls} call(s)${degradedNote}`,
@@ -135,7 +135,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     const recMap = new Map(recommended.map((r) => [r.tool, r.calls]));
     const toolSet = new Set<string>([...recMap.keys(), ...callStatMap.keys()]);
     if (toolSet.size === 0) {
-      log('  (none yet — call classify to record recommendations)');
+      log('  (none yet — call steer to record recommendations)');
     } else {
       for (const tool of [...toolSet].sort()) {
         const rec = recMap.get(tool) ?? 0;

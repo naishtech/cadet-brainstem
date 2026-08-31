@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-08-31
+
+### Changed
+
+- **`classify` → `steering` rename (breaking, Task 59).** The local-model routing
+  concept is renamed from *classify* to *steering*: the MCP tool
+  `classify` → `steering`, `classify()` → `steer()`, `Classification` →
+  `Steering`, the `src/classifier/` module → `src/steering/`, and the config
+  `classifier` key → `steering`. This reflects that the model doesn't just
+  classify a request — it steers how the agent should approach it (strategy,
+  tool plan, response policy).
+- A temporary `classify` → `steering` migration alias is kept in the MCP tool
+  dispatcher; update any callers to `steering`.
+
 ## [0.2.0] - 2026-08-29
 
 ### Changed

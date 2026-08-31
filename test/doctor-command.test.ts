@@ -11,7 +11,7 @@ const { isModelAvailableMock } = vi.hoisted(() => ({
   isModelAvailableMock: vi.fn(),
 }));
 
-vi.mock('../src/classifier', () => ({
+vi.mock('../src/steering', () => ({
   DEFAULT_OLLAMA_HOST: 'http://localhost:11434',
   isModelAvailable: isModelAvailableMock,
 }));
@@ -88,7 +88,7 @@ describe('runDoctor', () => {
     expect(out).toContain('✓ Node.js');
     expect(out).toContain('✓ npm');
     expect(out).toContain('✓ Ollama');
-    expect(out).toContain('✓ Classifier model');
+    expect(out).toContain('✓ Steering model');
     expect(out).toContain('✓ RTK');
     expect(out).toContain('✓ Serena');
     expect(out).toContain('✓ LeanCTX');
@@ -164,7 +164,7 @@ describe('runDoctor', () => {
 
   it('exits 1 when the config exists but is invalid (critical)', async () => {
     const { configPath, metricsPath } = createHealthyState();
-    writeFileSync(configPath, 'classifier: [unclosed\n', 'utf8');
+    writeFileSync(configPath, 'steering: [unclosed\n', 'utf8');
     const { exit, lines } = await run({ configPath, metricsPath });
 
     expect(exit).toBe(1);

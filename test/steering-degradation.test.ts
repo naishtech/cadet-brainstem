@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ClassificationValidationError,
-  ClassifierUnavailableError,
-  classifyWithFallback,
-  conservativeDefaultClassification,
-  type Classification,
-} from '../src/classifier/index';
+  SteeringValidationError,
+  SteeringUnavailableError,
+  steerWithFallback,
+  conservativeDefaultSteering,
+  type Steering,
+} from '../src/steering/index';
 
-const okClassification: Classification = {
+const okSteering: Steering = {
   task: 'debug',
   complexity: 'medium',
   risk: 'medium',
@@ -18,61 +18,61 @@ const okClassification: Classification = {
   response_policy: { directives: [] },
 };
 
-describe('conservativeDefaultClassification', () => {
+describe('conservativeDefaultSteering', () => {
   it('biases toward the highest context need and lowest risk', () => {
-    expect(conservativeDefaultClassification.context_need).toBe('exhaustive');
-    expect(conservativeDefaultClassification.risk).toBe('low');
-    expect(conservativeDefaultClassification.task).toBe('investigation');
+    expect(conservativeDefaultSteering.context_need).toBe('exhaustive');
+    expect(conservativeDefaultSteering.risk).toBe('low');
+    expect(conservativeDefaultSteering.task).toBe('investigation');
   });
 });
 
-describe('classifyWithFallback', () => {
+describe('steerWithFallback', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('returns the real classification when classification succeeds', async () => {
-    const outcome = await classifyWithFallback(
+  it('returns the real steering when steering succeeds', async () => {
+    const outcome = await steerWithFallback(
       'fix it',
       {},
-      async () => okClassification,
+      async () => okSteering,
     );
     expect(outcome.degraded).toBe(false);
-    expect(outcome.classification).toEqual(okClassification);
+    expect(outcome.steering).toEqual(okSteering);
     expect(outcome.reason).toBeUndefined();
   });
 
   it('degrades to the conservative default when Ollama is unavailable', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const outcome = await classifyWithFallback(
+    const outcome = await steerWithFallback(
       'fix it',
       {},
       async () => {
-        throw new ClassifierUnavailableError('Ollama is down');
+        throw new SteeringUnavailableError('Ollama is down');
       },
     );
     expect(outcome.degraded).toBe(true);
-    expect(outcome.classification).toEqual(conservativeDefaultClassification);
+    expect(outcome.steering).toEqual(conservativeDefaultSteering);
     expect(outcome.reason).toContain('Ollama is down');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('degraded'));
   });
 
   it('degrades on invalid/un-schema\'d output', async () => {
-    const outcome = await classifyWithFallback(
+    const outcome = await steerWithFallback(
       'fix it',
       {},
       async () => {
-        throw new ClassificationValidationError('invalid enum: not-a-task');
+        throw new SteeringValidationError('invalid enum: not-a-task');
       },
     );
     expect(outcome.degraded).toBe(true);
-    expect(outcome.classification).toEqual(conservativeDefaultClassification);
+    expect(outcome.steering).toEqual(conservativeDefaultSteering);
     expect(outcome.reason).toContain('invalid enum');
   });
 
   it('rethrows unexpected errors instead of swallowing them', async () => {
     await expect(
-      classifyWithFallback(
+      steerWithFallback(
         'fix it',
         {},
         async () => {

@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { extractFromConversation, isPlausibleTrigger, normalizeConfidence } from '../src/mine/extract';
 
 // Mock the local-LLM extraction so we can drive the filter deterministically.
-vi.mock('../src/classifier', () => ({
+vi.mock('../src/steering', () => ({
   extractProcedure: vi.fn(),
 }));
 
-import { extractProcedure } from '../src/classifier';
+import { extractProcedure } from '../src/steering';
 
 const mockExtract = vi.mocked(extractProcedure);
 

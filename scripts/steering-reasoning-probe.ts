@@ -1,9 +1,9 @@
 /**
- * Classifier reasoning-capacity probe.
+ * Steering reasoning-capacity probe.
  *
  * Purpose: find the point at which the raw (small) Ollama model stops being
- * able to produce a schema-valid classification. We test the model DIRECTLY
- * (not through the cadet classify pipeline) so we can isolate its ceiling.
+ * able to produce a schema-valid steering. We test the model DIRECTLY
+ * (not through the cadet steer pipeline) so we can isolate its ceiling.
  *
  * Two axes ramp up together:
  *   - REASONING: the requests get progressively harder (trivial question →
@@ -14,16 +14,16 @@
  *     fields, or timeouts).
  *
  * Usage (from repo root):
- *   npx tsx scripts/classifier-reasoning-probe.ts                 # full battery
- *   npx tsx scripts/classifier-reasoning-probe.ts --model qwen3:4b
- *   PROBE_REQUESTS=1,3,5 PROBE_LEVELS=0,2,4 npx tsx scripts/classifier-reasoning-probe.ts
+ *   npx tsx scripts/steering-reasoning-probe.ts                 # full battery
+ *   npx tsx scripts/steering-reasoning-probe.ts --model qwen3:4b
+ *   PROBE_REQUESTS=1,3,5 PROBE_LEVELS=0,2,4 npx tsx scripts/steering-reasoning-probe.ts
  *
  * Output: a per-(request × schema-level) table to stdout, plus a full JSON
  * dump (raw outputs included) written to scripts/output/ for later inspection.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CLASSIFICATION_JSON_SCHEMA } from '../src/classifier/schema';
+import { STEERING_JSON_SCHEMA } from '../src/steering/schema';
 
 const HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
 const MODEL = parseArg('--model', process.env.PROBE_MODEL ?? 'qwen3:4b');
@@ -115,12 +115,12 @@ function fieldsFor(level: number): string[] {
   return SCHEMA_LEVELS.slice(0, level + 1).flatMap((l) => l.fields);
 }
 
-/** Build a JSON schema subset from the full classification schema. */
+/** Build a JSON schema subset from the full steering schema. */
 function buildSchema(level: number): Record<string, unknown> {
   const fields = fieldsFor(level);
   const properties: Record<string, unknown> = {};
   for (const field of fields) {
-    const prop = (CLASSIFICATION_JSON_SCHEMA as { properties?: Record<string, unknown> })
+    const prop = (STEERING_JSON_SCHEMA as { properties?: Record<string, unknown> })
       .properties?.[field];
     if (prop !== undefined) {
       properties[field] = prop;
@@ -156,7 +156,7 @@ async function probe(requestText: string, schema: Record<string, unknown>): Prom
         messages: [
           {
             role: 'user',
-            content: `You are a routing classifier. Classify the request below and return ONLY the JSON routing strategy, matching the schema exactly (same field names).\n\nRequest: ${requestText}`,
+            content: `You are a routing steering. Steer the request below and return ONLY the JSON routing strategy, matching the schema exactly (same field names).\n\nRequest: ${requestText}`,
           },
         ],
         stream: false,

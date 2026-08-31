@@ -1,4 +1,4 @@
-import { extractProcedure } from '../classifier';
+import { extractProcedure } from '../steering';
 import type { ParsedConversation } from './parse';
 import { conversationToText } from './parse';
 
@@ -59,7 +59,7 @@ export function normalizeConfidence(raw: number): number {
 
 /**
  * Step 1.4 — decide whether a scrubbed conversation contains a repeatable,
- * mechanical task, using the same local LLM used for classification. Best
+ * mechanical task, using the same local LLM used for steering. Best
  * effort: on any failure it degrades to not-procedural (never crashes).
  *
  * Over-eager results are filtered here: a candidate only counts as procedural

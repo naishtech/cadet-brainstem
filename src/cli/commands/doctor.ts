@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../../classifier';
+import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../../steering';
 import {
   defaultConfig,
   getConfigPath,
@@ -22,7 +22,7 @@ export interface DoctorDeps {
   metricsPath?: string;
   /** Override the Ollama host (tests). */
   host?: string;
-  /** Override the classifier model (tests). */
+  /** Override the steering model (tests). */
   model?: string;
   /** Override the log sink (tests). */
   log?: (line: string) => void;
@@ -147,13 +147,13 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
     );
   }
 
-  // Classifier model (only checkable when Ollama is reachable).
-  const model = deps.model ?? config.classifier.model;
+  // Steering model (only checkable when Ollama is reachable).
+  const model = deps.model ?? config.steering.model;
   if (ollama.available) {
     const modelOk = await isModelAvailable(model, host);
     checks.push(
       doctorCheck({
-        label: 'Classifier model',
+        label: 'Steering model',
         ok: modelOk,
         critical: false,
         detail: modelOk ? model : `"${model}" not pulled`,
@@ -163,7 +163,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
   } else {
     checks.push(
       doctorCheck({
-        label: 'Classifier model',
+        label: 'Steering model',
         ok: false,
         critical: false,
         detail: 'cannot check (Ollama down)',

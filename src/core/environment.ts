@@ -1,6 +1,6 @@
 import { exec as execCb, execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { DEFAULT_OLLAMA_HOST, isOllamaAvailable } from '../classifier';
+import { DEFAULT_OLLAMA_HOST, isOllamaAvailable } from '../steering';
 import { LeanCtxAdapter } from '../integrations/leanctx';
 import { LEAN_CTX_BIN } from '../integrations/leanctx/adapter';
 import { RtkAdapter } from '../integrations/rtk';

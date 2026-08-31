@@ -1,4 +1,4 @@
-import type { TraceSink } from '../classifier';
+import type { TraceSink } from '../steering';
 import { getEventBus, type EventBus } from './event-bus';
 
 /**

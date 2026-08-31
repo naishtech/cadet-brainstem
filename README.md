@@ -51,8 +51,8 @@ cadet-brainstem doctor    # read-only health check with actionable fixes
 
 | Tool | What it does |
 | --- | --- |
-| `classify` | Classify the current request with Ollama and return the deterministic optimisation strategy |
-| `optimize_context` | Classify the task, return the LeanCTX-compressed context for a file/dir |
+| `steering` | Steering the current request with Ollama and return the deterministic optimisation strategy |
+| `optimize_context` | Steering the task, return the LeanCTX-compressed context for a file/dir |
 | `find_relevant_symbols` | Serena semantic search → only the relevant symbols/files |
 | `compress_command_output` | RTK-reduced output for a command |
 | `serena_call` / `serena_list_tools` | Forward to Serena (full navigation / rename / diagnostics capability) |
@@ -63,7 +63,7 @@ cadet-brainstem doctor    # read-only health check with actionable fixes
 | `procedure_review` | Build a concrete, reviewable diff for a write-procedure step before it applies |
 | `procedure_apply` | Execute a procedure step against a real repo — write steps are gated behind approval |
 
-The intended flow is to call `classify` once at the start of each agent turn,
+The intended flow is to call `steering` once at the start of each agent turn,
 then use its strategy to choose the context tools. MCP is client-driven: the
 server cannot intercept every Copilot Chat message or technically force a tool
 call. A workspace `AGENTS.md` can require this behavior from the agent, and
@@ -202,7 +202,7 @@ Paste this into your agent's prompts or `AGENTS.md` so it classifies every turn
 and prefers the cheap paths:
 
 > For every new user request, before doing anything else, call the Cadet Token
-> Saver `classify` MCP tool once with a short, faithful restatement of the
+> Saver `steering` MCP tool once with a short, faithful restatement of the
 > request (not the verbatim message); use its returned strategy and parse its
 > `response_policy` and `memory_policy`. Then call `optimize_context` before
 > reading a large file, `find_relevant_symbols` before broad searches, and
@@ -221,11 +221,11 @@ and prefers the cheap paths:
 Cadet Brainstem is a local CLI built around one decision: **what context does this task actually need?** It classifies the task with a small local model, applies a deterministic policy, invokes the right optimisation tool, and records the result.
 
 ```
-task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised context + metrics.db
+task → steering (Ollama) → policy → LeanCTX / RTK / Serena → optimised context + metrics.db
 ```
 
-- **Classifier** — a local Ollama model (`qwen3:4b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
-- **Policy engine** — deterministic: the same classification always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
+- **Steering** — a local Ollama model (`qwen3:4b`) classifies the task (type, complexity, risk, context need) as strict JSON over HTTP. Thinking is disabled, temperature is zero, and the model is kept warm with `keep_alive` to reduce latency. If Ollama is unavailable it degrades to a conservative default instead of failing.
+- **Policy engine** — deterministic: the same steering always yields the same strategy. The LLM only classifies; it never decides *how* to optimise.
 - **Adapters** — RTK (output reduction), Serena (semantic navigation) and LeanCTX (context compilation) are orchestrated behind a shared interface, never reimplemented. Missing tools degrade gracefully.
 - **Procedures** — reusable, intent-grounded operation sequences (`service: leanctx | serena | rtk`, tool, args) that the local model can execute against a real repo on the cloud agent's behalf. Read-only steps run automatically; write steps are gated behind a reviewable diff and explicit approval (`procedure_review` → `procedure_apply`). New candidates are discovered by mining historical conversations (`mine`).
 - **Metrics** — every optimisation event is stored in a local SQLite database (`~/.cadet-brainstem/metrics.db`), fully offline, with estimates clearly labelled.
@@ -233,7 +233,7 @@ task → classify (Ollama) → policy → LeanCTX / RTK / Serena → optimised c
 
 ### What the local LLM does
 
-The local LLM is a **routing classifier**, not a code generator. It reads a short restatement of the request and answers one question: *what does this task need?* Its job is classification and entity extraction only — it never decides how to optimise, and it never invokes tools.
+The local LLM is a **routing steering**, not a code generator. It reads a short restatement of the request and answers one question: *what does this task need?* Its job is steering and entity extraction only — it never decides how to optimise, and it never invokes tools.
 
 For each request it returns, as strict JSON:
 
@@ -242,10 +242,10 @@ For each request it returns, as strict JSON:
 - **Risk** — low, medium, or high.
 - **Context need** — minimal, targeted, broad, or exhaustive.
 - **Entities** — the key nouns and keywords pulled from the request (for example "checkout page", "blueprint", "X300").
-- **Confidence** — how sure the model is of this classification.
+- **Confidence** — how sure the model is of this steering.
 - **Needs more context** — true only when the request is insufficient on its own.
 
-The output is deterministic and cheap: temperature is zero, thinking is disabled, and the JSON schema is enforced by the caller. The classification feeds the **policy engine**, which deterministically maps it to the token-saving strategy (LeanCTX mode, search approach, compression). Because the model only classifies, it stays small, fast, and low-cost.
+The output is deterministic and cheap: temperature is zero, thinking is disabled, and the JSON schema is enforced by the caller. The steering feeds the **policy engine**, which deterministically maps it to the token-saving strategy (LeanCTX mode, search approach, compression). Because the model only classifies, it stays small, fast, and low-cost.
 
 The same model also powers supporting tasks:
 
@@ -253,14 +253,14 @@ The same model also powers supporting tasks:
 - **Procedure mining** — extracts reusable, repeatable operation sequences from past conversations (`mine`).
 - **Curated procedures** — lets you run basic, repeatable tasks from the procedure store (for example read a file, or create-then-edit a file). Read-only steps run automatically; write steps are gated behind a reviewable diff and explicit approval (`procedure_review` → `procedure_apply`).
 
-If Ollama is unavailable, the system degrades to conservative defaults instead of failing. The classifier then returns a safe, generic classification and the rest of the pipeline continues normally.
+If Ollama is unavailable, the system degrades to conservative defaults instead of failing. The steering then returns a safe, generic steering and the rest of the pipeline continues normally.
 
 ### Project layout
 
 ```
 src/
   cli/          the cadet-brainstem commands (init, doctor, stats, wrap, mcp, …)
-  classifier/   Ollama classification + graceful degradation
+  steering/   Ollama steering + graceful degradation
   policy/       deterministic strategy engine
   integrations/ RTK / Serena / LeanCTX adapters
   metrics/      local SQLite metrics store
@@ -292,7 +292,7 @@ The project is built incrementally from the task files in `tasks/`; see the desi
 `hook-session-start`, `hook-user-prompt`, `hook-post-tool`, `hook-pre-compact`,
 `hook-subagent-start`, `hook-subagent-stop`, `hook-stop`, `mcp`, `wrap`.
 (`config`, `dashboard`, `telemetry` remain scaffolded or partial.) The MCP
-server exposes `classify`, `optimize_context`, `find_relevant_symbols`,
+server exposes `steering`, `optimize_context`, `find_relevant_symbols`,
 `compress_command_output`, `serena_call`, `serena_list_tools`, `leanctx_call`,
 `leanctx_list_tools`, `chat_memory_store`, `activate_project`,
 `assess_context`, `procedure_review`, and `procedure_apply`.

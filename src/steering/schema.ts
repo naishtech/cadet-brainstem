@@ -38,7 +38,7 @@ export const riskSchema = z.enum(['low', 'medium', 'high']);
 export const contextNeedSchema = z.enum(['minimal', 'targeted', 'broad', 'exhaustive']);
 export const precisionSchema = z.enum(['approximate', 'normal', 'exact']);
 
-/** Recommended documentation language standard the classifier may pick. */
+/** Recommended documentation language standard the steering may pick. */
 export const LANGUAGE_STANDARDS = [
   'asd_ste100',
   'microsoft',
@@ -228,20 +228,20 @@ export interface ResponsePolicy {
 }
 
 /**
- * JSON Schema describing the lean LLM classification output. Passed to Ollama
+ * JSON Schema describing the lean LLM steering output. Passed to Ollama
  * via the `format` parameter so the model emits valid structured JSON directly.
  *
- * The model only does classification + simple entity/keyword extraction. It
+ * The model only does steering + simple entity/keyword extraction. It
  * does NOT reason about tools or retrieval here — `tool_plan` / `evidence_plan`
  * (the fields that drive token savings) are synthesized deterministically in
- * code from `entities` + `context_need` (see `src/classifier/synthesize.ts`).
+ * code from `entities` + `context_need` (see `src/steering/synthesize.ts`).
  * Keeping the model's job small makes it fast AND specific (entities are pulled
  * verbatim from the request, not invented).
  *
- * Kept in sync with the classifier SYSTEM block. `additionalProperties: false`
+ * Kept in sync with the steering SYSTEM block. `additionalProperties: false`
  * enforces the shape at every level.
  */
-export const CLASSIFICATION_JSON_SCHEMA = {
+export const STEERING_JSON_SCHEMA = {
   type: 'object',
   properties: {
     task: { type: 'string', enum: [...TASK_TYPES] },
@@ -271,10 +271,10 @@ export const CLASSIFICATION_JSON_SCHEMA = {
 
 /**
  * Raw model output schema. The five core fields are strict; `tool_plan` and
- * `response_policy` are lenient (sanitised by `parseClassification`) so an
- * invalid tool name or directive key never throws away a good classification.
+ * `response_policy` are lenient (sanitised by `parseSteering`) so an
+ * invalid tool name or directive key never throws away a good steering.
  */
-export const classificationSchema = z.object({
+export const steeringSchema = z.object({
   // Token-saving fields first so the cloud LLM reads them first.
   response_policy: z.unknown().optional(),
   reminders: z.unknown().optional(),
@@ -297,7 +297,7 @@ export const classificationSchema = z.object({
 /**
  * Procedure-extraction output (task 45 mining Step 1.4): does a conversation
  * contain a repeatable, mechanical task, and if so what are its trigger,
- * keywords and steps? Classification/extraction — not synthesis.
+ * keywords and steps? Steering/extraction — not synthesis.
  */
 export const procedureExtractionSchema = z.object({
   is_procedural: z.boolean(),
@@ -333,12 +333,12 @@ export function parseProcedureExtraction(raw: unknown): ProcedureExtraction {
   }
   const result = procedureExtractionSchema.safeParse(parsed);
   if (!result.success) {
-    throw new ClassificationValidationError('invalid procedure extraction output');
+    throw new SteeringValidationError('invalid procedure extraction output');
   }
   return result.data;
 }
 
-export interface Classification {
+export interface Steering {
   task: TaskType;
   complexity: Complexity;
   risk: Risk;
@@ -351,9 +351,9 @@ export interface Classification {
   response_policy: ResponsePolicy;
   /** Optional memory hint: whether to consult stored memories and why. */
   memory?: { use: boolean | 'if_necessary'; reason?: string };
-  /** Model's self-assessed confidence in this classification (0..1). */
+  /** Model's self-assessed confidence in this steering (0..1). */
   confidence?: number;
-  /** True when the model needs more context to classify well. */
+  /** True when the model needs more context to steer well. */
   needs_more_context?: boolean;
   /** Search queries + initial scope to start retrieval with (legacy alias). */
   retrieval?: RetrievalPlan;
@@ -714,22 +714,22 @@ function sanitizeMemory(raw: unknown): { use: boolean | 'if_necessary'; reason?:
     : { use: m.use };
 }
 
-/** Raised when classifier output does not match the classification schema. */
-export class ClassificationValidationError extends Error {
+/** Raised when steering output does not match the steering schema. */
+export class SteeringValidationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ClassificationValidationError';
+    this.name = 'SteeringValidationError';
   }
 }
 
 /**
- * Parse and validate classifier output (a JSON string or already-parsed object)
- * against the classification schema.
+ * Parse and validate steering output (a JSON string or already-parsed object)
+ * against the steering schema.
  *
  * Invalid output throws a clear error — the degradation layer (Task 05) is
  * responsible for deciding how to fall back conservatively.
  */
-export function parseClassification(raw: unknown): Classification {
+export function parseSteering(raw: unknown): Steering {
   let parsed: unknown = raw;
   if (typeof raw === 'string') {
     try {
@@ -740,9 +740,9 @@ export function parseClassification(raw: unknown): Classification {
     }
   }
 
-  const result = classificationSchema.safeParse(parsed);
+  const result = steeringSchema.safeParse(parsed);
   if (!result.success) {
-    throw new ClassificationValidationError(formatIssues(result.error));
+    throw new SteeringValidationError(formatIssues(result.error));
   }
   const confidence = sanitizeConfidence(result.data.confidence);
   const needsMoreContext = sanitizeBoolean(result.data.needs_more_context);
@@ -792,7 +792,7 @@ export function parseContextAssessment(raw: unknown): ContextAssessment {
   }
   const result = contextAssessmentSchema.safeParse(parsed);
   if (!result.success) {
-    throw new ClassificationValidationError(formatIssues(result.error));
+    throw new SteeringValidationError(formatIssues(result.error));
   }
   return {
     verdict: result.data.verdict,
@@ -805,5 +805,5 @@ function formatIssues(error: z.ZodError): string {
   const details = error.issues
     .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
     .join('; ');
-  return `Invalid classifier output: ${details}`;
+  return `Invalid steering output: ${details}`;
 }

@@ -29,7 +29,7 @@ beforeEach(() => {
   stateDir = join(dir, 'hooks');
   // Write a controlled config so tests never touch the real user config.
   const cfgFile = join(dir, 'config.yaml');
-  writeFileSync(cfgFile, 'classifier:\n  model: qwen3:4b\n', 'utf8');
+  writeFileSync(cfgFile, 'steering:\n  model: qwen3:4b\n', 'utf8');
   process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
 });
 
@@ -76,8 +76,8 @@ describe('runHookUserPrompt', () => {
     const { deps, outputs } = makeDeps(
       sessionPayload('s1', { prompt: 'refactor the auth module' }),
       {
-        classify: async () => ({
-          classification: {
+        steer: async () => ({
+          steering: {
             task: 'refactor',
             context_need: 'targeted',
             complexity: 'medium',
@@ -121,8 +121,8 @@ describe('runHookUserPrompt', () => {
       const { deps, outputs } = makeDeps(
         sessionPayload('s1', { prompt: 'run diagnostics on the file' }),
         {
-          classify: async () => ({
-            classification: {
+          steer: async () => ({
+            steering: {
               task: 'review',
               context_need: 'targeted',
               complexity: 'low',
@@ -153,8 +153,8 @@ describe('runHookUserPrompt', () => {
     const { deps, outputs } = makeDeps(
       sessionPayload('s1', { prompt: 'refactor the auth module' }),
       {
-        classify: async () => ({
-          classification: {
+        steer: async () => ({
+          steering: {
             task: 'refactor',
             context_need: 'targeted',
             complexity: 'medium',

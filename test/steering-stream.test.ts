@@ -1,10 +1,10 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OllamaClassifier } from '../src/classifier/index';
-import type { TraceSink } from '../src/classifier/index';
+import { OllamaSteerer } from '../src/steering/index';
+import type { TraceSink } from '../src/steering/index';
 
-const validClassification = {
+const validSteering = {
   task: 'debug',
   complexity: 'medium',
   risk: 'medium',
@@ -48,7 +48,7 @@ afterEach(() => {
 
 describe('LLM trace streaming', () => {
   it('streams reasoning tokens live and brackets with start/complete', async () => {
-    const content = JSON.stringify(validClassification);
+    const content = JSON.stringify(validSteering);
     const split = 10;
     const frames = [
       `${JSON.stringify({ message: { content: content.slice(0, split) } })}\n`,
@@ -58,15 +58,15 @@ describe('LLM trace streaming', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ndjsonResponse(frames)));
 
     const trace = makeTrace();
-    const classifier = new OllamaClassifier({
+    const steering = new OllamaSteerer({
       model: 'test-model',
       host: 'http://localhost:11434',
       trace: trace as unknown as TraceSink,
     });
 
-    const result = await classifier.classify('debug this');
+    const result = await steering.steer('debug this');
 
-    expect(result).toEqual(validClassification);
+    expect(result).toEqual(validSteering);
     expect(trace.start).toHaveBeenCalledTimes(1);
     expect(trace.token.mock.calls.length).toBeGreaterThanOrEqual(2);
     const deltaSum = trace.token.mock.calls
@@ -80,13 +80,13 @@ describe('LLM trace streaming', () => {
     });
   });
 
-  it('falls back to non-streaming when streaming fails without breaking classification', async () => {
+  it('falls back to non-streaming when streaming fails without breaking steering', async () => {
     const calls: Array<() => Promise<unknown>> = [
       async () => new Response(null, { status: 500 }), // streaming fails
       async () => ({
         ok: true,
         status: 200,
-        json: async () => ({ message: { content: JSON.stringify(validClassification) } }),
+        json: async () => ({ message: { content: JSON.stringify(validSteering) } }),
       }), // non-streaming fallback succeeds
     ];
     vi.stubGlobal(
@@ -95,15 +95,15 @@ describe('LLM trace streaming', () => {
     );
 
     const trace = makeTrace();
-    const classifier = new OllamaClassifier({
+    const steering = new OllamaSteerer({
       model: 'test-model',
       host: 'http://localhost:11434',
       trace: trace as unknown as TraceSink,
     });
 
-    const result = await classifier.classify('debug this');
+    const result = await steering.steer('debug this');
 
-    expect(result).toEqual(validClassification);
+    expect(result).toEqual(validSteering);
     expect(trace.start).toHaveBeenCalledTimes(1);
     expect(trace.token).not.toHaveBeenCalled();
     expect(trace.complete).toHaveBeenCalledTimes(1);
@@ -113,17 +113,17 @@ describe('LLM trace streaming', () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ message: { content: JSON.stringify(validClassification) } }),
+      json: async () => ({ message: { content: JSON.stringify(validSteering) } }),
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const classifier = new OllamaClassifier({
+    const steering = new OllamaSteerer({
       model: 'test-model',
       host: 'http://localhost:11434',
     });
 
-    const result = await classifier.classify('debug this');
-    expect(result).toEqual(validClassification);
+    const result = await steering.steer('debug this');
+    expect(result).toEqual(validSteering);
 
     const call = fetchMock.mock.calls[0]! as unknown as [string, RequestInit];
     const body = JSON.parse(call[1].body as string) as { stream: boolean };

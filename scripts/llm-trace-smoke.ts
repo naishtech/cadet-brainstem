@@ -1,14 +1,14 @@
 /**
  * Real-Ollama smoke test for LLM trace events (dashboard LLM trace).
  *
- * Verifies end-to-end that a live local-LLM classify call emits
+ * Verifies end-to-end that a live local-LLM steer call emits
  * `llm.trace.start` / `llm.trace.token` / `llm.trace.complete` events AND that
  * those events survive the cross-process JSONL bridge into a separate
- * "dashboard" EventBus (the same path hook classify events take today).
+ * "dashboard" EventBus (the same path hook steer events take today).
  *
  * Usage:
  *   npm run smoke:llm-trace                 # default sample prompt
- *   npm run smoke:llm-trace -- "your text"  # classify a specific prompt
+ *   npm run smoke:llm-trace -- "your text"  # steer a specific prompt
  *
  * Prereqs: Ollama installed + running (ollama serve) and the configured model
  * pulled (see ~/.cadet-brainstem/config.yaml). Exits non-zero on failure.
@@ -16,7 +16,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyWithFallback, isOllamaAvailable } from '../src/classifier/index';
+import { steerWithFallback, isOllamaAvailable } from '../src/steering/index';
 import { EventBus, type DashboardEvent } from '../src/dashboard/event-bus';
 import { JsonlTailer } from '../src/dashboard/jsonl-tail';
 import { getTraceSink } from '../src/dashboard/trace';
@@ -85,17 +85,17 @@ async function main(): Promise<void> {
   const tailer = new JsonlTailer({ path: logPath, bus: dashboard, intervalMs: 100 });
   tailer.start();
 
-  process.stdout.write(`Classifying (trace-enabled): ${prompt}\n`);
+  process.stdout.write(`Steering (trace-enabled): ${prompt}\n`);
   const started = Date.now();
-  const { classification, degraded } = await classifyWithFallback(prompt, {
+  const { steering, degraded } = await steerWithFallback(prompt, {
     trace: getTraceSink(producer),
   });
   const elapsedMs = Date.now() - started;
   await producer.flush?.();
   await sleep(500); // let the dashboard poll the JSONL
 
-  console.log(`  classify took ${elapsedMs}ms${degraded ? ' (degraded)' : ''}`);
-  console.log(`  task: ${classification.task ?? '(none)'}`);
+  console.log(`  steer took ${elapsedMs}ms${degraded ? ' (degraded)' : ''}`);
+  console.log(`  task: ${steering.task ?? '(none)'}`);
   console.log('\nProducer (hook) LLM trace events:');
   console.log(summarize(produced));
   console.log('\nDashboard (bridged) LLM trace events:');
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
 
   let ok = true;
   if (producerTokens === 0) {
-    console.error('\nFAIL: no llm.trace.token events were emitted by the LLM classify.');
+    console.error('\nFAIL: no llm.trace.token events were emitted by the LLM steer.');
     ok = false;
   }
   if (!bridged.some((e) => e.type === 'llm.trace.start')) {

@@ -2,10 +2,10 @@
  * Local-LLM (Ollama) availability state machine.
  *
  * The MCP server warms the model at startup (fire-and-forget) so the first
- * `classify` call doesn't pay the cold-load latency (which can take minutes).
+ * `steer` call doesn't pay the cold-load latency (which can take minutes).
  * Until the model is `ready`, tools should fail fast — returning conservative
  * defaults plus a "warming up / down" notice — rather than stalling the cloud
- * LLM on a request that can't succeed within the classifier timeout.
+ * LLM on a request that can't succeed within the steering timeout.
  *
  * Transitions (kept intentionally simple):
  *   unknown -> warming (warm-up kicked off at server start)

@@ -4,7 +4,9 @@
 config, hooks, docs, and tests. Done first (before tasks 57–58) so the later tasks are written
 in the new "steering" naming and need no further rename.
 
-**Status:** Not started
+**Status:** Done — full rename to `steering` (module, MCP tool, config key, hooks,
+identifiers, docs). Breaking change; version bumped to 0.3.0. Temporary `classify` →
+`steering` migration alias kept in the MCP dispatcher.
 **Phase:** Phase 15
 **Source:** `docs/plans/dashboard-llm-thinking-trace.md` §9.2 (split into tasks 57–59)
 
@@ -48,8 +50,8 @@ request, it steers how the agent should approach it (strategy, tool plan, respon
 
 ## Acceptance Criteria
 
-- [ ] `npm test` — all suites pass after the rename (no `classify`-only identifiers remain).
-- [ ] `npm run build` — no type errors from renamed symbols/modules.
-- [ ] `steering` tool works end-to-end (MCP + hooks); `classify` alias works during migration
+- [x] `npm test` — all suites pass after the rename (no `classify`-only identifiers remain).
+- [x] `npm run build` — no type errors from renamed symbols/modules.
+- [x] `steering` tool works end-to-end (MCP + hooks); `classify` alias works during migration
       if kept.
-- [ ] Docs/AGENTS updated to "call steering first".
+- [x] Docs/AGENTS updated to "call steering first".

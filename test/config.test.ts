@@ -57,7 +57,7 @@ function withEnv(env: Record<string, string | undefined>, fn: () => void): void 
 describe('default config', () => {
   it('matches the design doc §13 defaults', () => {
     expect(defaultConfig).toEqual({
-      classifier: {
+      steering: {
         provider: 'ollama',
         model: 'qwen3:4b',
         timeout_ms: 60000,
@@ -152,9 +152,9 @@ describe('loadConfig', () => {
 
   it('fills defaults for a partial config', () => {
     const dir = makeTempDir();
-    writeFileSync(configPath(dir), 'classifier:\n  model: llama3\n', 'utf8');
+    writeFileSync(configPath(dir), 'steering:\n  model: llama3\n', 'utf8');
     const cfg = loadConfig(configPath(dir));
-    expect(cfg.classifier).toEqual({
+    expect(cfg.steering).toEqual({
       provider: 'ollama',
       model: 'llama3',
       timeout_ms: 60000,
@@ -185,7 +185,7 @@ describe('saveConfig + round-trip', () => {
     const file = configPath(dir);
     const cfg = {
       ...defaultConfig,
-      classifier: {
+      steering: {
         provider: 'ollama' as const,
         model: 'custom-model',
         timeout_ms: 45000,
@@ -200,16 +200,16 @@ describe('saveConfig + round-trip', () => {
 
 describe('value access helpers', () => {
   it('reads individual values by dot path', () => {
-    expect(getConfigValue(defaultConfig, 'classifier.model')).toBe('qwen3:4b');
+    expect(getConfigValue(defaultConfig, 'steering.model')).toBe('qwen3:4b');
     expect(getConfigValue(defaultConfig, 'session.max_turns')).toBe(30);
     expect(getConfigValue(defaultConfig, 'tools.rtk')).toBe(true);
     expect(getConfigValue(defaultConfig, 'nope.missing')).toBeUndefined();
   });
 
   it('sets and validates individual values', () => {
-    const updated = setConfigValue(defaultConfig, 'classifier.model', 'qwen3:8b');
-    expect(updated.classifier.model).toBe('qwen3:8b');
-    expect(getConfigValue(updated, 'classifier.model')).toBe('qwen3:8b');
+    const updated = setConfigValue(defaultConfig, 'steering.model', 'qwen3:8b');
+    expect(updated.steering.model).toBe('qwen3:8b');
+    expect(getConfigValue(updated, 'steering.model')).toBe('qwen3:8b');
   });
 
   it('rejects invalid values on set', () => {

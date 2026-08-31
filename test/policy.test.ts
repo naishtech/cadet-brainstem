@@ -6,11 +6,11 @@ import {
   getStrategy,
   refineStrategy,
 } from '../src/policy/index';
-import type { Classification } from '../src/classifier/index';
+import type { Steering } from '../src/steering/index';
 
-function makeClassification(task: string): Classification {
+function makeSteering(task: string): Steering {
   return {
-    task: task as Classification['task'],
+    task: task as Steering['task'],
     complexity: 'medium',
     risk: 'medium',
     // 'exhaustive' never narrows, so the task maps straight to its raw policy.
@@ -22,7 +22,7 @@ function makeClassification(task: string): Classification {
   };
 }
 
-const debugClassification: Classification = {
+const debugSteering: Steering = {
   task: 'debug',
   complexity: 'high',
   risk: 'high',
@@ -33,7 +33,7 @@ const debugClassification: Classification = {
   response_policy: { directives: [] },
 };
 
-const questionClassification: Classification = {
+const questionSteering: Steering = {
   task: 'question',
   complexity: 'low',
   risk: 'low',
@@ -45,15 +45,15 @@ const questionClassification: Classification = {
 };
 
 describe('PolicyEngine', () => {
-  it('is deterministic for the same classification', () => {
+  it('is deterministic for the same steering', () => {
     const engine = new PolicyEngine();
-    expect(engine.getStrategy(debugClassification)).toEqual(
-      engine.getStrategy(debugClassification),
+    expect(engine.getStrategy(debugSteering)).toEqual(
+      engine.getStrategy(debugSteering),
     );
   });
 
   it('maps debug to the design-doc strategy', () => {
-    const strategy = getStrategy(debugClassification);
+    const strategy = getStrategy(debugSteering);
     expect(strategy).toEqual(defaultPolicies.debug);
     expect(strategy.context_need).toBe('broad');
     expect(strategy.compression).toBe('conservative');
@@ -63,15 +63,15 @@ describe('PolicyEngine', () => {
   });
 
   it('maps question to aggressive compression', () => {
-    const strategy = getStrategy(questionClassification);
+    const strategy = getStrategy(questionSteering);
     expect(strategy.compression).toBe('aggressive');
     expect(strategy.context_need).toBe('minimal');
     expect(strategy.code_search).toBe('none');
   });
 
-  it('narrows a broad task policy when the classifier asks for targeted context', () => {
+  it('narrows a broad task policy when the steering asks for targeted context', () => {
     const strategy = getStrategy({
-      ...makeClassification('review'),
+      ...makeSteering('review'),
       context_need: 'targeted',
     });
     expect(strategy.context_need).toBe('targeted');
@@ -81,16 +81,16 @@ describe('PolicyEngine', () => {
     expect(strategy.terminal_output).toBe(defaultPolicies.review.terminal_output);
   });
 
-  it('does not widen a minimal task policy when the classifier asks for broad', () => {
+  it('does not widen a minimal task policy when the steering asks for broad', () => {
     const strategy = getStrategy({
-      ...makeClassification('question'),
+      ...makeSteering('question'),
       context_need: 'broad',
     });
     expect(strategy.context_need).toBe('minimal');
     expect(strategy.leanctx_mode).toBe(defaultPolicies.question.leanctx_mode);
   });
 
-  it('refineStrategy caps the strategy by the classifier context_need', () => {
+  it('refineStrategy caps the strategy by the steering context_need', () => {
     expect(refineStrategy({ ...defaultPolicies.review }, 'targeted').leanctx_mode).toBe(
       'map',
     );
@@ -126,7 +126,7 @@ describe('PolicyEngine', () => {
     ];
     const engine = new PolicyEngine();
     for (const task of tasks) {
-      expect(engine.getStrategy(makeClassification(task))).toEqual(
+      expect(engine.getStrategy(makeSteering(task))).toEqual(
         defaultPolicies[task],
       );
     }
@@ -134,7 +134,7 @@ describe('PolicyEngine', () => {
 
   it('falls back to the default policy for unknown task types', () => {
     const engine = new PolicyEngine();
-    expect(engine.getStrategy(makeClassification('unknown'))).toEqual(
+    expect(engine.getStrategy(makeSteering('unknown'))).toEqual(
       defaultPolicies.default,
     );
   });
@@ -155,11 +155,11 @@ describe('PolicyEngine', () => {
       },
     };
     const engine = new PolicyEngine(custom);
-    expect(engine.getStrategy(debugClassification).compression).toBe('aggressive');
+    expect(engine.getStrategy(debugSteering).compression).toBe('aggressive');
   });
 
   it('produces only plain data (no executable behavior)', () => {
-    const strategy = getStrategy(debugClassification);
+    const strategy = getStrategy(debugSteering);
     for (const value of Object.values(strategy)) {
       expect(typeof value).not.toBe('function');
     }

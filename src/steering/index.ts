@@ -1,16 +1,16 @@
 export {
-  DEFAULT_CLASSIFIER_TIMEOUT_MS,
+  DEFAULT_STEERING_TIMEOUT_MS,
   DEFAULT_KEEP_ALIVE,
   DEFAULT_NUM_CTX,
   DEFAULT_NUM_PREDICT,
   DEFAULT_OLLAMA_HOST,
-  ClassifierUnavailableError,
-  OllamaClassifier,
+  SteeringUnavailableError,
+  OllamaSteerer,
   assess,
   buildAssessPrompt,
   buildExtractPrompt,
   buildPrompt,
-  classify,
+  steer,
   extractProcedure,
   isModelAvailable,
   isOllamaAvailable,
@@ -32,8 +32,8 @@ export type {
   LlmStatus,
 } from './llm-status';
 export {
-  CLASSIFICATION_JSON_SCHEMA,
-  ClassificationValidationError,
+  STEERING_JSON_SCHEMA,
+  SteeringValidationError,
   DEFAULT_RESPONSE_POLICY_KEYS,
   DEFAULT_TOOL_PLAN,
   LANGUAGE_STANDARD_DESCRIPTIONS,
@@ -44,12 +44,12 @@ export {
   RESPONSE_POLICY_KEYS,
   TASK_TYPES,
   TOOL_NAMES,
-  classificationSchema,
+  steeringSchema,
   complexitySchema,
   contextAssessmentSchema,
   contextNeedSchema,
   languageStandardSchema,
-  parseClassification,
+  parseSteering,
   parseContextAssessment,
   parseProcedureExtraction,
   precisionSchema,
@@ -63,9 +63,9 @@ export {
 } from './schema';
 export {
   assessWithFallback,
-  classifyWithFallback,
+  steerWithFallback,
   conservativeDefaultAssessment,
-  conservativeDefaultClassification,
+  conservativeDefaultSteering,
 } from './degradation';
 export {
   synthesizeEvidencePlan,
@@ -74,13 +74,13 @@ export {
   synthesizeResponsePolicy,
   synthesizeToolPlan,
 } from './synthesize';
-export type { ClassifierOptions } from './ollama';
+export type { SteeringOptions } from './ollama';
 export type {
-  ClassificationOutcome,
+  SteeringOutcome,
   ContextAssessmentOutcome,
 } from './degradation';
 export type {
-  Classification,
+  Steering,
   Complexity,
   ContextAssessment,
   ContextNeed,

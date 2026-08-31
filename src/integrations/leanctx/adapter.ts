@@ -36,7 +36,7 @@ export interface LeanCtxOptimizeRequest {
   target: string;
   /** Mode from the policy engine (Task 07). */
   mode: LeanCtxMode;
-  /** Classification from the classifier, recorded in metrics. */
+  /** Steering from the steering, recorded in metrics. */
   taskType: string;
   /** Optional token budget (reserved; used by the compile path in future). */
   budget?: number;

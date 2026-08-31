@@ -179,7 +179,7 @@ describe('MetricsStore (in-memory)', () => {
       makeEvent({ tool: 'mcp_cadet-brainstem_find_relevant_symbols', degraded: true }),
     );
     store.record(makeEvent({ tool: 'rtk', degraded: false }));
-    // Classifier recommended the bare canonical name on classify events.
+    // Steering recommended the bare canonical name on steer events.
     store.record(
       makeEvent({ tool: 'ollama', recommended_tools: ['find_relevant_symbols'] }),
     );

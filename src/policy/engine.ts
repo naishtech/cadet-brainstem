@@ -1,9 +1,9 @@
-import { Classification } from '../classifier/schema';
+import { Steering } from '../steering/schema';
 import { loadConfig } from '../config/index';
 import { OptimisationStrategy, Policies, StrategyContextNeed, LeanCtxMode } from './schema';
 
 /**
- * Ordering of context need across both the classifier enum and the strategy
+ * Ordering of context need across both the steering enum and the strategy
  * enum ('structural' is policy-only; treated as broad-equivalent).
  */
 const NEED_RANK: Record<StrategyContextNeed, number> = {
@@ -14,7 +14,7 @@ const NEED_RANK: Record<StrategyContextNeed, number> = {
   exhaustive: 3,
 };
 
-/** LeanCTX mode escalation when the classifier narrows the context need. */
+/** LeanCTX mode escalation when the steering narrows the context need. */
 const LEANCTX_BY_NEED: Record<
   Exclude<StrategyContextNeed, 'structural'>,
   LeanCtxMode
@@ -26,15 +26,15 @@ const LEANCTX_BY_NEED: Record<
 };
 
 /**
- * Cap the task-type default by the classifier's own `context_need`. The
- * classifier's read is authoritative on how much context to fetch: when it
+ * Cap the task-type default by the steering's own `context_need`. The
+ * steering's read is authoritative on how much context to fetch: when it
  * asks for *less* than the static per-task default, narrow the strategy (and
  * downgrade the LeanCTX mode) rather than over-fetching. It never widens a
  * strategy beyond the task-type default.
  */
 export function refineStrategy(
   strategy: OptimisationStrategy,
-  contextNeed: Classification['context_need'],
+  contextNeed: Steering['context_need'],
 ): OptimisationStrategy {
   const askedRank = NEED_RANK[contextNeed];
   const baseRank = NEED_RANK[strategy.context_need];
@@ -51,9 +51,9 @@ export function refineStrategy(
 /**
  * Deterministic policy engine (design doc §4).
  *
- * The LLM classifies; this engine decides. Given the same classification it
+ * The LLM classifies; this engine decides. Given the same steering it
  * always returns the same strategy. It never executes tools or constructs
- * shell commands — it only maps a classification to a strategy.
+ * shell commands — it only maps a steering to a strategy.
  */
 export class PolicyEngine {
   readonly policies: Policies;
@@ -62,10 +62,10 @@ export class PolicyEngine {
     this.policies = policies;
   }
 
-  /** Deterministic: same classification → same strategy. */
-  getStrategy(classification: Classification): OptimisationStrategy {
-    const policy = this.policies[classification.task] ?? this.policies.default;
-    return refineStrategy({ ...policy }, classification.context_need);
+  /** Deterministic: same steering → same strategy. */
+  getStrategy(steering: Steering): OptimisationStrategy {
+    const policy = this.policies[steering.task] ?? this.policies.default;
+    return refineStrategy({ ...policy }, steering.context_need);
   }
 
   /** Conservative strategy for the degraded/unavailable path (Task 05). */
@@ -75,10 +75,10 @@ export class PolicyEngine {
 }
 
 export function getStrategy(
-  classification: Classification,
+  steering: Steering,
   policies: Policies = loadConfig().policies,
 ): OptimisationStrategy {
-  return new PolicyEngine(policies).getStrategy(classification);
+  return new PolicyEngine(policies).getStrategy(steering);
 }
 
 export function getDefaultStrategy(

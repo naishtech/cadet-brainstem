@@ -12,12 +12,12 @@ const AGENTS = readFileSync(
  * present and correctly worded in the agent instructions. This guards the
  * instruction text (so it cannot be weakened or deleted silently); it does
  * NOT — and cannot — prove an LLM obeys it. Guaranteed runtime enforcement
- * requires a gateway/wrapper that calls classify before the model (design
+ * requires a gateway/wrapper that calls steer before the model (design
  * doc §16), which is separately integration-tested.
  */
 const REQUIRED_PHRASES = [
-  'Classify every user request',
-  'call the `classify` MCP tool',
+  'Steer every user request',
+  'call the `steering` MCP tool',
   'not the verbatim message',
   'response_policy',
   'tool_plan',

@@ -8,18 +8,18 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import pkg from '../../package.json';
 import {
-  classifyWithFallback,
-  conservativeDefaultClassification,
+  steerWithFallback,
+  conservativeDefaultSteering,
   synthesizePlans,
   synthesizeToolPlan,
-  type ClassificationOutcome,
-} from '../classifier';
+  type SteeringOutcome,
+} from '../steering';
 import {
   LlmStatusTracker,
   isOllamaAvailable,
   warmUpOllama,
   type LlmStatus,
-} from '../classifier';
+} from '../steering';
 import {
   RESPONSE_POLICY_DIRECTIVES,
   assessWithFallback,
@@ -32,8 +32,8 @@ import {
   type TaskType,
   type ToolName,
   type ToolPlan,
-} from '../classifier';
-import type { Classification } from '../classifier';
+} from '../steering';
+import type { Steering } from '../steering';
 import { PolicyEngine } from '../policy';
 import type { OptimisationStrategy } from '../policy';
 import { LeanCtxAdapter } from '../integrations/leanctx';
@@ -77,7 +77,7 @@ export interface CompiledResponsePolicy {
 
 /**
  * Compile the response policy into the cloud LLM's directive descriptions plus
- * any categorical choice (e.g. `language_standard`). The classifier picks the
+ * any categorical choice (e.g. `language_standard`). The steering picks the
  * subset per request; this returns only those, described for the cloud LLM.
  */
 export function compileResponsePolicy(policy: ResponsePolicy): CompiledResponsePolicy {
@@ -92,30 +92,30 @@ export function compileResponsePolicy(policy: ResponsePolicy): CompiledResponseP
   return result;
 }
 
-export type CoreClassification = Pick<
-  Classification,
+export type CoreSteering = Pick<
+  Steering,
   'task' | 'complexity' | 'risk' | 'context_need' | 'precision'
 > & {
   confidence?: number;
   needs_more_context?: boolean;
 };
 
-/** Project a classification to its core fields plus the new confidence signals. */
-export function coreClassification(
-  classification: Classification,
-): CoreClassification {
-  const core: CoreClassification = {
-    task: classification.task,
-    complexity: classification.complexity,
-    risk: classification.risk,
-    context_need: classification.context_need,
-    precision: classification.precision,
+/** Project a steering to its core fields plus the new confidence signals. */
+export function coreSteering(
+  steering: Steering,
+): CoreSteering {
+  const core: CoreSteering = {
+    task: steering.task,
+    complexity: steering.complexity,
+    risk: steering.risk,
+    context_need: steering.context_need,
+    precision: steering.precision,
   };
-  if (classification.confidence !== undefined) {
-    core.confidence = classification.confidence;
+  if (steering.confidence !== undefined) {
+    core.confidence = steering.confidence;
   }
-  if (classification.needs_more_context !== undefined) {
-    core.needs_more_context = classification.needs_more_context;
+  if (steering.needs_more_context !== undefined) {
+    core.needs_more_context = steering.needs_more_context;
   }
   return core;
 }
@@ -154,21 +154,21 @@ function toolPlanUses(plan: ToolPlan | undefined, name: ToolName): boolean {
 }
 
 /** Tool-anchored reminders the cloud LLM should honor (replaces guidance). */
-export function compileReminders(classification: Classification): Reminder[] {
-  return classification.reminders ?? [];
+export function compileReminders(steering: Steering): Reminder[] {
+  return steering.reminders ?? [];
 }
 
 /** Additional distinct task types detected (multi-task); undefined if none. */
-export function compileSubtasks(classification: Classification): TaskType[] | undefined {
-  return classification.subtasks;
+export function compileSubtasks(steering: Steering): TaskType[] | undefined {
+  return steering.subtasks;
 }
 
 /** Memory hints: advisory use flag, never instructs to skip memory. */
-export function compileMemoryHints(classification: Classification): {
+export function compileMemoryHints(steering: Steering): {
   use: boolean | 'if_necessary';
   reason?: string;
 } {
-  return classification.memory ?? { use: false };
+  return steering.memory ?? { use: false };
 }
 
 /**
@@ -192,7 +192,7 @@ export function memoryPolicyFor(usesMemory: boolean | 'if_necessary' | undefined
 
 /**
  * Serialized strategy for the cloud LLM — omits `context_need`, which always
- * duplicates `classification.context_need` (the policy engine copies it).
+ * duplicates `steering.context_need` (the policy engine copies it).
  */
 function serializeStrategy(
   strategy: OptimisationStrategy,
@@ -234,8 +234,8 @@ export interface LeanCtxTools {
 }
 
 export interface McpDeps {
-  classify?: (taskText: string) => Promise<ClassificationOutcome>;
-  getStrategy?: (classification: Classification) => OptimisationStrategy;
+  steer?: (taskText: string) => Promise<SteeringOutcome>;
+  getStrategy?: (steering: Steering) => OptimisationStrategy;
   /** Context assessment (assess_context); defaults to assessWithFallback. */
   assess?: (
     taskText: string,
@@ -265,8 +265,8 @@ export interface McpDeps {
 }
 
 interface ResolvedDeps {
-  classify: (taskText: string) => Promise<ClassificationOutcome>;
-  getStrategy: (classification: Classification) => OptimisationStrategy;
+  steer: (taskText: string) => Promise<SteeringOutcome>;
+  getStrategy: (steering: Steering) => OptimisationStrategy;
   assess: (
     taskText: string,
     inventoryText: string,
@@ -314,11 +314,11 @@ const sharedLlmStatus = new LlmStatusTracker();
 function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
   const metricsPath = deps.metricsPath ?? getDefaultMetricsPath();
   return {
-    classify: deps.classify ??
-      ((taskText) => classifyWithFallback(taskText, { trace: getTraceSink() })),
+    steer: deps.steer ??
+      ((taskText) => steerWithFallback(taskText, { trace: getTraceSink() })),
     getStrategy:
       deps.getStrategy ??
-      ((classification) => new PolicyEngine().getStrategy(classification)),
+      ((steering) => new PolicyEngine().getStrategy(steering)),
     assess: deps.assess ?? assessWithFallback,
     leanctx: deps.leanctx ?? sharedLeanctx,
     rtk: deps.rtk ?? sharedRtk,
@@ -359,12 +359,12 @@ function hintText(value: unknown, max = 100_000): string {
 }
 
 /**
- * Build a fast, conservative ClassificationOutcome for the given LLM status,
+ * Build a fast, conservative SteeringOutcome for the given LLM status,
  * with a human-readable reason the cloud LLM can relay to the user.
  */
-function conservativeOutcome(status: LlmStatus): ClassificationOutcome {
+function conservativeOutcome(status: LlmStatus): SteeringOutcome {
   return {
-    classification: structuredClone(conservativeDefaultClassification),
+    steering: structuredClone(conservativeDefaultSteering),
     degraded: true,
     reason:
       status === 'warming'
@@ -374,7 +374,7 @@ function conservativeOutcome(status: LlmStatus): ClassificationOutcome {
 }
 
 /**
- * Classify, but fail fast to conservative defaults while the local LLM is
+ * Steer, but fail fast to conservative defaults while the local LLM is
  * warming up or down — so the cloud LLM gets a fast response instead of
  * stalling on a cold model load (which can take minutes).
  *
@@ -383,12 +383,12 @@ function conservativeOutcome(status: LlmStatus): ClassificationOutcome {
  * to `warming` and kicks off a warm-up so later calls recover automatically
  * instead of staying degraded forever. This call still returns fast defaults.
  */
-function classifyOrDegrade(d: ResolvedDeps, task: string): Promise<ClassificationOutcome> {
+function steerOrDegrade(d: ResolvedDeps, task: string): Promise<SteeringOutcome> {
   const status = d.llmStatus.status;
   // `ready` and the transient `unknown` (pre-warm-up / default tracker) call
   // Ollama directly; only `warming`/`down` take the fast-degrade path.
   if (status === 'ready' || status === 'unknown') {
-    return d.classify(task);
+    return d.steer(task);
   }
   if (status === 'warming') {
     return Promise.resolve(conservativeOutcome('warming'));
@@ -413,30 +413,30 @@ export interface OptimizeContextArgs {
 }
 
 /**
- * Record a classifier (local-LLM) call. Every outcome is recorded — degraded
+ * Record a steering (local-LLM) call. Every outcome is recorded — degraded
  * ones are marked `degraded: true` so the fallback rate is visible; the "real
  * calls" counter filters them out (see `getCallsByTool`).
  */
-function recordClassifierCall(
+function recordSteeringCall(
   record: (event: OptimisationEvent) => void,
-  outcome: ClassificationOutcome,
+  outcome: SteeringOutcome,
   taskText: string,
   requestId: string,
   latencyMs: number,
 ): void {
   // tool_plan is now synthesized deterministically (the model only classifies
   // + extracts entities), so derive the recommended-tool metric from synthesis.
-  const recommended = (synthesizeToolPlan(outcome.classification).recommended_tools ?? []).map(
+  const recommended = (synthesizeToolPlan(outcome.steering).recommended_tools ?? []).map(
     (tool) => tool.name,
   );
   record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
-    task_type: outcome.classification.task,
-    complexity: outcome.classification.complexity,
-    risk: outcome.classification.risk,
+    task_type: outcome.steering.task,
+    complexity: outcome.steering.complexity,
+    risk: outcome.steering.risk,
     tool: 'ollama',
-    operation: 'classify',
+    operation: 'steering',
     origin: 'mcp',
     estimated_input_tokens: Math.round(Buffer.byteLength(taskText) / 4) + 50,
     estimated_output_tokens: 25,
@@ -450,7 +450,7 @@ function recordClassifierCall(
   });
 }
 
-/** `optimize_context` — classify, pick a LeanCTX mode from the policy, compile. */
+/** `optimize_context` — steer, pick a LeanCTX mode from the policy, compile. */
 export async function optimizeContextTool(
   args: OptimizeContextArgs,
   deps: McpDeps = {},
@@ -463,11 +463,11 @@ export async function optimizeContextTool(
   }
   const d = resolveDeps(deps);
   const requestId = resolveRequestId(args.request_id);
-  const classifyStart = performance.now();
-  const outcome = await classifyOrDegrade(d, args.task);
-  const classifyLatencyMs = Math.round(performance.now() - classifyStart);
-  const strategy = d.getStrategy(outcome.classification);
-  recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  const steerStart = performance.now();
+  const outcome = await steerOrDegrade(d, args.task);
+  const steerLatencyMs = Math.round(performance.now() - steerStart);
+  const strategy = d.getStrategy(outcome.steering);
+  recordSteeringCall(d.record, outcome, args.task, requestId, steerLatencyMs);
   if (d.leanctx.optimize === undefined) {
     throw new Error('optimize_context requires a LeanCTX optimize adapter');
   }
@@ -475,16 +475,16 @@ export async function optimizeContextTool(
   const result = await d.leanctx.optimize({
     target: args.target,
     mode: strategy.leanctx_mode,
-    taskType: outcome.classification.task,
+    taskType: outcome.steering.task,
     ...(args.lines !== undefined ? { lines: String(args.lines) } : {}),
   });
   const leanLatencyMs = Math.round(performance.now() - leanStart);
   d.record({
     timestamp: new Date().toISOString(),
     session_id: MCP_SESSION_ID,
-    task_type: outcome.classification.task,
-    complexity: outcome.classification.complexity,
-    risk: outcome.classification.risk,
+    task_type: outcome.steering.task,
+    complexity: outcome.steering.complexity,
+    risk: outcome.steering.risk,
     tool: 'leanctx',
     operation: 'optimize_context',
     estimated_input_tokens: Math.round(result.sourceSize / 4),
@@ -502,27 +502,27 @@ export async function optimizeContextTool(
       ? 'no compression benefit from LeanCTX on this target'
       : undefined;
 
-  const classification = synthesizePlans(outcome.classification);
+  const steering = synthesizePlans(outcome.steering);
   const usesMemory =
-    classification.memory?.use ??
-    toolPlanUses(classification.tool_plan, 'chat_memory_store');
+    steering.memory?.use ??
+    toolPlanUses(steering.tool_plan, 'chat_memory_store');
   return {
     // Most important directions first (response_policy -> ... -> request_id).
-    response_policy: compileResponsePolicy(classification.response_policy),
-    tool_plan: compileToolPlan(classification.tool_plan),
-    reminders: compileReminders(classification),
-    classification: coreClassification(classification),
-    entities: classification.entities,
+    response_policy: compileResponsePolicy(steering.response_policy),
+    tool_plan: compileToolPlan(steering.tool_plan),
+    reminders: compileReminders(steering),
+    steering: coreSteering(steering),
+    entities: steering.entities,
     strategy: serializeStrategy(strategy),
-    memory_hints: compileMemoryHints(classification),
+    memory_hints: compileMemoryHints(steering),
     ...(usesMemory === 'if_necessary'
       ? { memory_policy: memoryPolicyFor(usesMemory) }
       : {}),
-    ...(compileSubtasks(classification) !== undefined
-      ? { subtasks: compileSubtasks(classification) }
+    ...(compileSubtasks(steering) !== undefined
+      ? { subtasks: compileSubtasks(steering) }
       : {}),
-    ...(compileRetrieval(classification.retrieval) !== null
-      ? { retrieval: compileRetrieval(classification.retrieval) }
+    ...(compileRetrieval(steering.retrieval) !== null
+      ? { retrieval: compileRetrieval(steering.retrieval) }
       : {}),
     degraded: result.degraded,
     context: result.context,
@@ -535,7 +535,7 @@ export async function optimizeContextTool(
   };
 }
 
-export interface ClassifyArgs {
+export interface SteerArgs {
   task: string;
   request_id?: string;
 }
@@ -701,19 +701,19 @@ function compileProcedureReviews(
     }));
 }
 
-/** `classify` — classify a task with the local LLM, pick the strategy. */
-export async function classifyTool(
-  args: ClassifyArgs,
+/** `steer` — steer a task with the local LLM, pick the strategy. */
+export async function steerTool(
+  args: SteerArgs,
   deps: McpDeps = {},
 ): Promise<Record<string, unknown>> {
   if (typeof args.task !== 'string' || args.task.length === 0) {
-    throw new Error('classify requires a non-empty string "task"');
+    throw new Error('steer requires a non-empty string "task"');
   }
   const d = resolveDeps(deps);
   // Quick, inexpensive memory lookup: if the project-scoped memory DB contains
   // matching memories for this task, surface them as an auto-generated plan
   // placed into the `tasks/` directory. This is intentionally shallow (simple
-  // substring search) to keep the classifier stateless and fast.
+  // substring search) to keep the steering stateless and fast.
   let relevant_memories: Array<Record<string, unknown>> | undefined = undefined;
   try {
     const store =
@@ -751,28 +751,28 @@ export async function classifyTool(
     d.log(`memory lookup skipped: ${(err as Error).message}`);
   }
   const requestId = resolveRequestId(args.request_id);
-  const classifyStart = performance.now();
-  const outcome = await classifyOrDegrade(d, args.task);
-  const classifyLatencyMs = Math.round(performance.now() - classifyStart);
-  // Capture status after classification so a down->recovering request reports
+  const steerStart = performance.now();
+  const outcome = await steerOrDegrade(d, args.task);
+  const steerLatencyMs = Math.round(performance.now() - steerStart);
+  // Capture status after steering so a down->recovering request reports
   // `warming` (its fast default + notice) rather than the stale pre-call `down`.
   const llmStatus = d.llmStatus.status;
   const llmUnavailable = d.llmStatus.isUnavailable();
   // The model only classifies + extracts entities; synthesize the token-saving
   // fields (tool_plan / evidence_plan / response_policy / reminders) in code.
-  const classification = synthesizePlans(outcome.classification);
-  const strategy = d.getStrategy(outcome.classification);
-  recordClassifierCall(d.record, outcome, args.task, requestId, classifyLatencyMs);
+  const steering = synthesizePlans(outcome.steering);
+  const strategy = d.getStrategy(outcome.steering);
+  recordSteeringCall(d.record, outcome, args.task, requestId, steerLatencyMs);
   // Procedure handoff: match routine, read-only tasks against the local LLM's
   // procedures so the cloud LLM can hand off execution instead of doing it
-  // itself. Best-effort — never breaks classification if the store is missing.
+  // itself. Best-effort — never breaks steering if the store is missing.
   let procedures: Procedure[] | undefined;
   try {
     const store =
       deps.procedureStore ??
       new ProcedureStore();
     try {
-      procedures = store.findMatches(classification.entities, args.task);
+      procedures = store.findMatches(steering.entities, args.task);
     } finally {
       if (deps.procedureStore === undefined) {
         try {
@@ -786,26 +786,26 @@ export async function classifyTool(
     d.log(`procedure lookup skipped: ${(err as Error).message}`);
   }
   const usesMemory =
-    classification.memory?.use ??
-    toolPlanUses(classification.tool_plan, 'chat_memory_store');
+    steering.memory?.use ??
+    toolPlanUses(steering.tool_plan, 'chat_memory_store');
   const slimProcedures = procedures?.map(slimProcedure);
   return {
     // Most important directions first (response_policy -> ... -> request_id).
-    response_policy: compileResponsePolicy(classification.response_policy),
-    tool_plan: compileToolPlan(classification.tool_plan),
-    reminders: compileReminders(classification),
-    classification: coreClassification(classification),
-    entities: classification.entities,
+    response_policy: compileResponsePolicy(steering.response_policy),
+    tool_plan: compileToolPlan(steering.tool_plan),
+    reminders: compileReminders(steering),
+    steering: coreSteering(steering),
+    entities: steering.entities,
     strategy: serializeStrategy(strategy),
-    memory_hints: compileMemoryHints(classification),
+    memory_hints: compileMemoryHints(steering),
     ...(usesMemory === 'if_necessary'
       ? { memory_policy: memoryPolicyFor(usesMemory) }
       : {}),
-    ...(compileSubtasks(classification) !== undefined
-      ? { subtasks: compileSubtasks(classification) }
+    ...(compileSubtasks(steering) !== undefined
+      ? { subtasks: compileSubtasks(steering) }
       : {}),
-    ...(compileRetrieval(classification.retrieval) !== null
-      ? { retrieval: compileRetrieval(classification.retrieval) }
+    ...(compileRetrieval(steering.retrieval) !== null
+      ? { retrieval: compileRetrieval(steering.retrieval) }
       : {}),
     degraded: outcome.degraded,
     llm_status: llmStatus,
@@ -1481,9 +1481,9 @@ export async function assessContextTool(
 
 const TOOL_DEFS = [
   {
-    name: 'classify',
+    name: 'steering',
     description:
-      'Classify the user request with the local LLM and return the recommended ' +
+      'Steer the user request with the local LLM and return the recommended ' +
       'optimisation strategy (LeanCTX mode, compression, search approach), a ' +
       'tool_plan (tools to use/skip) and a response_policy (directives to follow ' +
       'when replying). Call this first on the user request before using the other tools.',
@@ -1492,7 +1492,7 @@ const TOOL_DEFS = [
       properties: {
         task: {
           type: 'string',
-          description: 'The user request / task to classify.',
+          description: 'The user request / task to steer.',
         },
         request_id: {
           type: 'string',
@@ -1536,7 +1536,7 @@ const TOOL_DEFS = [
   {
     name: 'optimize_context',
     description:
-      'Classify a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
+      'Steer a task, then return the LeanCTX-compressed representation of a file/directory as context. ' +
       'Use this instead of reading a large file raw, or to expand/triage shell/command output before ' +
       'sending it to the model.',
     inputSchema: {
@@ -1544,7 +1544,7 @@ const TOOL_DEFS = [
       properties: {
         task: {
           type: 'string',
-          description: 'The task description used to classify and pick the LeanCTX mode.',
+          description: 'The task description used to steer and pick the LeanCTX mode.',
         },
         target: {
           type: 'string',
@@ -1799,7 +1799,7 @@ const TOOL_DEFS = [
       properties: {
         request_id: {
           type: 'string',
-          description: 'The shared request id returned by classify / previous tool calls.',
+          description: 'The shared request id returned by steer / previous tool calls.',
         },
         task: {
           type: 'string',
@@ -1835,8 +1835,12 @@ export async function handleToolCall(
   try {
     let result: Record<string, unknown>;
     switch (name) {
+      case 'steering':
+        result = await steerTool(args as unknown as SteerArgs, deps);
+        break;
+      // Temporary migration alias: `classify` -> `steering` (Task 59).
       case 'classify':
-        result = await classifyTool(args as unknown as ClassifyArgs, deps);
+        result = await steerTool(args as unknown as SteerArgs, deps);
         break;
       case 'procedure_review':
         result = await procedureReviewTool(
@@ -1948,10 +1952,10 @@ export async function runMcpServer(deps: McpDeps = {}): Promise<number> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Fire-and-forget: warm the local LLM in the background so the first
-  // classify doesn't pay the cold-load latency. Never blocks the server —
-  // until ready, classify returns fast conservative defaults with a notice.
+  // steer doesn't pay the cold-load latency. Never blocks the server —
+  // until ready, steer returns fast conservative defaults with a notice.
   void warmUpOnServerStart(resolved);
-  // Auto-start the in-process dashboard (design §9.2) so live classify/MCP
+  // Auto-start the in-process dashboard (design §9.2) so live steer/MCP
   // events stream to it over the shared EventBus. Best-effort, non-blocking.
   void startInProcessDashboard().catch(() => undefined);
   // Client disconnected — release the persistent Serena session (if any).

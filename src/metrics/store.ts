@@ -25,11 +25,11 @@ export interface OptimisationEvent {
   symbols_found?: number;
   /** Serena: number of unique files found. */
   files_found?: number;
-  /** Stable id linking a logical flow (e.g. classify -> optimize_context). */
+  /** Stable id linking a logical flow (e.g. steer -> optimize_context). */
   request_id?: string;
-  /** Tool names the classifier recommended (adoption telemetry, classify events). */
+  /** Tool names the steering recommended (adoption telemetry, steer events). */
   recommended_tools?: string[];
-  /** Origin of the recorded call: 'hook' (UserPromptSubmit/SubagentStart hook) or 'mcp' (classify tool). */
+  /** Origin of the recorded call: 'hook' (UserPromptSubmit/SubagentStart hook) or 'mcp' (steer tool). */
   origin?: string;
 }
 
@@ -131,7 +131,7 @@ export function getDefaultMetricsPath(): string {
  *
  * The VS Code Copilot Chat MCP client records tools exposed by an MCP server
  * with a `<server>_` prefix (`mcp_cadet-token-s_find_relevant_symbols`), while
- * the classifier's `recommended_tools` stores the bare canonical name
+ * the steering's `recommended_tools` stores the bare canonical name
  * (`find_relevant_symbols`). Stripping the `mcp_<server>_` prefix lets the
  * "Recommended vs invoked" view join the two vocabularies on the same row.
  * The server name may be either cadet-token-s or cadet-brainstem, so the strip
@@ -439,20 +439,20 @@ export class MetricsStore {
   }
 
   /**
-   * Classify-event breakdown by origin (hook vs mcp), with degraded counts.
-   * Classify events are recorded from two paths: the UserPromptSubmit hook
-   * (operation `user_prompt`, tool `classify`) and the MCP `classify` tool
-   * (operation `classify`, tool `ollama`). This lets you see which mechanism is
-   * doing the classification and whether it is succeeding or falling back.
+   * Steer-event breakdown by origin (hook vs mcp), with degraded counts.
+   * Steer events are recorded from two paths: the UserPromptSubmit hook
+   * (operation `user_prompt`, tool `steer`) and the MCP `steer` tool
+   * (operation `steer`, tool `ollama`). This lets you see which mechanism is
+   * doing the steering and whether it is succeeding or falling back.
    */
-  getClassifyCallsByOrigin(): Array<{ origin: string; calls: number; degraded: number }> {
+  getSteeringCallsByOrigin(): Array<{ origin: string; calls: number; degraded: number }> {
     const rows = this.db
       .prepare(
         `SELECT COALESCE(origin, 'unknown') AS origin,
                 SUM(CASE WHEN degraded IS NULL OR degraded = 0 THEN 1 ELSE 0 END) AS calls,
                 SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded
          FROM optimisation_events
-         WHERE operation IN ('classify', 'user_prompt')
+         WHERE operation IN ('steering', 'user_prompt')
          GROUP BY origin
          ORDER BY origin`,
       )
@@ -465,7 +465,7 @@ export class MetricsStore {
   }
 
   /**
-   * Adoption telemetry: how many times each tool was RECOMMENDED across classify
+   * Adoption telemetry: how many times each tool was RECOMMENDED across steer
    * events (parsed from the `recommended_tools` JSON column). Compare with
    * `getCallStatsByTool().calls` to see recommended-vs-invoked per tool.
    */

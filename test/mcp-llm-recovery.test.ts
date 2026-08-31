@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Control the availability probe + warm-up without touching a real Ollama.
-vi.mock('../src/classifier', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/classifier')>();
+vi.mock('../src/steering', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/steering')>();
   return {
     ...actual,
     isOllamaAvailable: vi.fn(),
@@ -13,21 +13,21 @@ vi.mock('../src/classifier', async (importOriginal) => {
   };
 });
 
-import { classifyTool, type McpDeps } from '../src/mcp';
+import { steerTool, type McpDeps } from '../src/mcp';
 import {
   LlmStatusTracker,
   isOllamaAvailable,
   warmUpOllama,
-  type ClassificationOutcome,
-} from '../src/classifier';
+  type SteeringOutcome,
+} from '../src/steering';
 import type { OptimisationStrategy } from '../src/policy';
 
 const mockedIsOllamaAvailable = vi.mocked(isOllamaAvailable);
 const mockedWarmUpOllama = vi.mocked(warmUpOllama);
 
-function makeClassification(): ClassificationOutcome {
+function makeSteering(): SteeringOutcome {
   return {
-    classification: {
+    steering: {
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -74,20 +74,20 @@ afterEach(() => {
 });
 
 function makeDeps(tracker: LlmStatusTracker): McpDeps {
-  const classify = vi.fn(async () => makeClassification());
+  const steer = vi.fn(async () => makeSteering());
   return {
-    classify,
+    steer,
     getStrategy: () => makeStrategy(),
     llmStatus: tracker,
     metricsPath,
   };
 }
 
-describe('classify / LLM availability state machine', () => {
-  it('returns the real classification when the LLM is ready', async () => {
+describe('steer / LLM availability state machine', () => {
+  it('returns the real steering when the LLM is ready', async () => {
     const tracker = new LlmStatusTracker();
     tracker.set('ready');
-    const result = await classifyTool({ task: 'debug the loader' }, makeDeps(tracker));
+    const result = await steerTool({ task: 'debug the loader' }, makeDeps(tracker));
     expect(result.degraded).toBe(false);
     expect(result.llm_status).toBe('ready');
     expect(result.notice).toBeUndefined();
@@ -98,13 +98,13 @@ describe('classify / LLM availability state machine', () => {
     const tracker = new LlmStatusTracker();
     tracker.set('warming');
     const deps = makeDeps(tracker);
-    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    const result = await steerTool({ task: 'debug the loader' }, deps);
     expect(result.degraded).toBe(true);
     expect(result.llm_status).toBe('warming');
     expect(result.notice).toContain('warming up');
     expect(result.procedures_unavailable).toBe(true);
     // Must NOT call Ollama (fast path) — no stall on the cold load.
-    expect(deps.classify).not.toHaveBeenCalled();
+    expect(deps.steer).not.toHaveBeenCalled();
   });
 
   it('stays degraded (down) when Ollama is unreachable', async () => {
@@ -112,12 +112,12 @@ describe('classify / LLM availability state machine', () => {
     const tracker = new LlmStatusTracker();
     tracker.set('down');
     const deps = makeDeps(tracker);
-    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    const result = await steerTool({ task: 'debug the loader' }, deps);
     expect(result.degraded).toBe(true);
     expect(result.llm_status).toBe('down');
     expect(result.notice).toContain('down');
     expect(result.procedures_unavailable).toBe(true);
-    expect(deps.classify).not.toHaveBeenCalled();
+    expect(deps.steer).not.toHaveBeenCalled();
     expect(mockedWarmUpOllama).not.toHaveBeenCalled();
     expect(tracker.status).toBe('down');
   });
@@ -136,13 +136,13 @@ describe('classify / LLM availability state machine', () => {
     const tracker = new LlmStatusTracker();
     tracker.set('down');
     const deps = makeDeps(tracker);
-    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    const result = await steerTool({ task: 'debug the loader' }, deps);
     // This call still returns fast conservative defaults (recovering -> warming).
     expect(result.degraded).toBe(true);
     expect(result.llm_status).toBe('warming');
     expect(result.notice).toContain('warming up');
     expect(result.procedures_unavailable).toBe(true);
-    expect(deps.classify).not.toHaveBeenCalled();
+    expect(deps.steer).not.toHaveBeenCalled();
     // Warm-up was kicked off; the tracker stays warming until it completes.
     expect(mockedWarmUpOllama).toHaveBeenCalled();
     expect(tracker.status).toBe('warming');

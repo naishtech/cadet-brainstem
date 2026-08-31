@@ -1,5 +1,5 @@
 import {
-  Classification,
+  Steering,
   EvidencePlan,
   EvidenceQuery,
   LanguageStandard,
@@ -15,10 +15,10 @@ import {
 /**
  * Deterministic synthesis of the token-saving fields (`tool_plan`,
  * `evidence_plan`, `response_policy`, `reminders`) from the lean LLM
- * classification (`task`, `context_need`, `entities`).
+ * steering (`task`, `context_need`, `entities`).
  *
  * Rationale (from testing): the local Qwen model reliably produces the core
- * classification + entity extraction fast and correctly, but is SLOW AND
+ * steering + entity extraction fast and correctly, but is SLOW AND
  * GENERIC when asked to reason about tool/evidence selection. So we stop asking
  * it. These fields are computed here in code from a curated keyword → tool map,
  * which is faster (no second reasoning pass) and more specific (real tool names,
@@ -89,7 +89,7 @@ const TOOL_RULES: ToolRule[] = [
 ];
 
 /** Synthesize `tool_plan` deterministically from entities + context_need. */
-export function synthesizeToolPlan(c: Classification): ToolPlan {
+export function synthesizeToolPlan(c: Steering): ToolPlan {
   // Simple questions need no tools.
   if (c.context_need === 'minimal') {
     return { recommended_tools: [] };
@@ -119,13 +119,13 @@ export function synthesizeToolPlan(c: Classification): ToolPlan {
 }
 
 /** Synthesize the scope string from the task + matched entities. */
-function synthesizeScope(c: Classification): string {
+function synthesizeScope(c: Steering): string {
   const names = c.entities.slice(0, 5).join(', ');
   return names.length > 0 ? `${c.task}: ${names}` : c.task;
 }
 
 /** Synthesize `evidence_plan` — one query per entity. Returns undefined if none. */
-export function synthesizeEvidencePlan(c: Classification): EvidencePlan | undefined {
+export function synthesizeEvidencePlan(c: Steering): EvidencePlan | undefined {
   if (c.context_need === 'minimal') {
     return undefined;
   }
@@ -147,7 +147,7 @@ export function synthesizeEvidencePlan(c: Classification): EvidencePlan | undefi
  * work — maximum clarity, minimal ambiguity. Architecture/planning lean toward
  * Diátaxis (reader-mode structure); everything else uses the house style.
  */
-export function synthesizeLanguageStandard(c: Classification): LanguageStandard {
+export function synthesizeLanguageStandard(c: Steering): LanguageStandard {
   switch (c.task) {
     case 'documentation':
       return 'asd_ste100';
@@ -160,7 +160,7 @@ export function synthesizeLanguageStandard(c: Classification): LanguageStandard 
 }
 
 /** Synthesize response directives deterministically from task/context. */
-export function synthesizeResponsePolicy(c: Classification): ResponsePolicy {
+export function synthesizeResponsePolicy(c: Steering): ResponsePolicy {
   const directives: ResponsePolicyKey[] = [];
   const exploratory = ['debug', 'review', 'investigation'].includes(c.task);
   if (exploratory) {
@@ -178,7 +178,7 @@ export function synthesizeResponsePolicy(c: Classification): ResponsePolicy {
 }
 
 /** Synthesize reminders from the recommended tools. */
-export function synthesizeReminders(c: Classification): Reminder[] {
+export function synthesizeReminders(c: Steering): Reminder[] {
   const tools = c.tool_plan?.recommended_tools ?? [];
   return tools.slice(0, 8).map((t) => ({
     tool: t.name,
@@ -187,16 +187,16 @@ export function synthesizeReminders(c: Classification): Reminder[] {
 }
 
 /**
- * Fill the lean model classification with synthesized token-saving fields.
+ * Fill the lean model steering with synthesized token-saving fields.
  * The model only produces `task/complexity/risk/context_need/entities/
- * confidence/needs_more_context`; this returns the full classification with
+ * confidence/needs_more_context`; this returns the full steering with
  * `tool_plan`, `evidence_plan`, `response_policy` and `reminders` computed in
  * code.
  */
-export function synthesizePlans(c: Classification): Classification {
+export function synthesizePlans(c: Steering): Steering {
   const toolPlan = synthesizeToolPlan(c);
   const evidencePlan = synthesizeEvidencePlan(c);
-  const withPlans: Classification = {
+  const withPlans: Steering = {
     ...c,
     tool_plan: toolPlan,
     response_policy: synthesizeResponsePolicy({ ...c, tool_plan: toolPlan }),

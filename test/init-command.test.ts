@@ -28,7 +28,7 @@ vi.mock('../src/core/installers', () => ({
   startOllamaDocker: startOllamaDockerMock,
 }));
 
-vi.mock('../src/classifier', () => ({
+vi.mock('../src/steering', () => ({
   DEFAULT_OLLAMA_HOST: 'http://localhost:11434',
   isModelAvailable: isModelAvailableMock,
 }));
@@ -82,7 +82,7 @@ describe('runInit', () => {
     expect(exit).toBe(0);
     expect(existsSync(configPath)).toBe(true);
     expect(existsSync(metricsPath)).toBe(true);
-    expect(loadConfig(configPath).classifier.model).toBe('qwen3:4b');
+    expect(loadConfig(configPath).steering.model).toBe('qwen3:4b');
     const out = lines.join('\n');
     expect(out).toContain('config created');
     expect(out).toContain('metrics database ready');
@@ -103,7 +103,7 @@ describe('runInit', () => {
     await runInit(deps);
     await runInit(deps);
 
-    expect(loadConfig(configPath).classifier.model).toBe('qwen3:4b');
+    expect(loadConfig(configPath).steering.model).toBe('qwen3:4b');
     const store = new MetricsStore(metricsPath);
     expect(store.count()).toBe(0);
     store.close();
@@ -155,7 +155,7 @@ describe('runInit', () => {
     );
   });
 
-  it('pulls the classifier model when the user consents', async () => {
+  it('pulls the steering model when the user consents', async () => {
     pullOllamaModelMock.mockResolvedValue({ stdout: 'pulling…', stderr: '' });
     const lines: string[] = [];
 
