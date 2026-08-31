@@ -85,7 +85,9 @@ export class DashboardServer {
     this.jsonlTailer = new JsonlTailer({
       path: options.jsonlPath ?? getDashboardLogPath(),
       bus: this.eventBus,
-      intervalMs: options.jsonlIntervalMs,
+      ...(options.jsonlIntervalMs !== undefined
+        ? { intervalMs: options.jsonlIntervalMs }
+        : {}),
     });
     this.registerRoutes();
   }
