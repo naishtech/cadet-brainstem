@@ -62,6 +62,7 @@ describe('default config', () => {
         model: 'qwen3:4b',
         timeout_ms: 60000,
         keep_alive: '30m',
+        think: false,
       },
       session: { max_turns: 30 },
       optimisation: { enabled: true, default_budget: 12000 },
@@ -159,6 +160,7 @@ describe('loadConfig', () => {
       model: 'llama3',
       timeout_ms: 60000,
       keep_alive: '30m',
+      think: false,
     });
     expect(cfg.session.max_turns).toBe(30);
     expect(cfg.telemetry.enabled).toBe(false);
@@ -190,6 +192,7 @@ describe('saveConfig + round-trip', () => {
         model: 'custom-model',
         timeout_ms: 45000,
         keep_alive: '15m',
+        think: false,
       },
       session: { max_turns: 5 },
     };

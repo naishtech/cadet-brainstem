@@ -39,6 +39,9 @@ export type DashboardEvent =
   | { type: 'llm.trace.start'; ts: number; id: string; model: string; request: string }
   | { type: 'llm.trace.token'; ts: number; id: string; delta: string }
   | { type: 'llm.trace.complete'; ts: number; id: string; usage?: LlmUsage }
+  | { type: 'llm.trace.think.start'; ts: number; id: string }
+  | { type: 'llm.trace.think.token'; ts: number; id: string; delta: string }
+  | { type: 'llm.trace.think.complete'; ts: number; id: string }
   | { type: 'stats.updated'; ts: number };
 
 export interface EventBusOptions {
@@ -192,6 +195,18 @@ export class EventBus {
 
   traceComplete(input: { id: string; usage?: LlmUsage }): void {
     this.publish({ type: 'llm.trace.complete', ts: now(), ...input });
+  }
+
+  traceThinkStart(input: { id: string }): void {
+    this.publish({ type: 'llm.trace.think.start', ts: now(), ...input });
+  }
+
+  traceThinkToken(input: { id: string; delta: string }): void {
+    this.publish({ type: 'llm.trace.think.token', ts: now(), ...input });
+  }
+
+  traceThinkComplete(input: { id: string }): void {
+    this.publish({ type: 'llm.trace.think.complete', ts: now(), ...input });
   }
 
   statsUpdated(): void {

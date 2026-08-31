@@ -31,5 +31,26 @@ export function getTraceSink(bus: EventBus = getEventBus()): TraceSink {
         /* best-effort */
       }
     },
+    thinkStart(info) {
+      try {
+        bus.traceThinkStart({ id: info.id });
+      } catch {
+        /* best-effort */
+      }
+    },
+    thinkToken(info) {
+      try {
+        bus.traceThinkToken({ id: info.id, delta: info.delta });
+      } catch {
+        /* best-effort */
+      }
+    },
+    thinkComplete(info) {
+      try {
+        bus.traceThinkComplete({ id: info.id });
+      } catch {
+        /* best-effort */
+      }
+    },
   };
 }
