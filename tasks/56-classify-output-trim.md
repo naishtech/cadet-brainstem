@@ -3,9 +3,14 @@
 **Risk rationale:** Low — output-layer trim only; internal `Classification` type,
 schema sanitizers, and deterministic synthesis are untouched.
 
-**Status:** Not started
+**Status:** Done — implemented and merged (2026-08-31, PR #45)
 **Phase:** Phase 14
 **Source:** `docs/plans/classify-output-trim.md` (promoted to task 56)
+
+> **Implementation note:** item 3 used option **(a)** — `context_need` is stripped from the
+> serialized strategy at return time via `serializeStrategy()` in `src/mcp/server.ts`. The
+> internal `OptimisationStrategy`/`PolicyEngine` still carry `context_need` (option (b) was
+> not applied). All other items (1–2, 4–7) and the field re-ordering are applied.
 
 ## Objective
 
@@ -96,9 +101,9 @@ fields and before `request_id`.
 
 ## Acceptance Criteria
 
-- [ ] `npm test` — all suites pass.
-- [ ] `npm run build` (tsup) — no type errors from removed helpers/fields.
-- [ ] Manual `classify` call: the seven redundancies are gone while `entities`, `reminders`,
+- [x] `npm test` — all suites pass.
+- [x] `npm run build` (tsup) — no type errors from removed helpers/fields.
+- [x] Manual `classify` call: the seven redundancies are gone while `entities`, `reminders`,
       `tool_plan`, `response_policy` remain, and retained fields appear in the priority
       order (`response_policy` → … → `request_id`).
-- [ ] `assess_context` and `chat_memory_store` outputs are unchanged.
+- [x] `assess_context` and `chat_memory_store` outputs are unchanged.
