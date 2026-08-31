@@ -85,7 +85,9 @@ export class DashboardServer {
     this.jsonlTailer = new JsonlTailer({
       path: options.jsonlPath ?? getDashboardLogPath(),
       bus: this.eventBus,
-      intervalMs: options.jsonlIntervalMs,
+      ...(options.jsonlIntervalMs !== undefined
+        ? { intervalMs: options.jsonlIntervalMs }
+        : {}),
     });
     this.registerRoutes();
   }
@@ -219,8 +221,11 @@ export class DashboardServer {
     res.on('close', () => {
       this.sseConnections.delete(conn);
     });
-    // Replay recent buffered events, then live events flow via the broadcast.
-    for (const event of this.eventBus.recent(100)) {
+    // Replay recent buffered events in chronological order (oldest-first) so
+    // clients can reconstruct state correctly — e.g. the LLM tab needs
+    // `llm.trace.start` before `llm.trace.complete` to mark a trace done.
+    // `recent()` returns newest-first, so reverse before replaying.
+    for (const event of this.eventBus.recent(100).reverse()) {
       const { type, ...data } = event;
       conn.write(type, data);
     }

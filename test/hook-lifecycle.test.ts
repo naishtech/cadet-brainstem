@@ -148,6 +148,39 @@ describe('runHookUserPrompt', () => {
     }
   });
 
+  it('publishes request/response/stats.updated to the dashboard', async () => {
+    const published: Array<{ type: string }> = [];
+    const { deps, outputs } = makeDeps(
+      sessionPayload('s1', { prompt: 'refactor the auth module' }),
+      {
+        classify: async () => ({
+          classification: {
+            task: 'refactor',
+            context_need: 'targeted',
+            complexity: 'medium',
+            risk: 'medium',
+            precision: 'normal',
+            entities: ['refactor'],
+            guidance: '',
+            tool_plan: { recommended_tools: [] },
+            response_policy: { directives: [] },
+          },
+          degraded: false,
+        }),
+        publishEvents: async (events) => {
+          published.push(...events.map((e) => ({ type: e.type })));
+        },
+      },
+    );
+    const exit = await runHookUserPrompt(deps);
+    expect(exit).toBe(0);
+    const types = published.map((e) => e.type);
+    expect(types[0]).toBe('request');
+    expect(types).toContain('response');
+    expect(types).toContain('stats.updated');
+    expect(outputs[0]).toBeDefined();
+  });
+
   it('is a no-op when no prompt is present', async () => {
     const { deps, outputs } = makeDeps(sessionPayload());
     const exit = await runHookUserPrompt(deps);
@@ -173,6 +206,24 @@ describe('runHookPostTool', () => {
     const totals = store.getTotals();
     store.close();
     expect(totals.eventCount).toBeGreaterThan(0);
+  });
+
+  it('publishes request/response/stats.updated to the dashboard', async () => {
+    const published: Array<{ type: string }> = [];
+    const { deps } = makeDeps(
+      sessionPayload('s1', { tool_name: 'grep_search', tool_output: 'x' }),
+      {
+        publishEvents: async (events) => {
+          published.push(...events.map((e) => ({ type: e.type })));
+        },
+      },
+    );
+    const exit = await runHookPostTool(deps);
+    expect(exit).toBe(0);
+    const types = published.map((e) => e.type);
+    expect(types[0]).toBe('request');
+    expect(types).toContain('response');
+    expect(types).toContain('stats.updated');
   });
 });
 

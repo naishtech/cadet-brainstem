@@ -2,7 +2,11 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**'] },
+  {
+    // Scratch/debug artifacts (tmp-session-*.cjs etc.) are not shipped and are
+    // not part of the lint-gated publish surface.
+    ignores: ['dist/**', 'node_modules/**', 'scripts/tmp-*'],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
