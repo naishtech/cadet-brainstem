@@ -15,6 +15,7 @@ import {
 } from '../../classifier';
 
 import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
+import { getTraceSink } from '../../dashboard/trace';
 import type { CliCommand } from '../types';
 
 /**
@@ -275,7 +276,7 @@ export async function runHookUserPrompt(
   }
 
   const { classification, degraded } = await (deps.classify ??
-    classifyWithFallback)(prompt);
+    classifyWithFallback)(prompt, { trace: getTraceSink() });
   // The model only classifies + extracts entities; synthesize the steering
   // fields (tool_plan / response_policy) in code for the injected context.
   const synthesized = synthesizePlans(classification);
@@ -436,6 +437,7 @@ export async function runHookSubagentStart(
   if (prompt.trim()) {
     const { classification } = await (deps.classify ?? classifyWithFallback)(
       prompt,
+      { trace: getTraceSink() },
     );
     const tools = (classification.tool_plan?.recommended_tools ?? [])
       .map((t) => t.name)

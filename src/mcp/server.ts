@@ -340,7 +340,15 @@ function resolveRequestId(provided: string | undefined): string {
 }
 
 /** Bounded summary hint for dashboard instrumentation (avoids huge SSE frames). */
-function hintText(value: unknown, max = 400): string {
+/**
+ * Serialize a tool input/result for the dashboard request/response columns.
+ *
+ * The cap is deliberately generous: the Instrumenter applies the real
+ * truncation policy (`dashboard.captureFull` → 120-char hints when off, full
+ * content when on). This upper bound only guards against pathological payloads
+ * (e.g. a huge symbol dump) blowing up the in-memory ring buffer / JSONL.
+ */
+function hintText(value: unknown, max = 100_000): string {
   let text: string;
   try {
     text = JSON.stringify(value);

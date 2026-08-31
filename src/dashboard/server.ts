@@ -6,7 +6,8 @@ import pkg from '../../package.json';
 import { getDefaultMetricsPath, MetricsStore, formatStats } from '../metrics';
 import { Router, sendJson } from './router';
 import { openSse, type SseConnection } from './stream';
-import { getEventBus, type DashboardEvent, type EventBus } from './event-bus';
+import { getEventBus, getDashboardLogPath, type DashboardEvent, type EventBus } from './event-bus';
+import { JsonlTailer } from './jsonl-tail';
 import { getServiceStatus, type ToolStatus } from './status';
 
 export const DEFAULT_DASHBOARD_HOST = '127.0.0.1';
@@ -50,6 +51,10 @@ export interface DashboardServerOptions {
   getStatus?: () => Promise<ToolStatus[]>;
   /** Optional log sink. */
   log?: (line: string) => void;
+  /** Shared JSONL log to tail for cross-process events. Defaults to the standard path. */
+  jsonlPath?: string;
+  /** JSONL poll interval in ms. Defaults to 1000. */
+  jsonlIntervalMs?: number;
 }
 
 export interface ServerInfo {
@@ -72,10 +77,16 @@ export class DashboardServer {
   private heartbeat: NodeJS.Timeout | undefined;
   private statusTimer: NodeJS.Timeout | undefined;
   private unsubscribe: (() => void) | undefined;
+  private readonly jsonlTailer: JsonlTailer;
 
   constructor(options: DashboardServerOptions = {}) {
     this.options = options;
     this.eventBus = options.eventBus ?? getEventBus();
+    this.jsonlTailer = new JsonlTailer({
+      path: options.jsonlPath ?? getDashboardLogPath(),
+      bus: this.eventBus,
+      intervalMs: options.jsonlIntervalMs,
+    });
     this.registerRoutes();
   }
 
@@ -130,6 +141,7 @@ export class DashboardServer {
     this.info = { host, port, url: `http://${host}:${port}` };
     this.startHeartbeat();
     this.startStatusRefresh();
+    this.jsonlTailer.start();
     return this.info;
   }
 
@@ -137,6 +149,7 @@ export class DashboardServer {
   async stop(): Promise<void> {
     this.stopHeartbeat();
     this.stopStatusRefresh();
+    this.jsonlTailer.stop();
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     for (const conn of this.sseConnections) {

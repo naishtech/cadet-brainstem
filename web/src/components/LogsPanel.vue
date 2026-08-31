@@ -70,27 +70,61 @@ function statusSummary(
           class="py-1 border-b border-zinc-800"
         >
           <span class="text-zinc-500">{{ time(event.ts) }}</span>
-          <span class="ml-2">{{ event.type }}</span>
-          <span v-if="event.type === 'log'" class="ml-2 text-zinc-300">
-            {{ (event as Extract<DashboardEvent, { type: 'log' }>).message }}
-          </span>
-          <span v-else-if="event.type === 'request'" class="ml-2 text-zinc-300">
-            {{ (event as Extract<DashboardEvent, { type: 'request' }>).operation }}
-          </span>
-          <span
-            v-else-if="event.type === 'response'"
-            class="ml-2"
-            :class="
-              (event as Extract<DashboardEvent, { type: 'response' }>).ok
-                ? 'text-emerald-400'
-                : 'text-red-400'
-            "
-          >
-            {{ (event as Extract<DashboardEvent, { type: 'response' }>).ok ? 'ok' : 'fail' }}
-          </span>
-          <span v-else-if="event.type === 'status'" class="ml-2 text-zinc-300">
-            {{ statusSummary(event as Extract<DashboardEvent, { type: 'status' }>) }}
-          </span>
+          <span class="ml-2 text-zinc-500">{{ event.type }}</span>
+          <template v-if="event.type === 'log'">
+            <span class="ml-2 text-zinc-300">
+              {{ (event as Extract<DashboardEvent, { type: 'log' }>).message }}
+            </span>
+          </template>
+          <template v-else-if="event.type === 'request'">
+            <span class="ml-2 text-sky-300">
+              {{ (event as Extract<DashboardEvent, { type: 'request' }>).tool }}
+            </span>
+            <span class="ml-2 text-zinc-200 font-semibold">
+              {{ (event as Extract<DashboardEvent, { type: 'request' }>).operation }}
+            </span>
+            <details
+              v-if="(event as Extract<DashboardEvent, { type: 'request' }>).inputHint"
+              class="inline-block ml-2 align-middle text-zinc-400"
+            >
+              <summary class="inline-block cursor-pointer select-none">request</summary>
+              <pre class="mt-1 whitespace-pre-wrap break-all bg-zinc-950 rounded p-2 text-zinc-200">{{
+                (event as Extract<DashboardEvent, { type: 'request' }>).inputHint
+              }}</pre>
+            </details>
+          </template>
+          <template v-else-if="event.type === 'response'">
+            <span
+              class="ml-2"
+              :class="
+                (event as Extract<DashboardEvent, { type: 'response' }>).ok
+                  ? 'text-emerald-400'
+                  : 'text-red-400'
+              "
+            >
+              {{ (event as Extract<DashboardEvent, { type: 'response' }>).ok ? 'ok' : 'fail' }}
+            </span>
+            <span
+              v-if="(event as Extract<DashboardEvent, { type: 'response' }>).latencyMs !== undefined"
+              class="ml-2 text-zinc-500"
+            >
+              {{ (event as Extract<DashboardEvent, { type: 'response' }>).latencyMs }}ms
+            </span>
+            <details
+              v-if="(event as Extract<DashboardEvent, { type: 'response' }>).outputHint"
+              class="inline-block ml-2 align-middle text-zinc-400"
+            >
+              <summary class="inline-block cursor-pointer select-none">response</summary>
+              <pre class="mt-1 whitespace-pre-wrap break-all bg-zinc-950 rounded p-2 text-zinc-200">{{
+                (event as Extract<DashboardEvent, { type: 'response' }>).outputHint
+              }}</pre>
+            </details>
+          </template>
+          <template v-else-if="event.type === 'status'">
+            <span class="ml-2 text-zinc-300">
+              {{ statusSummary(event as Extract<DashboardEvent, { type: 'status' }>) }}
+            </span>
+          </template>
         </div>
       </template>
     </div>
