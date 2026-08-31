@@ -17,7 +17,7 @@ const stats: StatsPayload = {
   savingsByTool: [],
   savingsByTaskType: [],
   callStats: [],
-  classifyByOrigin: [],
+  steerByOrigin: [],
   recommendedByTool: [],
   sessions: [],
   mostExpensiveOperations: [],

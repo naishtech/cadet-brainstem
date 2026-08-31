@@ -16,9 +16,9 @@ How to use Cadet Brainstem from VS Code to reduce agent token usage.
 the **cadet-brainstem** MCP server appears in Copilot Chat's tools. The agent
 can then call:
 
-- `classify` — classify the current user request with the local Ollama model
+- `steering` — steering the current user request with the local Ollama model
    and return the deterministic optimisation strategy. Call this first.
-- `optimize_context` — classify the task, return the LeanCTX-compressed
+- `optimize_context` — steering the task, return the LeanCTX-compressed
   representation of a file/directory.
 - `find_relevant_symbols` — Serena semantic search for task-relevant symbols.
 - `compress_command_output` — RTK-reduced output for a command.
@@ -30,7 +30,7 @@ running until the client disconnects).
 
 ## 2. Steer the agent
 
-`AGENTS.md` (repo root) tells the agent to call `classify` at the start of
+`AGENTS.md` (repo root) tells the agent to call `steering` at the start of
 every turn, then prefer `optimize_context` / `find_relevant_symbols` for large
 context reads and `wrap` for noisy commands. It also tells the agent to check
 `chat_memory_store` before starting work and, at the end of each response, to
@@ -42,7 +42,7 @@ project's `AGENTS.md`.
 This is an instruction-level preference, not a protocol guarantee. Copilot
 Chat decides whether to call an MCP tool; the MCP server cannot intercept or
 reject a user message that arrives without a tool call. For guaranteed
-classification, put the classification step in a wrapper or gateway that
+steering, put the steering step in a wrapper or gateway that
 owns the chat request before it reaches the model. The built-in fallback keeps
 normal operation available when Ollama or MCP is unavailable.
 
@@ -83,7 +83,7 @@ loop (this file is local/untracked — copy it into your repo):
   `approved: true` it allows. Other tools pass through:
   `cadet-brainstem hook-procedure-review`
 
-The write-review flow is: `classify` flags a write procedure →
+The write-review flow is: `steering` flags a write procedure →
 `procedure_review` shows the diff → user approves →
 `procedure_apply {approved: true}` applies (and `executeProcedure` verifies the
 applied file matches the reviewed diff).

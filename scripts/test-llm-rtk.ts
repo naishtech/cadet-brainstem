@@ -10,7 +10,7 @@
  *   3. RTK output is fed back to the local LLM.
  *   4. Local LLM reports the results.
  */
-import { resolveBaseModel } from '../src/classifier';
+import { resolveBaseModel } from '../src/steering';
 import { RtkAdapter } from '../src/integrations/rtk';
 
 const HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';

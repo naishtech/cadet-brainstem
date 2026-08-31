@@ -26,7 +26,7 @@ export interface StartDashboardResult {
 }
 
 /**
- * Start the dashboard in-process (design doc §9.2) so live classify/MCP events
+ * Start the dashboard in-process (design doc §9.2) so live steer/MCP events
  * stream to it over the shared EventBus. Called by the MCP server on start.
  *
  * Never throws and never blocks: the dashboard is best-effort and its failure

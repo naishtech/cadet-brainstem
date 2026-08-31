@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { classifyTool, procedureApplyTool, procedureReviewTool } from '../src/mcp';
+import { steerTool, procedureApplyTool, procedureReviewTool } from '../src/mcp';
 import { ProcedureStore } from '../src/procedure';
 
 const tempDirs: string[] = [];
@@ -55,9 +55,9 @@ function seededStore(): ProcedureStore {
   return store;
 }
 
-function stubClassify(entities: string[]) {
+function stubSteer(entities: string[]) {
   return async () => ({
-    classification: {
+    steering: {
       task: 'search',
       complexity: 'low',
       risk: 'low',
@@ -84,11 +84,11 @@ describe('procedure matcher (repeatable)', () => {
     store.close();
   });
 
-  it('classifyTool returns a procedures handoff list for a matching request', async () => {
+  it('steerTool returns a procedures handoff list for a matching request', async () => {
     const store = seededStore();
-    const result = (await classifyTool(
+    const result = (await steerTool(
       { task: 'gather and compress the relevant context for this file' },
-      { classify: stubClassify(['context', 'compress', 'file']) as any, procedureStore: store },
+      { steer: stubSteer(['context', 'compress', 'file']) as any, procedureStore: store },
     )) as any;
 
     expect(Array.isArray(result.procedures)).toBe(true);
@@ -98,18 +98,18 @@ describe('procedure matcher (repeatable)', () => {
     store.close();
   });
 
-  it('classifyTool returns no procedures when nothing matches', async () => {
+  it('steerTool returns no procedures when nothing matches', async () => {
     const store = seededStore();
-    const result = (await classifyTool(
+    const result = (await steerTool(
       { task: 'deploy the website to production' },
-      { classify: stubClassify(['deploy', 'website']) as any, procedureStore: store },
+      { steer: stubSteer(['deploy', 'website']) as any, procedureStore: store },
     )) as any;
 
     expect(result.procedures).toEqual([]);
     store.close();
   });
 
-  it('classifyTool includes review guidance for write procedures (review gate)', async () => {
+  it('steerTool includes review guidance for write procedures (review gate)', async () => {
     const store = seededStore();
     store.seedProcedure({
       triggerPattern: 'Replace content in a file',
@@ -117,9 +117,9 @@ describe('procedure matcher (repeatable)', () => {
       steps: [{ service: 'serena', tool: 'replace_content', args: {} }],
       riskTier: 'requires_review',
     });
-    const result = (await classifyTool(
+    const result = (await steerTool(
       { task: 'replace content in a file' },
-      { classify: stubClassify(['replace', 'content', 'edit']) as any, procedureStore: store },
+      { steer: stubSteer(['replace', 'content', 'edit']) as any, procedureStore: store },
     )) as any;
 
     expect(Array.isArray(result.procedures_review)).toBe(true);

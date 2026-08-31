@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../config/index';
 import Mustache from 'mustache';
 import {
-  CLASSIFICATION_JSON_SCHEMA,
-  Classification,
-  ClassificationValidationError,
+  STEERING_JSON_SCHEMA,
+  Steering,
+  SteeringValidationError,
   PROCEDURE_EXTRACTION_JSON_SCHEMA,
   TOOL_NAMES,
-  parseClassification,
+  parseSteering,
   parseContextAssessment,
   parseProcedureExtraction,
   type ContextAssessment,
@@ -16,21 +16,21 @@ import {
 } from './schema';
 
 export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
-export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000;
+export const DEFAULT_STEERING_TIMEOUT_MS = 30_000;
 
 /** How long the model is kept loaded between calls (Ollama keep_alive). */
 export const DEFAULT_KEEP_ALIVE = '30m';
 
-/** Max tokens to generate for a classification decision. */
+/** Max tokens to generate for a steering decision. */
 export const DEFAULT_NUM_PREDICT = 400;
 /** Context window sized to the actual prompt+schema length. */
 export const DEFAULT_NUM_CTX = 2048;
 
 /** Raised when Ollama is unreachable or returns a non-OK/invalid response. */
-export class ClassifierUnavailableError extends Error {
+export class SteeringUnavailableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ClassifierUnavailableError';
+    this.name = 'SteeringUnavailableError';
   }
 }
 
@@ -40,7 +40,7 @@ export interface LlmUsage {
 }
 
 /**
- * Live LLM trace sink (design doc §7). When provided, the classifier streams
+ * Live LLM trace sink (design doc §7). When provided, the steering streams
  * the model's output and emits start/token/complete events so the dashboard can
  * render the reasoning live. Optional — callers that don't pass one get the
  * original non-streaming behaviour unchanged.
@@ -60,8 +60,8 @@ export interface TraceSink {
   thinkComplete?(info: { id: string }): void;
 }
 
-export interface ClassifierOptions {
-  /** Overrides the configured `classifier.model`. */
+export interface SteeringOptions {
+  /** Overrides the configured `steering.model`. */
   model?: string;
   /** Overrides `OLLAMA_HOST` / the default localhost host. */
   host?: string;
@@ -72,7 +72,7 @@ export interface ClassifierOptions {
   trace?: TraceSink;
 }
 
-const CLASSIFICATION_SHAPE = `{
+const STEERING_SHAPE = `{
   "task": "question | coding_new | coding_fix | debug | refactor | test | review | architecture | documentation | investigation | planning | search | configuration",
   "complexity": "low | medium | high",
   "risk": "low | medium | high",
@@ -82,12 +82,12 @@ const CLASSIFICATION_SHAPE = `{
   "needs_more_context": false
 }`;
 
-const DEFAULT_CLASSIFIER_PROMPT_TEMPLATE = `You are a task classifier for an AI coding agent context optimizer.
-Classify the user request ONLY — do NOT solve it, do NOT suggest tools or
+const DEFAULT_STEERING_PROMPT_TEMPLATE = `You are a task steering for an AI coding agent context optimizer.
+Steer the user request ONLY — do NOT solve it, do NOT suggest tools or
 search queries (that is handled separately), do NOT invent information.
 
 Respond with exactly this JSON shape:
-{{{classificationShape}}}
+{{{steeringShape}}}
 
 task: "review" is for reviewing existing code, changes, or a PR.
 Do not use "review" for design, planning, architecture, or exploratory requests.
@@ -109,8 +109,8 @@ implied) in the request — e.g. "checkout page", "blueprint", "X300",
 "Docs/Components". Simple EXTRACTION, NOT reasoning: do not invent tools, do not
 reason about how to accomplish the task. 2-6 entries is typical.
 
-confidence: a number 0..1 for how sure you are of this classification.
-needs_more_context: true only when you cannot classify well without seeing
+confidence: a number 0..1 for how sure you are of this steering.
+needs_more_context: true only when you cannot steer well without seeing
 more of the repository.
 
 User request:
@@ -118,19 +118,19 @@ User request:
 {{{userRequest}}}
 """`;
 
-function loadClassifierPromptTemplate(): string {
+function loadSteeringPromptTemplate(): string {
   try {
-    return readFileSync(new URL('./classifier-prompt.mustache', import.meta.url), 'utf8');
+    return readFileSync(new URL('./steering-prompt.mustache', import.meta.url), 'utf8');
   } catch {
-    return DEFAULT_CLASSIFIER_PROMPT_TEMPLATE;
+    return DEFAULT_STEERING_PROMPT_TEMPLATE;
   }
 }
 
-/** Build the classifier prompt. It instructs the model to classify ONLY. */
+/** Build the steering prompt. It instructs the model to steer ONLY. */
 export function buildPrompt(taskText: string, template?: string): string {
-  const promptTemplate = template ?? loadClassifierPromptTemplate();
+  const promptTemplate = template ?? loadSteeringPromptTemplate();
   return Mustache.render(promptTemplate, {
-    classificationShape: CLASSIFICATION_SHAPE,
+    steeringShape: STEERING_SHAPE,
     userRequest: taskText,
   });
 }
@@ -179,7 +179,7 @@ export function buildExtractPrompt(conversationText: string): string {
     '- keywords: 2-6 match terms for recognizing this task again.',
     '- confidence: 0..1 for how sure you are. Be honest — low confidence means',
     '  you should lean toward is_procedural false.',
-    '- classification/extraction only — do not write code, do not explain.',
+    '- steering/extraction only — do not write code, do not explain.',
     '',
     'Conversation:',
     '"""',
@@ -254,7 +254,7 @@ export async function isModelAvailable(
 
 export interface WarmUpOptions {
   host?: string;
-  /** Model to load (defaults to the configured classifier model). */
+  /** Model to load (defaults to the configured steering model). */
   model?: string;
   /** keep_alive for the warm request (defaults to config). */
   keepAlive?: string | number;
@@ -276,7 +276,7 @@ export interface WarmUpResult {
 }
 
 /**
- * Force the local model to load so the first real classify call doesn't pay
+ * Force the local model to load so the first real steer call doesn't pay
  * the cold-load latency (which can take minutes on a cold start). Pings the
  * server, verifies the model is present, then issues a tiny throwaway chat
  * request with a generous timeout. Never throws — returns a WarmUpResult.
@@ -333,11 +333,11 @@ export async function warmUpOllama(options: WarmUpOptions = {}): Promise<WarmUpR
 }
 
 /**
- * Local Ollama classifier. Uses HTTP only — it never executes or constructs
+ * Local Ollama steering. Uses HTTP only — it never executes or constructs
  * shell commands (safety principle §14.4). Model and host come from config
  * (with env/host override), never hard-coded.
  */
-export class OllamaClassifier {
+export class OllamaSteerer {
   readonly model: string;
   readonly host: string;
   readonly timeoutMs: number;
@@ -346,7 +346,7 @@ export class OllamaClassifier {
   readonly trace: TraceSink | undefined;
   private lastUsage: LlmUsage | undefined;
 
-  constructor(options: ClassifierOptions = {}) {
+  constructor(options: SteeringOptions = {}) {
     this.model = resolveModel(options.model);
     this.host =
       options.host !== undefined && options.host.length > 0
@@ -362,13 +362,13 @@ export class OllamaClassifier {
     return isOllamaAvailable(this.host);
   }
 
-  async classify(taskText: string): Promise<Classification> {
+  async steer(taskText: string): Promise<Steering> {
     // Always send the full prompt template with the field defs (there is no
-    // derived fast-classifier model anymore).
+    // derived fast-steering model anymore).
     const prompt = buildPrompt(taskText);
     // Structured output constrains enum values, so the model emits valid
-    // classification fields.
-    return parseClassification(await this.chatJson(prompt, CLASSIFICATION_JSON_SCHEMA));
+    // steering fields.
+    return parseSteering(await this.chatJson(prompt, STEERING_JSON_SCHEMA));
   }
 
   /** Decide whether the context gathered so far is sufficient (assess_context). */
@@ -397,11 +397,11 @@ export class OllamaClassifier {
       model: this.model,
       messages: [{ role: 'user', content: prompt }],
       stream: false,
-      // Structured output for classify: pass the JSON Schema so the model
-      // emits valid JSON matching the classification shape. Assess keeps
+      // Structured output for steer: pass the JSON Schema so the model
+      // emits valid JSON matching the steering shape. Assess keeps
       // plain JSON mode (no schema).
       format,
-      // Routing (classify/assess) never reasons — it is a cheap decision.
+      // Routing (steer/assess) never reasons — it is a cheap decision.
       think: false,
       // Keep the model warm between calls so a cold reload (which can take
       // ~10s on CPU) doesn't blow the timeout.
@@ -453,13 +453,13 @@ export class OllamaClassifier {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
-      throw new ClassifierUnavailableError(
+      throw new SteeringUnavailableError(
         `Could not reach Ollama at ${this.host}: ${(err as Error).message}`,
       );
     }
 
     if (!response.ok) {
-      throw new ClassifierUnavailableError(
+      throw new SteeringUnavailableError(
         `Ollama responded with HTTP ${response.status} at ${this.host}`,
       );
     }
@@ -468,13 +468,13 @@ export class OllamaClassifier {
     try {
       data = (await response.json()) as { message?: { content?: unknown } };
     } catch (err) {
-      throw new ClassifierUnavailableError(
+      throw new SteeringUnavailableError(
         `Ollama returned invalid JSON: ${(err as Error).message}`,
       );
     }
 
     if (data.message === undefined || typeof data.message.content !== 'string') {
-      throw new ClassifierUnavailableError('Ollama returned no message content');
+      throw new SteeringUnavailableError('Ollama returned no message content');
     }
 
     // Latency instrumentation (nanoseconds) — lets us tell whether load,
@@ -486,7 +486,7 @@ export class OllamaClassifier {
       eval_duration?: number;
     };
     this.log(
-      `[cadet-brainstem] classifier durations (ns) model=${this.model} ` +
+      `[cadet-brainstem] steering durations (ns) model=${this.model} ` +
         `total=${d.total_duration ?? 'n/a'} load=${d.load_duration ?? 'n/a'} ` +
         `prompt_eval=${d.prompt_eval_duration ?? 'n/a'} eval=${d.eval_duration ?? 'n/a'}`,
     );
@@ -512,12 +512,12 @@ export class OllamaClassifier {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
-      throw new ClassifierUnavailableError(
+      throw new SteeringUnavailableError(
         `Could not reach Ollama at ${this.host}: ${(err as Error).message}`,
       );
     }
     if (!response.ok || response.body === null) {
-      throw new ClassifierUnavailableError(
+      throw new SteeringUnavailableError(
         `Ollama responded with HTTP ${response.status} at ${this.host}`,
       );
     }
@@ -585,7 +585,7 @@ export class OllamaClassifier {
     }
 
     if (accumulated.length === 0) {
-      throw new ClassifierUnavailableError('Ollama returned no message content');
+      throw new SteeringUnavailableError('Ollama returned no message content');
     }
     this.lastUsage = usage;
     return accumulated;
@@ -597,23 +597,23 @@ function resolveModel(override?: string): string {
   if (override !== undefined && override.length > 0) {
     return override;
   }
-  const classifier = loadConfig().classifier;
-  return classifier.model;
+  const steering = loadConfig().steering;
+  return steering.model;
 }
 
-/** Resolve the classifier model (plain model; no derived fast-classifier). */
+/** Resolve the steering model (plain model; no derived fast-steering). */
 export function resolveBaseModel(): string {
-  return loadConfig().classifier.model;
+  return loadConfig().steering.model;
 }
 
 /**
- * Default log sink for the classifier's latency instrumentation.
+ * Default log sink for the steering's latency instrumentation.
  *
- * IMPORTANT: this must write to STDERR, not stdout. When the classifier runs
+ * IMPORTANT: this must write to STDERR, not stdout. When the steering runs
  * inside a VS Code Copilot Chat hook, the hook's stdout is read by VS Code and
  * parsed as a single JSON response. Any non-JSON line on stdout (e.g. this
  * latency diagnostic) breaks that parse, so VS Code discards the whole hook
- * output — including the injected `additionalContext` — and the classification
+ * output — including the injected `additionalContext` — and the steering
  * never reaches the model. Diagnostics belong on stderr.
  */
 function defaultLog(line: string): void {
@@ -625,8 +625,8 @@ function resolveTimeoutMs(override?: number): number {
   if (override !== undefined && override > 0) {
     return override;
   }
-  const fromConfig = loadConfig().classifier.timeout_ms;
-  return fromConfig > 0 ? fromConfig : DEFAULT_CLASSIFIER_TIMEOUT_MS;
+  const fromConfig = loadConfig().steering.timeout_ms;
+  return fromConfig > 0 ? fromConfig : DEFAULT_STEERING_TIMEOUT_MS;
 }
 
 /**
@@ -637,36 +637,36 @@ function resolveTimeoutMs(override?: number): number {
  * to numbers.
  */
 function resolveKeepAlive(): string | number {
-  const raw = loadConfig().classifier.keep_alive;
+  const raw = loadConfig().steering.keep_alive;
   if (typeof raw === 'string' && raw.trim() !== '' && !Number.isNaN(Number(raw))) {
     return Number(raw);
   }
   return raw;
 }
 
-/** Convenience function — constructs an {@link OllamaClassifier} and classifies. */
-export function classify(
+/** Convenience function — constructs an {@link OllamaSteerer} and classifies. */
+export function steer(
   taskText: string,
-  options: ClassifierOptions = {},
-): Promise<Classification> {
-  return new OllamaClassifier(options).classify(taskText);
+  options: SteeringOptions = {},
+): Promise<Steering> {
+  return new OllamaSteerer(options).steer(taskText);
 }
 
 /** Convenience function — assess whether gathered context is sufficient. */
 export function assess(
   taskText: string,
   inventoryText: string,
-  options: ClassifierOptions = {},
+  options: SteeringOptions = {},
 ): Promise<ContextAssessment> {
-  return new OllamaClassifier(options).assess(taskText, inventoryText);
+  return new OllamaSteerer(options).assess(taskText, inventoryText);
 }
 
 /** Convenience function — extract a repeatable procedure from a conversation. */
 export function extractProcedure(
   conversationText: string,
-  options: ClassifierOptions = {},
+  options: SteeringOptions = {},
 ): Promise<ProcedureExtraction> {
-  return new OllamaClassifier({
+  return new OllamaSteerer({
     ...options,
     model: options.model ?? resolveBaseModel(),
   }).extractProcedure(conversationText);
@@ -674,4 +674,4 @@ export function extractProcedure(
 
 // Re-export so callers can distinguish "unavailable" from "invalid output"
 // without importing from the schema module directly.
-export { ClassificationValidationError };
+export { SteeringValidationError };

@@ -9,7 +9,7 @@ export type CodeSearch = z.infer<typeof codeSearchSchema>;
 export const terminalOutputSchema = z.enum(['error-focused', 'normal']);
 export type TerminalOutput = z.infer<typeof terminalOutputSchema>;
 
-/** Strategy context need — adds 'structural' beyond the classifier enum (design doc §4 REFACTOR). */
+/** Strategy context need — adds 'structural' beyond the steering enum (design doc §4 REFACTOR). */
 export const strategyContextNeedSchema = z.enum([
   'minimal',
   'targeted',

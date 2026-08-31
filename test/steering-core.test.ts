@@ -3,17 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
-  CLASSIFICATION_JSON_SCHEMA,
-  ClassificationValidationError,
-  ClassifierUnavailableError,
-  OllamaClassifier,
+  STEERING_JSON_SCHEMA,
+  SteeringValidationError,
+  SteeringUnavailableError,
+  OllamaSteerer,
   buildPrompt,
-  classify,
+  steer,
   isOllamaAvailable,
-  parseClassification,
-} from '../src/classifier/index';
+  parseSteering,
+} from '../src/steering/index';
 
-const validClassification = {
+const validSteering = {
   task: 'debug',
   complexity: 'medium',
   risk: 'medium',
@@ -48,31 +48,31 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('parseClassification', () => {
-  it('parses a JSON string into a classification', () => {
-    expect(parseClassification(JSON.stringify(validClassification))).toEqual(
-      validClassification,
+describe('parseSteering', () => {
+  it('parses a JSON string into a steering', () => {
+    expect(parseSteering(JSON.stringify(validSteering))).toEqual(
+      validSteering,
     );
   });
 
   it('accepts an already-parsed object', () => {
-    expect(parseClassification(validClassification)).toEqual(validClassification);
+    expect(parseSteering(validSteering)).toEqual(validSteering);
   });
 
   it('rejects output with an invalid enum value', () => {
     expect(() =>
-      parseClassification({ ...validClassification, task: 'not-a-task' }),
-    ).toThrow(ClassificationValidationError);
+      parseSteering({ ...validSteering, task: 'not-a-task' }),
+    ).toThrow(SteeringValidationError);
   });
 
   it('rejects non-JSON output', () => {
-    expect(() => parseClassification('this is not json')).toThrow(
-      ClassificationValidationError,
+    expect(() => parseSteering('this is not json')).toThrow(
+      SteeringValidationError,
     );
   });
 
   it('fills defaults when tool_plan/response_policy are omitted', () => {
-    const parsed = parseClassification({
+    const parsed = parseSteering({
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -87,7 +87,7 @@ describe('parseClassification', () => {
   });
 
   it('drops invalid tool_plan/response_policy entries instead of failing', () => {
-    const parsed = parseClassification({
+    const parsed = parseSteering({
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -95,7 +95,7 @@ describe('parseClassification', () => {
       precision: 'normal',
       entities: [],
       tool_plan: {
-        use: ['optimize_context', 'classify', 42, null],
+        use: ['optimize_context', 'steering', 42, null],
       },
       response_policy: ['delta_only', 'not_a_directive', 7],
     });
@@ -113,16 +113,16 @@ describe('parseClassification', () => {
   });
 
   it('accepts a legacy flat-array response_policy as directives', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       response_policy: ['compact', 'delta_only'],
     });
     expect(parsed.response_policy).toEqual({ directives: ['compact', 'delta_only'] });
   });
 
   it('dedupes repeated directives instead of preserving duplicates', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       response_policy: {
         directives: [
           'follow_tool_plan',
@@ -139,8 +139,8 @@ describe('parseClassification', () => {
   });
 
   it('captures confidence, needs_more_context, and retrieval when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       confidence: 0.42,
       needs_more_context: true,
       retrieval: { queries: ['.serena', '.cadet'], scope: 'project root' },
@@ -154,24 +154,24 @@ describe('parseClassification', () => {
   });
 
   it('parses optional memory field when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       memory: { use: true, reason: 'previous decision: prefer-leanctx' },
     });
     expect(parsed.memory).toEqual({ use: true, reason: 'previous decision: prefer-leanctx' });
   });
 
   it('parses memory use = "if_necessary" when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       memory: { use: 'if_necessary', reason: 'may help during search' },
     });
     expect(parsed.memory).toEqual({ use: 'if_necessary', reason: 'may help during search' });
   });
 
   it('normalizes retrieval scope strings', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       retrieval: {
         queries: ['chat_memory'],
         scope: 'project_root+config +  memory implementation',
@@ -184,8 +184,8 @@ describe('parseClassification', () => {
   });
 
   it('drops invalid confidence / needs_more_context / retrieval values', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       confidence: 'high',
       needs_more_context: 'yes',
       retrieval: { queries: [42, null, 'x'], scope: 7 },
@@ -196,15 +196,15 @@ describe('parseClassification', () => {
   });
 
   it('omits confidence/needs_more_context/retrieval when absent', () => {
-    const parsed = parseClassification(validClassification);
+    const parsed = parseSteering(validSteering);
     expect(parsed.confidence).toBeUndefined();
     expect(parsed.needs_more_context).toBeUndefined();
     expect(parsed.retrieval).toBeUndefined();
   });
 
   it('captures guidance and evidence_plan when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       guidance:
         'Advisory: compare overrides between A and B; verify before concluding.',
       evidence_plan: {
@@ -242,8 +242,8 @@ describe('parseClassification', () => {
   });
 
   it('synthesizes evidence_plan from the legacy retrieval alias', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       retrieval: { queries: ['.serena', '.cadet'], scope: 'project root' },
     });
     expect(parsed.retrieval).toEqual({
@@ -270,8 +270,8 @@ describe('parseClassification', () => {
   });
 
   it('keeps recommended_tools and drops invalid entries', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       tool_plan: {
         use: ['optimize_context'],
         recommended_tools: [
@@ -294,14 +294,14 @@ describe('parseClassification', () => {
   });
 
   it('omits guidance/evidence_plan when absent', () => {
-    const parsed = parseClassification(validClassification);
+    const parsed = parseSteering(validSteering);
     expect(parsed.guidance).toBeUndefined();
     expect(parsed.evidence_plan).toBeUndefined();
   });
 
   it('captures a valid nested language_standard when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       response_policy: { directives: ['compact'], language_standard: 'asd_ste100' },
     });
     expect(parsed.response_policy.language_standard).toBe('asd_ste100');
@@ -309,17 +309,17 @@ describe('parseClassification', () => {
   });
 
   it('drops an invalid language_standard and omits it when absent', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       response_policy: { directives: ['compact'], language_standard: 'chicago' },
     });
     expect(parsed.response_policy.language_standard).toBeUndefined();
-    expect(parseClassification(validClassification).response_policy.language_standard).toBeUndefined();
+    expect(parseSteering(validSteering).response_policy.language_standard).toBeUndefined();
   });
 
   it('captures reminders and subtasks when present', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       reminders: [
         { tool: 'rtk', message: 'Use RTK for git output' },
         { tool: 'leanctx', message: 'Use LeanCTX for shell output' },
@@ -334,16 +334,16 @@ describe('parseClassification', () => {
   });
 
   it('derives guidance from the first reminder when guidance is absent', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       reminders: [{ tool: 'rtk', message: 'Use RTK for git output' }],
     });
     expect(parsed.guidance).toBe('Use RTK for git output');
   });
 
   it('drops invalid reminders/subtasks entries', () => {
-    const parsed = parseClassification({
-      ...validClassification,
+    const parsed = parseSteering({
+      ...validSteering,
       reminders: [
         { tool: '', message: 'x' },
         { tool: 'rtk', message: 'ok' },
@@ -357,9 +357,9 @@ describe('parseClassification', () => {
 });
 
 describe('buildPrompt', () => {
-  it('enforces the key classifier constraints', () => {
+  it('enforces the key steering constraints', () => {
     const prompt = buildPrompt('fix the blueprint loader');
-    expect(prompt).toContain('You are a fast, lightweight routing classifier');
+    expect(prompt).toContain('You are a fast, lightweight routing steerer');
     expect(prompt).toContain('Do NOT solve');
     expect(prompt).toContain('do NOT invent repository facts');
     expect(prompt).toContain('FIELD DEFINITIONS — use these exactly');
@@ -383,7 +383,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('User request: Fix config loading');
   });
 
-  it('teaches classification + entity extraction, NOT tool/evidence selection', () => {
+  it('teaches steering + entity extraction, NOT tool/evidence selection', () => {
     const prompt = buildPrompt('document the blueprints and X300 code');
     expect(prompt).toContain('entities');
     expect(prompt).toContain('simple EXTRACTION, NOT reasoning');
@@ -395,7 +395,7 @@ describe('buildPrompt', () => {
     expect(prompt).not.toContain('response_policy');
   });
 
-  it('defines the classification fields', () => {
+  it('defines the steering fields', () => {
     const prompt = buildPrompt('Design a new workflow.');
     expect(prompt).toContain('task (pick ONE)');
     expect(prompt).toContain('complexity (pick ONE)');
@@ -406,37 +406,37 @@ describe('buildPrompt', () => {
   });
 });
 
-describe('classify', () => {
-  it('returns a validated classification from Ollama JSON', async () => {
+describe('steering', () => {
+  it('returns a validated steering from Ollama JSON', async () => {
     const fetchMock = mockFetchJson({
-      message: { content: JSON.stringify(validClassification) },
+      message: { content: JSON.stringify(validSteering) },
     });
     vi.stubGlobal('fetch', fetchMock);
-    const result = await classify('fix the blueprint loader', {
+    const result = await steer('fix the blueprint loader', {
       model: 'qwen3:4b',
       host: 'http://localhost:11434',
     });
-    expect(result).toEqual(validClassification);
+    expect(result).toEqual(validSteering);
   });
 
   it('sends the configured model and requests JSON format', async () => {
     // Isolate from the real user config so keep_alive is deterministic.
     const cfgDir = mkdtempSync(join(tmpdir(), 'to-class-'));
     const cfgFile = join(cfgDir, 'config.yaml');
-    writeFileSync(cfgFile, 'classifier:\n  model: default-model\n  keep_alive: 30m\n', 'utf8');
+    writeFileSync(cfgFile, 'steering:\n  model: default-model\n  keep_alive: 30m\n', 'utf8');
     process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
-        message: { content: JSON.stringify(validClassification) },
+        message: { content: JSON.stringify(validSteering) },
       });
       vi.stubGlobal('fetch', fetchMock);
-      await classify('debug flaky test', {
+      await steer('debug flaky test', {
         model: 'custom-model',
         host: 'http://localhost:11434',
       });
       const body = requestBodyOf(fetchMock);
       expect(body.model).toBe('custom-model');
-      expect(body.format).toEqual(CLASSIFICATION_JSON_SCHEMA);
+      expect(body.format).toEqual(STEERING_JSON_SCHEMA);
       expect(body.stream).toBe(false);
       expect(body.think).toBe(false);
       expect(body.keep_alive).toBe('30m');
@@ -451,16 +451,16 @@ describe('classify', () => {
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(
       cfgFile,
-      'classifier:\n  model: config-model\n',
+      'steering:\n  model: config-model\n',
       'utf8',
     );
     process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
-        message: { content: JSON.stringify(validClassification) },
+        message: { content: JSON.stringify(validSteering) },
       });
       vi.stubGlobal('fetch', fetchMock);
-      await classify('hello', { host: 'http://localhost:11434' });
+      await steer('hello', { host: 'http://localhost:11434' });
       expect(requestBodyOf(fetchMock).model).toBe('config-model');
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -472,30 +472,30 @@ describe('classify', () => {
     const cfgFile = join(dir, 'config.yaml');
     writeFileSync(
       cfgFile,
-      'classifier:\n  model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
+      'steering:\n  model: config-model\n  timeout_ms: 45000\n  keep_alive: 15m\n',
       'utf8',
     );
     process.env.CADET_BRAINSTEM_CONFIG = cfgFile;
     try {
       const fetchMock = mockFetchJson({
-        message: { content: JSON.stringify(validClassification) },
+        message: { content: JSON.stringify(validSteering) },
       });
       vi.stubGlobal('fetch', fetchMock);
-      await classify('hello', { host: 'http://localhost:11434' });
+      await steer('hello', { host: 'http://localhost:11434' });
       const body = requestBodyOf(fetchMock);
       expect(body.model).toBe('config-model');
       expect(body.keep_alive).toBe('15m');
-      const classifier = new OllamaClassifier({
+      const steering = new OllamaSteerer({
         host: 'http://localhost:11434',
       });
-      expect(classifier.timeoutMs).toBe(45000);
-      expect(classifier.keepAlive).toBe('15m');
+      expect(steering.timeoutMs).toBe(45000);
+      expect(steering.keepAlive).toBe('15m');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('throws ClassifierUnavailableError when Ollama is unreachable', async () => {
+  it('throws SteeringUnavailableError when Ollama is unreachable', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -503,25 +503,25 @@ describe('classify', () => {
       }),
     );
     await expect(
-      classify('hi', { model: 'm', host: 'http://localhost:11434' }),
-    ).rejects.toThrow(ClassifierUnavailableError);
+      steer('hi', { model: 'm', host: 'http://localhost:11434' }),
+    ).rejects.toThrow(SteeringUnavailableError);
   });
 
-  it('throws ClassifierUnavailableError on a non-OK response', async () => {
+  it('throws SteeringUnavailableError on a non-OK response', async () => {
     vi.stubGlobal('fetch', mockFetchJson({}, false, 500));
     await expect(
-      classify('hi', { model: 'm', host: 'http://localhost:11434' }),
-    ).rejects.toThrow(ClassifierUnavailableError);
+      steer('hi', { model: 'm', host: 'http://localhost:11434' }),
+    ).rejects.toThrow(SteeringUnavailableError);
   });
 
-  it('throws ClassificationValidationError on invalid JSON output', async () => {
+  it('throws SteeringValidationError on invalid JSON output', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetchJson({ message: { content: JSON.stringify({ task: 'nope' }) } }),
     );
     await expect(
-      classify('hi', { model: 'm', host: 'http://localhost:11434' }),
-    ).rejects.toThrow(ClassificationValidationError);
+      steer('hi', { model: 'm', host: 'http://localhost:11434' }),
+    ).rejects.toThrow(SteeringValidationError);
   });
 });
 
@@ -542,27 +542,27 @@ describe('isOllamaAvailable', () => {
   });
 });
 
-describe('OllamaClassifier', () => {
+describe('OllamaSteerer', () => {
   it('classifies through the class API', async () => {
     vi.stubGlobal(
       'fetch',
-      mockFetchJson({ message: { content: JSON.stringify(validClassification) } }),
+      mockFetchJson({ message: { content: JSON.stringify(validSteering) } }),
     );
-    const classifier = new OllamaClassifier({
+    const steering = new OllamaSteerer({
       model: 'qwen3:4b',
       host: 'http://localhost:11434',
     });
-    await expect(classifier.classify('refactor this')).resolves.toEqual(
-      validClassification,
+    await expect(steering.steer('refactor this')).resolves.toEqual(
+      validSteering,
     );
   });
 
   it('reports availability', async () => {
     vi.stubGlobal('fetch', mockFetchJson({ models: [] }));
-    const classifier = new OllamaClassifier({
+    const steering = new OllamaSteerer({
       model: 'qwen3:4b',
       host: 'http://localhost:11434',
     });
-    await expect(classifier.isAvailable()).resolves.toBe(true);
+    await expect(steering.isAvailable()).resolves.toBe(true);
   });
 });

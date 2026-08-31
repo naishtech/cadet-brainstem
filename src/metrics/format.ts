@@ -28,7 +28,7 @@ export interface StatsPayload {
   savingsByTool: GroupedSavings[];
   savingsByTaskType: GroupedSavings[];
   callStats: CallStats[];
-  classifyByOrigin: Array<{ origin: string; calls: number; degraded: number }>;
+  steerByOrigin: Array<{ origin: string; calls: number; degraded: number }>;
   recommendedByTool: GroupedCalls[];
   sessions: SessionSummary[];
   mostExpensiveOperations: MostExpensiveOperation[];
@@ -60,7 +60,7 @@ export function formatStats(store: MetricsStore): StatsPayload {
     savingsByTool: store.getSavingsByTool(),
     savingsByTaskType: store.getSavingsByTaskType(),
     callStats: store.getCallStatsByTool(),
-    classifyByOrigin: store.getClassifyCallsByOrigin(),
+    steerByOrigin: store.getSteeringCallsByOrigin(),
     recommendedByTool: store.getRecommendedByTool(),
     sessions: store.getSessionSummary(),
     mostExpensiveOperations: store.getMostExpensiveOperations(5),

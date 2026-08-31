@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCb);
 
-/** Default classifier model pulled by `init` when Ollama is reachable. */
+/** Default steering model pulled by `init` when Ollama is reachable. */
 export const OLLAMA_MODEL = 'qwen3:4b';
 
 /**

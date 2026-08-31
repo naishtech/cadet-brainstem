@@ -3,10 +3,10 @@ import {
   synthesizeEvidencePlan,
   synthesizePlans,
   synthesizeToolPlan,
-} from '../src/classifier';
-import type { Classification } from '../src/classifier';
+} from '../src/steering';
+import type { Steering } from '../src/steering';
 
-function makeClassification(overrides: Partial<Classification>): Classification {
+function makeSteering(overrides: Partial<Steering>): Steering {
   return {
     task: 'debug',
     complexity: 'medium',
@@ -22,20 +22,20 @@ function makeClassification(overrides: Partial<Classification>): Classification 
 
 describe('synthesizeToolPlan', () => {
   it('returns an empty plan for context_need=minimal (no tools for simple questions)', () => {
-    const plan = synthesizeToolPlan(makeClassification({ context_need: 'minimal' }));
+    const plan = synthesizeToolPlan(makeSteering({ context_need: 'minimal' }));
     expect(plan.recommended_tools).toEqual([]);
   });
 
   it('adds the debug rule tool from a matching entity', () => {
     const plan = synthesizeToolPlan(
-      makeClassification({ entities: ['checkout', 'error handler'] }),
+      makeSteering({ entities: ['checkout', 'error handler'] }),
     );
     expect((plan.recommended_tools ?? []).map((t) => t.name)).toContain('find_relevant_symbols');
   });
 
   it('adds optimize_context for documentation/planning entities', () => {
     const plan = synthesizeToolPlan(
-      makeClassification({ task: 'documentation', entities: ['blueprints', 'document'] }),
+      makeSteering({ task: 'documentation', entities: ['blueprints', 'document'] }),
     );
     expect((plan.recommended_tools ?? []).map((t) => t.name)).toEqual(
       expect.arrayContaining(['find_relevant_symbols', 'optimize_context']),
@@ -44,24 +44,24 @@ describe('synthesizeToolPlan', () => {
 
   it('does not over-trigger compress_command_output from the noun "command"', () => {
     const plan = synthesizeToolPlan(
-      makeClassification({ task: 'documentation', entities: ['CLI commands', 'README'] }),
+      makeSteering({ task: 'documentation', entities: ['CLI commands', 'README'] }),
     );
     expect((plan.recommended_tools ?? []).map((t) => t.name)).not.toContain('compress_command_output');
   });
 
   it('falls back to a baseline find_relevant_symbols when nothing matches', () => {
-    const plan = synthesizeToolPlan(makeClassification({ entities: ['unknown-thing'] }));
+    const plan = synthesizeToolPlan(makeSteering({ entities: ['unknown-thing'] }));
     expect((plan.recommended_tools ?? []).map((t) => t.name)).toEqual(['find_relevant_symbols']);
   });
 });
 
 describe('synthesizeEvidencePlan', () => {
   it('returns undefined for context_need=minimal', () => {
-    expect(synthesizeEvidencePlan(makeClassification({ context_need: 'minimal' }))).toBeUndefined();
+    expect(synthesizeEvidencePlan(makeSteering({ context_need: 'minimal' }))).toBeUndefined();
   });
 
   it('emits one query per entity with an id (required for tracing)', () => {
-    const ep = synthesizeEvidencePlan(makeClassification({ entities: ['loader', 'payment'] }));
+    const ep = synthesizeEvidencePlan(makeSteering({ entities: ['loader', 'payment'] }));
     expect(ep).toBeDefined();
     expect(ep!.prioritized_queries.map((q) => q.id)).toEqual(['q1', 'q2']);
     expect(ep!.prioritized_queries[0]).toMatchObject({
@@ -71,13 +71,13 @@ describe('synthesizeEvidencePlan', () => {
   });
 
   it('omits evidence_plan when there are no entities', () => {
-    expect(synthesizeEvidencePlan(makeClassification({ entities: [] }))).toBeUndefined();
+    expect(synthesizeEvidencePlan(makeSteering({ entities: [] }))).toBeUndefined();
   });
 });
 
 describe('synthesizePlans', () => {
-  it('fills tool_plan, evidence_plan, response_policy and reminders on a lean classification', () => {
-    const lean = makeClassification({
+  it('fills tool_plan, evidence_plan, response_policy and reminders on a lean steering', () => {
+    const lean = makeSteering({
       task: 'debug',
       context_need: 'broad',
       entities: ['checkout', 'payment'],

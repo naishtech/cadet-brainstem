@@ -21,7 +21,7 @@ export interface StatsPayload {
   savingsByTool: Array<{ key: string; estimatedTokensSaved: number }>;
   savingsByTaskType: Array<{ key: string; estimatedTokensSaved: number }>;
   callStats: Array<{ tool: string; calls: number; degraded: number; avgLatencyMs: number | null }>;
-  classifyByOrigin: Array<{ origin: string; calls: number; degraded: number }>;
+  steerByOrigin: Array<{ origin: string; calls: number; degraded: number }>;
   recommendedByTool: Array<{ tool: string; calls: number }>;
   sessions: Array<{ session_id: string; eventCount: number; estimatedTokensSaved: number }>;
   mostExpensiveOperations: Array<{

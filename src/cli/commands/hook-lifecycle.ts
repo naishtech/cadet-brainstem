@@ -10,10 +10,10 @@ import {
 } from '../../memory';
 import { DEFAULT_RECOMMENDED_TOOL } from './hooks';
 import {
-  classifyWithFallback,
+  steerWithFallback,
   synthesizePlans,
-  type Classification,
-} from '../../classifier';
+  type Steering,
+} from '../../steering';
 
 import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
 import { getTraceSink } from '../../dashboard/trace';
@@ -57,9 +57,9 @@ export interface HookLifecycleDeps {
   memoryPath?: string;
   /** Override the project resolver (tests). */
   resolveProject?: (cwd: string) => string;
-  /** Override the classifier (tests). Defaults to classifyWithFallback. */
-  classify?: (text: string) => Promise<{
-    classification: Classification;
+  /** Override the steering (tests). Defaults to steerWithFallback. */
+  steer?: (text: string) => Promise<{
+    steering: Steering;
     degraded: boolean;
   }>;
   /** Override the dashboard event publisher (tests). Defaults to the shared EventBus. */
@@ -279,7 +279,7 @@ export async function runHookSessionStart(
 }
 
 /**
- * UserPromptSubmit handler: classify the prompt with the local model and inject
+ * UserPromptSubmit handler: steer the prompt with the local model and inject
  * the returned strategy (response_policy + tool_plan + guidance) as context, so
  * the downstream LM deterministically follows the cheap path.
  */
@@ -306,17 +306,17 @@ export async function runHookUserPrompt(
       type: 'request',
       ts: requestTs,
       id: requestId,
-      tool: 'classify',
+      tool: 'steering',
       operation: 'user_prompt',
       inputHint: prompt.slice(0, 500),
     },
   ]);
 
-  const { classification, degraded } = await (deps.classify ??
-    classifyWithFallback)(prompt, { trace: getTraceSink() });
+  const { steering, degraded } = await (deps.steer ??
+    steerWithFallback)(prompt, { trace: getTraceSink() });
   // The model only classifies + extracts entities; synthesize the steering
   // fields (tool_plan / response_policy) in code for the injected context.
-  const synthesized = synthesizePlans(classification);
+  const synthesized = synthesizePlans(steering);
   const tools = (synthesized.tool_plan?.recommended_tools ?? [])
     .map((t) => t.name)
     .join(', ');
@@ -329,16 +329,16 @@ export async function runHookUserPrompt(
   ctx += `- recommended tools: ${tools || '(none)'}\n`;
   ctx += `- response_policy directives: ${directives || '(none)'}\n`;
   ctx += `- language_standard: ${synthesized.response_policy?.language_standard ?? '(none)'}\n`;
-  if (classification.guidance) {
-    ctx += `- guidance: ${classification.guidance}\n`;
+  if (steering.guidance) {
+    ctx += `- guidance: ${steering.guidance}\n`;
   }
   if (degraded) {
-    ctx += `- (classifier degraded — conservative defaults applied)\n`;
+    ctx += `- (steering degraded — conservative defaults applied)\n`;
   }
   // Procedure handoff: match routine, read-only tasks against the local LLM's
   // procedures so the cloud LLM knows it can hand off execution to the local
-  // LLM (mirrors the MCP classifyTool `procedures` field). Best effort — never
-  // breaks classification if the store is missing or empty.
+  // LLM (mirrors the MCP steerTool `procedures` field). Best effort — never
+  // breaks steering if the store is missing or empty.
   try {
     const store = new ProcedureStore(
       process.env.CADET_BRAINSTEM_PROCEDURES ?? getDefaultProcedurePath(),
@@ -371,7 +371,7 @@ export async function runHookUserPrompt(
   });
   recordMetrics(deps, {
     sessionId,
-    tool: 'classify',
+    tool: 'steering',
     operation: 'user_prompt',
     estimatedInputTokens: 0,
     estimatedOutputTokens: 0,
@@ -485,7 +485,7 @@ export async function runHookPreCompact(
 }
 
 /**
- * SubagentStart handler: classify the subtask so nested agents use the cheap
+ * SubagentStart handler: steer the subtask so nested agents use the cheap
  * path, and inject a compact primer.
  */
 export async function runHookSubagentStart(
@@ -501,11 +501,11 @@ export async function runHookSubagentStart(
 
   let ctx = 'Subagent started. Prefer the recommended cadet tools and the cheap path.';
   if (prompt.trim()) {
-    const { classification } = await (deps.classify ?? classifyWithFallback)(
+    const { steering } = await (deps.steer ?? steerWithFallback)(
       prompt,
       { trace: getTraceSink() },
     );
-    const tools = (classification.tool_plan?.recommended_tools ?? [])
+    const tools = (steering.tool_plan?.recommended_tools ?? [])
       .map((t) => t.name)
       .join(', ');
     ctx += `\nSubtask classified. Recommended tools: ${tools || '(none)'}.`;
@@ -613,7 +613,7 @@ export const hookSessionStartCommand = lifecycleCommand(
 
 export const hookUserPromptCommand = lifecycleCommand(
   'hook-user-prompt',
-  'UserPromptSubmit hook: classify the prompt and inject the strategy',
+  'UserPromptSubmit hook: steer the prompt and inject the strategy',
   runHookUserPrompt,
 );
 
@@ -631,7 +631,7 @@ export const hookPreCompactCommand = lifecycleCommand(
 
 export const hookSubagentStartCommand = lifecycleCommand(
   'hook-subagent-start',
-  'SubagentStart hook: classify the subtask and inject a cheap-path primer',
+  'SubagentStart hook: steer the subtask and inject a cheap-path primer',
   runHookSubagentStart,
 );
 

@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { classifyTool } from '../src/mcp';
+import { steerTool } from '../src/mcp';
 import { MemoryStore } from '../src/memory';
 
-describe('classifyTool memory auto-plan', () => {
+describe('steerTool memory auto-plan', () => {
   let dir: string;
   let oldCwd: string;
 
@@ -32,10 +32,10 @@ describe('classifyTool memory auto-plan', () => {
       project,
     });
 
-    // Minimal stub classifier outcome — classifyTool only needs to call this.
-    const stubClassify = async (taskText: string) => {
+    // Minimal stub steering outcome — steerTool only needs to call this.
+    const stubSteer = async (taskText: string) => {
       return {
-        classification: {
+        steering: {
           task: 'debug',
           complexity: 'low',
           risk: 'low',
@@ -49,9 +49,9 @@ describe('classifyTool memory auto-plan', () => {
       } as any;
     };
 
-    const result = (await classifyTool(
+    const result = (await steerTool(
       { task: 'loader' },
-      { classify: stubClassify as any, memory: store, defaultProject: project },
+      { steer: stubSteer as any, memory: store, defaultProject: project },
     )) as any;
 
     // Ensure relevant memories are returned in the response

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import os from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../../classifier';
+import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../../steering';
 import { getConfigPath, loadConfig, saveConfig } from '../../config';
 import {
   detectEnvironment,
@@ -78,13 +78,13 @@ async function offerInstallations(
   report: EnvironmentReport,
   { ask, log, model, host }: OfferContext,
 ): Promise<void> {
-  // Classifier model — only offer to pull when Ollama is reachable AND the
+  // Steering model — only offer to pull when Ollama is reachable AND the
   // model is not already present (idempotent, no redundant prompts).
   if (report.ollama.available) {
     const modelOk = await isModelAvailable(model, host);
     if (modelOk) {
-      log(`Classifier model ${model} already present — nothing to pull.`);
-    } else if (await ask(`Pull the classifier model (${model}) via Ollama?`)) {
+      log(`Steering model ${model} already present — nothing to pull.`);
+    } else if (await ask(`Pull the steering model (${model}) via Ollama?`)) {
       try {
         const { stdout, stderr } = await pullOllamaModel(model);
         log(stdout || stderr);
@@ -94,7 +94,7 @@ async function offerInstallations(
     }
   } else {
     log('');
-    log('Missing: ollama (classifier)');
+    log('Missing: ollama (steering)');
     log('  Native install: https://ollama.com');
     log(
       '  Docker: docker run -d --name ollama -v ollama:/root/.ollama -p 11434:11434 --restart unless-stopped ollama/ollama',
@@ -185,7 +185,7 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log(`[cadet-brainstem] metrics database ready: ${metricsPath}`);
 
   // 4. Consent-gated configuration/installation of missing pieces.
-  const model = loadConfig(configPath).classifier.model;
+  const model = loadConfig(configPath).steering.model;
   const host = process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
   await offerInstallations(report, { ask, log, model, host });
 
@@ -214,11 +214,11 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('}');
   log('');
   log('The "cadet-brainstem" MCP server will then appear in Copilot Chat,');
-  log('exposing classify, optimize_context, find_relevant_symbols, compress_command_output and chat_memory_store.');
+  log('exposing steer, optimize_context, find_relevant_symbols, compress_command_output and chat_memory_store.');
   log('Docs: https://github.com/naishtech/cadet-brainstem/blob/main/docs/integration-vscode.md');
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
-  log('  "For every user request, before doing anything else, call the `classify` tool once');
+  log('  "For every user request, before doing anything else, call the `steer` tool once');
   log('   with a short, faithful restatement of the request — not the verbatim message. It');
   log('   runs the local LLM and returns the recommended strategy plus a `response_policy`');
   log('   and a `memory_policy`; parse and follow both in every reply. Then use the Cadet');

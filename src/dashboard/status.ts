@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../classifier';
+import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../steering';
 import { loadConfig } from '../config';
 import { detectEnvironment } from '../core/environment';
 
@@ -14,7 +14,7 @@ export interface ToolStatus {
 }
 
 export interface GetServiceStatusOptions {
-  /** Classifier model to verify via isModelAvailable (defaults to config). */
+  /** Steering model to verify via isModelAvailable (defaults to config). */
   model?: string;
   /** Ollama host override. */
   host?: string;
@@ -23,15 +23,15 @@ export interface GetServiceStatusOptions {
   /** Test seam. */
   modelAvailable?: typeof isModelAvailable;
   /** Test seam. Defaults to loadConfig(). */
-  getConfig?: () => { classifier: { model: string } };
+  getConfig?: () => { steering: { model: string } };
 }
 
 /**
  * Resolve live status for the four dashboard services (design doc §5.5):
- * the local LLM (Ollama + classifier model), RTK, Serena, and LeanCTX.
+ * the local LLM (Ollama + steering model), RTK, Serena, and LeanCTX.
  *
  * The LLM is "available" only when Ollama is reachable AND the configured
- * classifier model is present. Detection never throws — missing tools degrade
+ * steering model is present. Detection never throws — missing tools degrade
  * to `available: false` with a hint.
  */
 export async function getServiceStatus(
@@ -40,13 +40,13 @@ export async function getServiceStatus(
   const detect = options.detect ?? detectEnvironment;
   const modelAvailable = options.modelAvailable ?? isModelAvailable;
   const getConfig =
-    options.getConfig ?? (() => loadConfig() as { classifier: { model: string } });
+    options.getConfig ?? (() => loadConfig() as { steering: { model: string } });
   const host = options.host ?? process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
 
   let model = options.model;
   if (model === undefined) {
     try {
-      model = getConfig().classifier.model;
+      model = getConfig().steering.model;
     } catch {
       model = '';
     }
@@ -60,7 +60,7 @@ export async function getServiceStatus(
     const present = await modelAvailable(model, host);
     if (!present) {
       llmAvailable = false;
-      llmDetail = `Ollama reachable but classifier model "${model}" not present`;
+      llmDetail = `Ollama reachable but steering model "${model}" not present`;
     } else {
       // Show the running model so the UI can render e.g. "LLM [qwen3:4b]".
       llmDetail = model;

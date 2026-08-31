@@ -130,8 +130,8 @@ export async function defaultFillArgs(
   handoffShape?: string,
 ): Promise<Record<string, unknown>> {
   const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-  // Lazily import to avoid a hard classifier dependency at module load.
-  const { resolveBaseModel } = await import('../classifier');
+  // Lazily import to avoid a hard steering dependency at module load.
+  const { resolveBaseModel } = await import('../steering');
   // Procedures always reason so the dashboard shows the model's thinking.
   const think = true;
   const hints = argHintsFor(step.tool);

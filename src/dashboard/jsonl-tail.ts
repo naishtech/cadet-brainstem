@@ -8,7 +8,7 @@ import type { DashboardEvent, EventBus } from './event-bus';
  * their own in-memory EventBus, but all of them persist every event as a JSON
  * line to the same `dashboard.log`. This tailer lets the dashboard server read
  * that shared file so events emitted by *other* processes (e.g. the
- * `hook-user-prompt` classify) show up on the live dashboard (design §7 /
+ * `hook-user-prompt` steer) show up on the live dashboard (design §7 /
  * process-isolation fix).
  *
  * On start it hydrates the whole file into the bus (no broadcast), then polls

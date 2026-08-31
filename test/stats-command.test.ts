@@ -132,8 +132,8 @@ describe('runStats', () => {
   it('shows degraded counts and average latency per tool', async () => {
     const metricsPath = join(dir, 'metrics.db');
     seedStore(metricsPath, [
-      makeEvent({ tool: 'ollama', operation: 'classify', degraded: false, latency_ms: 100 }),
-      makeEvent({ tool: 'ollama', operation: 'classify', degraded: true, latency_ms: 5000 }),
+      makeEvent({ tool: 'ollama', operation: 'steering', degraded: false, latency_ms: 100 }),
+      makeEvent({ tool: 'ollama', operation: 'steering', degraded: true, latency_ms: 5000 }),
       makeEvent({ tool: 'leanctx', degraded: false, latency_ms: 250 }),
     ]);
 
@@ -152,10 +152,10 @@ describe('runStats', () => {
   it('joins recommended vs invoked adoption counts across MCP-prefixed tool names', async () => {
     const metricsPath = join(dir, 'metrics.db');
     seedStore(metricsPath, [
-      // Classifier recommended the bare canonical name.
+      // Steering recommended the bare canonical name.
       makeEvent({
         tool: 'ollama',
-        operation: 'classify',
+        operation: 'steering',
         recommended_tools: ['find_relevant_symbols'],
       }),
       // Invocations recorded by the MCP client carry the `mcp_<server>_` prefix.

@@ -15,7 +15,7 @@ export class ConfigError extends Error {
 
 // ── Schema (defaults match design doc §13) ────────────────────────────────
 
-const classifierSchema = z.object({
+const steeringSchema = z.object({
   provider: z.enum(['ollama']),
   model: z.string().min(1, 'model must be a non-empty string'),
   timeout_ms: z
@@ -78,7 +78,7 @@ const dashboardSchema = z.object({
 });
 
 export const configSchema = z.object({
-  classifier: classifierSchema,
+  steering: steeringSchema,
   session: sessionSchema,
   optimisation: optimisationSchema,
   telemetry: telemetrySchema,
@@ -95,14 +95,14 @@ export type Config = z.infer<typeof configSchema>;
  * Single source of truth for defaults — partial configs are deep-merged on top
  * of this before validation.
  *
- * The default classifier model is qwen3:4b, matching the model pulled for
+ * The default steering model is qwen3:4b, matching the model pulled for
  * the project (see src/core/installers.ts). Thinking is disabled in the
- * Ollama adapter (see classifier/ollama.ts), and keep_alive keeps the model
+ * Ollama adapter (see steering/ollama.ts), and keep_alive keeps the model
  * warm between calls so a cold model reload doesn't blow the timeout (see
- * classifier/ollama.ts).
+ * steering/ollama.ts).
  */
 export const defaultConfig: Config = {
-  classifier: {
+  steering: {
     provider: 'ollama',
     model: 'qwen3:4b',
     timeout_ms: 60_000,
@@ -247,7 +247,7 @@ export function saveConfig(config: Config, filePath = getConfigPath()): void {
 
 // ── Individual value access (used by the `config` command) ────────────────
 
-/** Read a single value by dot path, e.g. "classifier.model". */
+/** Read a single value by dot path, e.g. "steering.model". */
 export function getConfigValue(config: Config, key: string): unknown {
   let current: unknown = config;
   for (const part of key.split('.')) {

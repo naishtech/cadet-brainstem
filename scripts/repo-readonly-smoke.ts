@@ -9,7 +9,7 @@
  *
  * Prereqs: Ollama running with the model warmed; Serena + LeanCTX available.
  */
-import { resolveBaseModel } from '../src/classifier';
+import { resolveBaseModel } from '../src/steering';
 import { SerenaAdapter } from '../src/integrations/serena';
 import { LeanCtxAdapter } from '../src/integrations/leanctx';
 

@@ -1,8 +1,8 @@
 /**
  * Real-Ollama + real-DB smoke test for the procedure matcher (task 44).
  *
- * Runs the full `classifyTool` path against the live seeded `procedures` table
- * and the real local Ollama classifier — no injected stubs. Verifies the cloud
+ * Runs the full `steerTool` path against the live seeded `procedures` table
+ * and the real local Ollama steering — no injected stubs. Verifies the cloud
  * LLM would receive a `procedures` handoff list.
  *
  * Usage:
@@ -11,9 +11,9 @@
  * Prereqs: Ollama installed + running (`ollama serve`), a model pulled, and
  * the procedures table seeded (`npm run seed:procedures`).
  */
-import { classifyTool } from '../src/mcp/server';
+import { steerTool } from '../src/mcp/server';
 import { ProcedureStore } from '../src/procedure';
-import { isOllamaAvailable } from '../src/classifier';
+import { isOllamaAvailable } from '../src/steering';
 
 const SAMPLES = [
   'gather and compress the relevant context for this file',
@@ -44,9 +44,9 @@ async function main(): Promise<void> {
   store.close();
 
   for (const task of SAMPLES) {
-    process.stdout.write(`\n--- classify: "${task}" ---\n`);
+    process.stdout.write(`\n--- steer: "${task}" ---\n`);
     try {
-      const result = await classifyTool({ task });
+      const result = await steerTool({ task });
       console.log(`entities:      ${JSON.stringify(result.entities)}`);
       const procedures = (result.procedures ?? []) as Array<{
         triggerPattern: string;

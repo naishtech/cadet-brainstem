@@ -41,7 +41,7 @@ describe('getServiceStatus', () => {
     expect(status.find((s) => s.name === 'serena')?.detail).toBe('1.0.0');
   });
 
-  it('flags llm unavailable when the classifier model is missing', async () => {
+  it('flags llm unavailable when the steering model is missing', async () => {
     const status = await getServiceStatus({
       model: 'qwen3:4b',
       detect: async () => report(),
@@ -60,7 +60,7 @@ describe('getServiceStatus', () => {
         capturedModel = model;
         return true;
       },
-      getConfig: () => ({ classifier: { model: 'custom-model' } }),
+      getConfig: () => ({ steering: { model: 'custom-model' } }),
     });
     expect(capturedModel).toBe('custom-model');
     expect(status.find((s) => s.kind === 'llm')?.available).toBe(true);

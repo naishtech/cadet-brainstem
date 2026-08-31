@@ -1,20 +1,20 @@
 /**
- * Real-Ollama smoke test for the classifier (Task 03).
+ * Real-Ollama smoke test for the steering (Task 03).
  *
- * Runs the actual OllamaClassifier against a local Ollama server so we can
+ * Runs the actual OllamaSteerer against a local Ollama server so we can
  * validate the riskiest assumption early: does a small local model return
- * valid structured JSON classifications?
+ * valid structured JSON steering?
  *
  * Usage:
- *   npm run classify:smoke                    # run with default sample requests
- *   npm run classify:smoke -- "your message"  # classify a specific request
+ *   npm run steer:smoke                    # run with default sample requests
+ *   npm run steer:smoke -- "your message"  # steer a specific request
  *
  * Prereqs: Ollama installed + running (ollama serve), and a model pulled,
  * e.g. `ollama pull qwen3:4b`. The model is read from config
  * (~/.cadet-brainstem/config.yaml) unless CADET_BRAINSTEM_CONFIG points
  * elsewhere.
  */
-import { classify, isOllamaAvailable } from '../src/classifier/index';
+import { steer, isOllamaAvailable } from '../src/steering/index';
 
 const DEFAULT_SAMPLES = [
   'Fix the Blueprint loading so actors appear in the level.',
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
         'Ollama is not reachable (expected at http://localhost:11434).',
         '  - Start it:  ollama serve',
         '  - Pull a model:  ollama pull qwen3:4b',
-        '  - Then re-run:  npm run classify:smoke',
+        '  - Then re-run:  npm run steer:smoke',
       ].join('\n'),
     );
     process.exitCode = 1;
@@ -46,9 +46,9 @@ async function main(): Promise<void> {
   process.stdout.write('available\n\n');
 
   for (const text of requests) {
-    process.stdout.write(`Classifying: ${text}\n`);
+    process.stdout.write(`Steering: ${text}\n`);
     try {
-      const result = await classify(text);
+      const result = await steer(text);
       console.log(JSON.stringify(result, null, 2));
     } catch (err) {
       console.error(

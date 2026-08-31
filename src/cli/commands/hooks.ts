@@ -26,14 +26,14 @@ export interface HookCommand {
   command: string;
   /**
    * Max ms VS Code waits for the hook before aborting. VS Code's default is
-   * 30s, which is too short for hooks that run the local classifier (~20-45s),
+   * 30s, which is too short for hooks that run the local steering (~20-45s),
    * so the LLM-calling hooks set an explicit higher timeout.
    */
   timeout?: number;
 }
 
-/** Timeout (ms) for hooks that call the local LLM classifier. */
-export const CLASSIFY_HOOK_TIMEOUT_MS = 90_000;
+/** Timeout (ms) for hooks that call the local LLM steering. */
+export const STEERING_HOOK_TIMEOUT_MS = 90_000;
 
 /** Shape of the generated VS Code Copilot Chat Hooks config file. */
 export interface CopilotHooksConfig {
@@ -145,13 +145,13 @@ export function parseHooksArgs(args: readonly string[]): ParsedHooksArgs {
  * event wires to a `cadet-brainstem hook-*` handler that saves tokens at that
  * point in the agent session:
  *  - SessionStart: prime the session with memory hints + recommended tool.
- *  - UserPromptSubmit: classify the prompt and inject the strategy.
+ *  - UserPromptSubmit: steer the prompt and inject the strategy.
  *  - PreToolUse (OPT-IN via --pretool): redirect native search/list to cadet
  *    tools, then remind toward the recommended tool. Off by default — it
  *    intercepts every tool call and proved too intrusive for daily dev.
  *  - PostToolUse: record token-saving metrics per tool call.
  *  - PreCompact: export important context to memory before truncation.
- *  - SubagentStart/Stop: classify + track nested usage, aggregate + cleanup.
+ *  - SubagentStart/Stop: steer + track nested usage, aggregate + cleanup.
  *  - Stop: persist a session summary to memory and clean up hook state.
  */
 export function buildHooksConfig(
@@ -167,7 +167,7 @@ export function buildHooksConfig(
         {
           type: 'command',
           command: 'cadet-brainstem hook-user-prompt',
-          timeout: CLASSIFY_HOOK_TIMEOUT_MS,
+          timeout: STEERING_HOOK_TIMEOUT_MS,
         },
       ],
       ...(opts.pretool === true
@@ -209,7 +209,7 @@ export function buildHooksConfig(
         {
           type: 'command',
           command: 'cadet-brainstem hook-subagent-start',
-          timeout: CLASSIFY_HOOK_TIMEOUT_MS,
+          timeout: STEERING_HOOK_TIMEOUT_MS,
         },
       ],
       SubagentStop: [

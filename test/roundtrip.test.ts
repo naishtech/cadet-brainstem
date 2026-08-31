@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   chatMemoryStoreTool,
-  classifyTool,
+  steerTool,
   compressCommandOutputTool,
   findRelevantSymbolsTool,
   handleToolCall,
@@ -12,13 +12,13 @@ import {
   type McpDeps,
 } from '../src/mcp';
 import { runStats } from '../src/cli/commands/stats';
-import type { ClassificationOutcome } from '../src/classifier';
+import type { SteeringOutcome } from '../src/steering';
 import type { OptimisationStrategy } from '../src/policy';
 import { MemoryStore } from '../src/memory';
 
 /**
  * Integration (round-trip) test: make a real call through the MCP tool dispatch
- * for every cadet service (classify, optimize_context, find_relevant_symbols,
+ * for every cadet service (steer, optimize_context, find_relevant_symbols,
  * compress_command_output, chat_memory_store), then verify `stats` reports the
  * tokens actually saved.
  *
@@ -28,9 +28,9 @@ import { MemoryStore } from '../src/memory';
  * are all the real code, exercised end-to-end.
  */
 
-function makeClassification(): ClassificationOutcome {
+function makeSteering(): SteeringOutcome {
   return {
-    classification: {
+    steering: {
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -91,7 +91,7 @@ function makeDeps(): McpDeps {
   return {
     metricsPath,
     memory,
-    classify: vi.fn(async () => makeClassification()),
+    steer: vi.fn(async () => makeSteering()),
     getStrategy: vi.fn(() => makeStrategy()),
     leanctx: {
       optimize: vi.fn(async (req: { target: string; taskType: string }) => ({
@@ -140,9 +140,9 @@ describe('full round trip through the MCP services + stats', () => {
   it('calls every service and stats reports the tokens saved', async () => {
     const deps = makeDeps();
 
-    // 1. classify — records 0 saved (steering only).
-    const classify = await classifyTool({ task: 'debug the loader' }, deps);
-    expect(classify.classification).toMatchObject({ task: 'debug' });
+    // 1. steer — records 0 saved (steering only).
+    const steer = await steerTool({ task: 'debug the loader' }, deps);
+    expect(steer.steering).toMatchObject({ task: 'debug' });
 
     // 2. optimize_context (LeanCTX) — records 19 saved.
     const opt = await optimizeContextTool({ task: 'extract context', target: 'src/loader' }, deps);
@@ -168,7 +168,7 @@ describe('full round trip through the MCP services + stats', () => {
     const { exit, out } = await statsLines();
     expect(exit).toBe(0);
 
-    // 5 events: classify, classify(optimize's internal), optimize_context,
+    // 5 events: steer, steer(optimize's internal), optimize_context,
     // find_relevant_symbols, compress_command_output, chat_memory_store.
     expect(out).toContain('Events:');
     // Total tokens saved = 19 + 75 = 94.
@@ -183,7 +183,7 @@ describe('full round trip through the MCP services + stats', () => {
   it('round-trips through the handleToolCall MCP dispatch and stats sees savings', async () => {
     const deps = makeDeps();
     const calls: Array<[string, Record<string, unknown>]> = [
-      ['classify', { task: 'debug the loader' }],
+      ['steering', { task: 'debug the loader' }],
       ['optimize_context', { task: 'extract', target: 'src/loader' }],
       ['find_relevant_symbols', { query: 'loader', cwd: process.cwd() }],
       ['compress_command_output', { command: 'git status' }],

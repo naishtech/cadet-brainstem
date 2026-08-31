@@ -1,21 +1,21 @@
 import {
   assess,
-  classify,
-  ClassifierOptions,
-  ClassifierUnavailableError,
+  steer,
+  SteeringOptions,
+  SteeringUnavailableError,
 } from './ollama';
 import {
-  Classification,
-  ClassificationValidationError,
+  Steering,
+  SteeringValidationError,
   ContextAssessment,
 } from './schema';
 
 /**
- * Conservative default used when the classifier cannot run (Ollama
+ * Conservative default used when the steering cannot run (Ollama
  * unavailable) or returns invalid output. Biased toward the highest context
  * need and lowest risk so no information is lost (safety principles §14).
  */
-export const conservativeDefaultClassification: Classification = {
+export const conservativeDefaultSteering: Steering = {
   task: 'investigation',
   complexity: 'high',
   risk: 'low',
@@ -31,16 +31,16 @@ export const conservativeDefaultClassification: Classification = {
   memory: { use: false },
 };
 
-export interface ClassificationOutcome {
-  classification: Classification;
-  /** True when the classifier degraded to the conservative default. */
+export interface SteeringOutcome {
+  steering: Steering;
+  /** True when the steering degraded to the conservative default. */
   degraded: boolean;
   /** Why degradation happened (present when degraded). */
   reason?: string;
 }
 
 /**
- * Classify with graceful degradation (Tasks 04–05).
+ * Steer with graceful degradation (Tasks 04–05).
  *
  * Never crashes on Ollama being unavailable or on invalid/un-schema'd model
  * output — it falls back to the conservative default and surfaces the fallback
@@ -48,24 +48,24 @@ export interface ClassificationOutcome {
  *
  * Unrelated/unexpected errors are rethrown rather than swallowed.
  */
-export async function classifyWithFallback(
+export async function steerWithFallback(
   taskText: string,
-  options: ClassifierOptions = {},
-  classifyFn: (text: string, opts?: ClassifierOptions) => Promise<Classification> = classify,
-): Promise<ClassificationOutcome> {
+  options: SteeringOptions = {},
+  steerFn: (text: string, opts?: SteeringOptions) => Promise<Steering> = steer,
+): Promise<SteeringOutcome> {
   try {
-    const classification = await classifyFn(taskText, options);
-    return { classification, degraded: false };
+    const steering = await steerFn(taskText, options);
+    return { steering, degraded: false };
   } catch (err) {
-    const known = err instanceof ClassifierUnavailableError || err instanceof ClassificationValidationError;
+    const known = err instanceof SteeringUnavailableError || err instanceof SteeringValidationError;
     if (!known) {
       throw err;
     }
     const reason = (err as Error).message;
     // Explicit, never silent.
-    console.warn(`[cadet-brainstem] classifier degraded to conservative default: ${reason}`);
+    console.warn(`[cadet-brainstem] steering degraded to conservative default: ${reason}`);
     return {
-      classification: structuredClone(conservativeDefaultClassification),
+      steering: structuredClone(conservativeDefaultSteering),
       degraded: true,
       reason,
     };
@@ -95,11 +95,11 @@ export interface ContextAssessmentOutcome {
 export async function assessWithFallback(
   taskText: string,
   inventoryText: string,
-  options: ClassifierOptions = {},
+  options: SteeringOptions = {},
   assessFn: (
     t: string,
     i: string,
-    opts?: ClassifierOptions,
+    opts?: SteeringOptions,
   ) => Promise<ContextAssessment> = assess,
 ): Promise<ContextAssessmentOutcome> {
   try {
@@ -107,8 +107,8 @@ export async function assessWithFallback(
     return { assessment, degraded: false };
   } catch (err) {
     const known =
-      err instanceof ClassifierUnavailableError ||
-      err instanceof ClassificationValidationError;
+      err instanceof SteeringUnavailableError ||
+      err instanceof SteeringValidationError;
     if (!known) {
       throw err;
     }

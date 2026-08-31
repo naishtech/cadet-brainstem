@@ -2,7 +2,7 @@
  * Agent-loop write E2E (task 49, gap #3): drive the REAL components in the
  * exact order the Copilot Chat agent would, for a write procedure:
  *
- *   1. classify  -> matched procedures + procedures_review (write flagged)
+ *   1. steer  -> matched procedures + procedures_review (write flagged)
  *   2. procedure_apply WITHOUT approved -> refused (review gate)
  *   3. hook-procedure-review -> denies and surfaces the concrete diff
  *   4. procedure_apply WITH approved:true + concrete args -> applies + verifies
@@ -26,15 +26,15 @@ async function main(): Promise<void> {
   try {
     writeFileSync(join(scratch, 'a.ts'), 'const x = 1;\n', 'utf8');
 
-    // 1. classify -> matched procedures + review flags.
-    const classify = JSON.parse(
-      (await handleToolCall('classify', { task: TASK })).content[0]!.text,
+    // 1. steer -> matched procedures + review flags.
+    const steer = JSON.parse(
+      (await handleToolCall('steering', { task: TASK })).content[0]!.text,
     );
     const procs: Array<{ id: string; triggerPattern: string; riskTier: string }> =
-      classify.procedures ?? [];
-    const reviews: Array<{ triggerPattern: string }> = classify.procedures_review ?? [];
+      steer.procedures ?? [];
+    const reviews: Array<{ triggerPattern: string }> = steer.procedures_review ?? [];
     const target = procs.find((p) => p.triggerPattern === 'Replace content in a file');
-    console.log('1. classify -> matched:', procs.length, '| write-flagged:', reviews.length);
+    console.log('1. steer -> matched:', procs.length, '| write-flagged:', reviews.length);
     if (!target) {
       console.log('   (no "Replace content in a file" procedure matched — aborting)');
       return;

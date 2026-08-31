@@ -7,7 +7,7 @@ import {
   MEMORY_POLICY,
   assessContextTool,
   chatMemoryStoreTool,
-  classifyTool,
+  steerTool,
   compressCommandOutputTool,
   findRelevantSymbolsTool,
   handleToolCall,
@@ -20,16 +20,16 @@ import {
 } from '../src/mcp';
 import {
   RESPONSE_POLICY_DIRECTIVES,
-  type ClassificationOutcome,
+  type SteeringOutcome,
   type ContextAssessmentOutcome,
-} from '../src/classifier';
+} from '../src/steering';
 import type { OptimisationStrategy } from '../src/policy';
 import { MetricsStore } from '../src/metrics';
 import { MemoryStore } from '../src/memory';
 
-function makeClassification(): ClassificationOutcome {
+function makeSteering(): SteeringOutcome {
   return {
-    classification: {
+    steering: {
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 function makeDeps(overrides: Partial<McpDeps> = {}) {
-  const classify = vi.fn(async () => makeClassification());
+  const steer = vi.fn(async () => makeSteering());
   const getStrategy = vi.fn(() => makeStrategy());
   const leanctxOptimize = vi.fn(async (req: { target: string; taskType: string }) => ({
     context: 'compressed',
@@ -136,7 +136,7 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
     degraded: false,
   }));
   const deps: McpDeps = {
-    classify,
+    steer,
     getStrategy,
     leanctx: {
       optimize: leanctxOptimize,
@@ -150,7 +150,7 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
   };
   return {
     deps,
-    classify,
+    steer,
     getStrategy,
     leanctxOptimize,
     rtkOptimize,
@@ -252,7 +252,7 @@ describe('optimize_context', () => {
     expect(callsByTool(metricsPath).ollama).toBe(1);
     expect(callsByTool(metricsPath).leanctx).toBe(1);
 
-    // classify -> optimize_context share a request_id, with latency + degraded.
+    // steer -> optimize_context share a request_id, with latency + degraded.
     const ollamaRow = firstRowForTool(metricsPath, 'ollama');
     const leanctxRow = firstRowForTool(metricsPath, 'leanctx');
     expect(ollamaRow.request_id).toBeTruthy();
@@ -282,12 +282,12 @@ describe('optimize_context', () => {
     expect(result.note).toBe('no compression benefit from LeanCTX on this target');
   });
 
-  it('does not record an ollama call when classification degrades', async () => {
+  it('does not record an ollama call when steering degrades', async () => {
     const { deps } = makeDeps();
     const degradedDeps = {
       ...deps,
-      classify: vi.fn(async () => ({
-        classification: makeClassification().classification,
+      steer: vi.fn(async () => ({
+        steering: makeSteering().steering,
         degraded: true,
         reason: 'ollama unreachable',
       })),
@@ -317,11 +317,11 @@ describe('optimize_context', () => {
   });
 });
 
-describe('classify', () => {
+describe('steering', () => {
   it('classifies, returns the strategy, and records an ollama call', async () => {
     const { deps } = makeDeps();
-    const result = await classifyTool({ task: 'debug the loader' }, deps);
-    expect(result.classification).toEqual({
+    const result = await steerTool({ task: 'debug the loader' }, deps);
+    expect(result.steering).toEqual({
       task: 'debug',
       complexity: 'medium',
       risk: 'medium',
@@ -364,17 +364,17 @@ describe('classify', () => {
     expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
-  it('does not record an ollama call when classification degrades', async () => {
+  it('does not record an ollama call when steering degrades', async () => {
     const { deps } = makeDeps();
     const degradedDeps = {
       ...deps,
-      classify: vi.fn(async () => ({
-        classification: makeClassification().classification,
+      steer: vi.fn(async () => ({
+        steering: makeSteering().steering,
         degraded: true,
         reason: 'ollama unreachable',
       })),
     };
-    const result = await classifyTool(
+    const result = await steerTool(
       { task: 'debug the loader' },
       degradedDeps,
     );
@@ -387,7 +387,7 @@ describe('classify', () => {
 
   it('returns and stamps a caller-supplied request_id', async () => {
     const { deps } = makeDeps();
-    const result = await classifyTool(
+    const result = await steerTool(
       { task: 'debug the loader', request_id: 'rid-42' },
       deps,
     );
@@ -397,7 +397,7 @@ describe('classify', () => {
 
   it('generates a request_id when none is supplied', async () => {
     const { deps } = makeDeps();
-    const result = await classifyTool({ task: 'debug the loader' }, deps);
+    const result = await steerTool({ task: 'debug the loader' }, deps);
     const requestId = result.request_id as string;
     expect(typeof requestId).toBe('string');
     expect(requestId.length).toBeGreaterThan(0);
@@ -405,7 +405,7 @@ describe('classify', () => {
 
   it('rejects an empty task', async () => {
     const { deps } = makeDeps();
-    await expect(classifyTool({ task: '' }, deps)).rejects.toThrow('task');
+    await expect(steerTool({ task: '' }, deps)).rejects.toThrow('task');
   });
 });
 
@@ -809,13 +809,21 @@ describe('handleToolCall', () => {
     expect(res.content[0]?.text).toContain('non-empty string "task"');
   });
 
-  it('dispatches classify and returns JSON text with the strategy', async () => {
+  it('dispatches steer and returns JSON text with the strategy', async () => {
+    const { deps } = makeDeps();
+    const res = await handleToolCall('steering', { task: 'x' }, deps);
+    expect(res.isError).toBeUndefined();
+    expect(res.content[0]?.text).toContain('"steering"');
+    expect(res.content[0]?.text).toContain('"strategy"');
+    expect(callsByTool(metricsPath).ollama).toBe(1);
+  });
+
+  it('dispatches the temporary `classify` alias to steering', async () => {
     const { deps } = makeDeps();
     const res = await handleToolCall('classify', { task: 'x' }, deps);
     expect(res.isError).toBeUndefined();
-    expect(res.content[0]?.text).toContain('"classification"');
+    expect(res.content[0]?.text).toContain('"steering"');
     expect(res.content[0]?.text).toContain('"strategy"');
-    expect(callsByTool(metricsPath).ollama).toBe(1);
   });
 
   it('returns isError for an unknown tool', async () => {

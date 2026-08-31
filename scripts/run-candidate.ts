@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { basename } from 'node:path';
 import { promisify } from 'node:util';
-import { resolveBaseModel } from '../src/classifier';
+import { resolveBaseModel } from '../src/steering';
 import { RtkAdapter } from '../src/integrations/rtk';
 import { LeanCtxAdapter } from '../src/integrations/leanctx';
 import { SerenaAdapter } from '../src/integrations/serena';

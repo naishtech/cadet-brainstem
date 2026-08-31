@@ -5,10 +5,10 @@ model. It is available as a **local MCP server** (`cadet-brainstem mcp`,
 registered in `.vscode/mcp.json`) and as a **command wrapper**
 (`cadet-brainstem wrap`). Use the cheap paths below whenever possible.
 
-## Classify every user request
+## Steer every user request
 
 - For each new user request, before taking any other action (no other tool
-  calls, no file reads), call the `classify` MCP tool exactly once. Pass a
+  calls, no file reads), call the `steering` MCP tool exactly once. Pass a
   short, faithful restatement of the request — what the user wants done, in
   one or two sentences — not the verbatim message.
 - Use the returned `strategy` (LeanCTX mode, compression, search approach)
@@ -26,7 +26,7 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   optional evidence, never authoritative state — retrieve hints before work,
   verify them against the current project, and store expensive-to-rediscover
   facts when done.
-- If `classify` is unavailable, continue with the tools below using defaults —
+- If `steering` is unavailable, continue with the tools below using defaults —
   never block on it.
 
 This instruction guides the agent; MCP itself cannot force a client to invoke a
@@ -34,7 +34,7 @@ tool for every user request.
 
 ## Memory
 
-- `classify` returns a `memory_policy` alongside `response_policy`. Treat
+- `steering` returns a `memory_policy` alongside `response_policy`. Treat
   memory as **optional evidence, never authoritative state**: retrieve hints
   before work and verify them against the current project state before acting.
   Skip `chat_memory_store` entirely when the returned `tool_plan` skips it.
@@ -61,7 +61,7 @@ tool for every user request.
 - If you need noisy command output as context, call `compress_command_output`
   with the command instead of pasting raw terminal output.
 - Thread one `request_id` through the tools in a logical flow (reuse the id
-  `classify` returns). After gathering context, call `assess_context` with
+  `steering` returns). After gathering context, call `assess_context` with
   that id to ask whether the signal is sufficient and what to gather next.
 
 ## Command output (wrapper)

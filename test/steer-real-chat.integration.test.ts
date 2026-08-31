@@ -3,10 +3,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  classify,
+  steer,
   isOllamaAvailable,
   TASK_TYPES,
-} from '../src/classifier';
+} from '../src/steering';
 
 const HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
 const LIMIT = Number(process.env.CADET_CHAT_LIMIT ?? '5');
@@ -85,11 +85,11 @@ const prompts = chatLog ? extractUserPrompts(chatLog, LIMIT) : [];
 const ollamaUp = await isOllamaAvailable(HOST);
 const run = ollamaUp && prompts.length > 0 ? describe : describe.skip;
 
-run('classify on real chat prompts', () => {
-  it('produces a schema-valid, non-degraded classification for each real user prompt', async () => {
+run('steer on real chat prompts', () => {
+  it('produces a schema-valid, non-degraded steering for each real user prompt', async () => {
     for (const prompt of prompts) {
-      const result = await classify(prompt, { host: HOST, timeoutMs: 60_000 });
-      // classify() runs parseClassification, so a resolved value is already
+      const result = await steer(prompt, { host: HOST, timeoutMs: 60_000 });
+      // steer() runs parseSteering, so a resolved value is already
       // schema-valid. Assert the routing fields are present and sensible.
       expect(TASK_TYPES).toContain(result.task);
       expect(result.complexity).toBeDefined();

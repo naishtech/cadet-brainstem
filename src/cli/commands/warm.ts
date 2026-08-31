@@ -1,4 +1,4 @@
-import { warmUpOllama } from '../../classifier';
+import { warmUpOllama } from '../../steering';
 import type { CliCommand } from '../types';
 
 export interface WarmOptions {
@@ -12,7 +12,7 @@ export interface WarmOptions {
 /**
  * Warm up the local LLM on demand (e.g. from a VS Code startup task or to test
  * `keep_alive` settings). Forces the configured model to load so the first real
- * classify call is fast. Returns the process exit code (0 = success).
+ * steer call is fast. Returns the process exit code (0 = success).
  */
 export async function runWarm(options: WarmOptions = {}): Promise<number> {
   const log = options.log ?? ((line: string) => console.log(line));

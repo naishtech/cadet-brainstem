@@ -7,9 +7,9 @@ What you need installed to run Cadet Brainstem and its integrations.
 - **Node.js 18+** — runtime
 - **npm** — package management
 
-## Local LLM classifier
+## Local LLM steering
 
-- **Ollama** — local LLM server used by the classifier.
+- **Ollama** — local LLM server used by the steering.
   - Native install: https://ollama.com
   - Or Docker: `docker run -d --name ollama -v ollama:/root/.ollama -p 11434:11434 --restart unless-stopped ollama/ollama`
 - **Model (default):** `qwen3:4b` — pull with: `ollama pull qwen3:4b`

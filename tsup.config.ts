@@ -13,5 +13,5 @@ export default defineConfig({
   sourcemap: true,
   dts: true,
   outDir: 'dist',
-  assets: ['src/classifier/classifier-prompt.mustache'],
+  assets: ['src/steering/steering-prompt.mustache'],
 });
