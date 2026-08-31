@@ -23,7 +23,6 @@ const classifierSchema = z.object({
     .int('timeout_ms must be an integer')
     .positive('timeout_ms must be positive'),
   keep_alive: z.string().min(1, 'keep_alive must be a non-empty string'),
-  think: z.boolean().optional(),
 });
 
 const sessionSchema = z.object({
@@ -108,7 +107,6 @@ export const defaultConfig: Config = {
     model: 'qwen3:4b',
     timeout_ms: 60_000,
     keep_alive: '30m',
-    think: false,
   },
   session: { max_turns: 30 },
   optimisation: { enabled: true, default_budget: 12000 },

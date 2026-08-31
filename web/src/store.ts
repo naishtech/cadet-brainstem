@@ -7,6 +7,7 @@ export interface Trace {
   model: string;
   request: string;
   tokens: string;
+  thinking: string;
   complete: boolean;
 }
 
@@ -60,6 +61,7 @@ export const useDashboardStore = defineStore('dashboard', {
             model: event.model,
             request: event.request,
             tokens: '',
+            thinking: '',
             complete: false,
           });
           break;
@@ -73,6 +75,19 @@ export const useDashboardStore = defineStore('dashboard', {
           if (trace) trace.complete = true;
           break;
         }
+        case 'llm.trace.think.start': {
+          const trace = this.traces.find((t) => t.id === event.id);
+          if (trace) trace.thinking = '';
+          break;
+        }
+        case 'llm.trace.think.token': {
+          const trace = this.traces.find((t) => t.id === event.id);
+          if (trace) trace.thinking += event.delta;
+          break;
+        }
+        case 'llm.trace.think.complete':
+          // thinking already accumulated into the trace
+          break;
       }
     },
   },

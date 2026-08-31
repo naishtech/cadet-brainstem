@@ -131,16 +131,12 @@ export async function defaultFillArgs(
 ): Promise<Record<string, unknown>> {
   const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
   // Lazily import to avoid a hard classifier dependency at module load.
-  const [{ resolveBaseModel }, { loadConfig }] = await Promise.all([
-    import('../classifier'),
-    import('../config'),
-  ]);
-  const think = loadConfig().classifier.think ?? false;
+  const { resolveBaseModel } = await import('../classifier');
+  // Procedures always reason so the dashboard shows the model's thinking.
+  const think = true;
   const hints = argHintsFor(step.tool);
   const traceId = `procedure-fill-${Date.now()}`;
-  const sink = think
-    ? (await import('../dashboard/trace')).getTraceSink()
-    : undefined;
+  const sink = (await import('../dashboard/trace')).getTraceSink();
   const response = await fetch(`${host}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -171,7 +167,7 @@ export async function defaultFillArgs(
     message?: { content?: string; reasoning_content?: string };
   };
   const reasoning = data.message?.reasoning_content ?? '';
-  if (sink && think && reasoning.length > 0) {
+  if (sink && reasoning.length > 0) {
     sink.thinkStart?.({ id: traceId });
     sink.thinkToken?.({ id: traceId, delta: reasoning });
     sink.thinkComplete?.({ id: traceId });
