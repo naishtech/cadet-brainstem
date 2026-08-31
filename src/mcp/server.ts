@@ -258,6 +258,8 @@ export interface McpDeps {
   /** Injectable adapters for procedure_apply (tests); defaults to real ones. */
   procedureSerena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
+  /** Stream per-step reasoning during procedure_apply (default true). Tests pass false. */
+  procedureThinkEachStep?: boolean;
   record?: (event: OptimisationEvent) => void;
   log?: (line: string) => void;
   /** Dashboard instrumentation (defaults to a config-aware singleton). */
@@ -651,6 +653,7 @@ export async function procedureApplyTool(
     const result = await executeProcedure(procedure, {
       repoPath: args.repo,
       store,
+      thinkEachStep: deps.procedureThinkEachStep ?? true,
       approve: async () => true, // this tool IS the explicit approval
       ...(fillArgs !== undefined ? { fillArgs } : {}),
       ...(serenaAdapter !== undefined ? { serena: serenaAdapter } : {}),

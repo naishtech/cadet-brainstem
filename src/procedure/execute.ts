@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ProcedureStore, type Procedure, type ProcedureStep } from './index';
 import { buildWriteDiff } from './review';
+import type { Instrumenter } from '../dashboard/instrument';
 
 /** Serena/LeanCTX tools that mutate files (or shell) — these need review. */
 const WRITE_TOOLS = new Set([
@@ -115,6 +116,13 @@ export interface ExecuteProcedureOptions {
   onStep?: (result: ExecuteStepResult) => void;
   /** Fill the tool's parameters for a step. Defaults to the local LLM. */
   fillArgs?: (step: ProcedureStep, repoPath: string) => Promise<Record<string, unknown>>;
+  /**
+   * Stream a chain-of-thought reasoning trace before each step executes, so the
+   * dashboard's Procedures tab shows what the model is thinking as it works
+   * through the step (not just the arg-fill). Best-effort; adds one LLM call per
+   * step. Default: false (tests and high-throughput paths keep it off).
+   */
+  thinkEachStep?: boolean;
   /** Injectable adapters (for tests / reuse). Created lazily if omitted. */
   serena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   leanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
@@ -164,9 +172,9 @@ export async function defaultFillArgs(
   });
   if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
   const data = (await response.json()) as {
-    message?: { content?: string; reasoning_content?: string };
+    message?: { content?: string; reasoning_content?: string; thinking?: string };
   };
-  const reasoning = data.message?.reasoning_content ?? '';
+  const reasoning = data.message?.reasoning_content ?? data.message?.thinking ?? '';
   if (sink && reasoning.length > 0) {
     sink.thinkStart?.({ id: traceId });
     sink.thinkToken?.({ id: traceId, delta: reasoning });
@@ -204,6 +212,58 @@ async function invoke(
 }
 
 /**
+ * Stream the model's chain-of-thought about a step before it executes, so the
+ * dashboard's Procedures tab shows what the model is thinking as it works
+ * through the step. Best-effort and never throws; adds one LLM call per step.
+ */
+async function reasonAboutStep(
+  procedure: Procedure,
+  step: ProcedureStep,
+  repoPath: string,
+  index: number,
+): Promise<void> {
+  const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
+  try {
+    const { resolveBaseModel } = await import('../steering');
+    const { getTraceSink } = await import('../dashboard/trace');
+    const traceId = `procedure-step-${procedure.id.slice(0, 8)}-${index}-${Date.now()}`;
+    const sink = getTraceSink();
+    const response = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: resolveBaseModel(),
+        messages: [
+          {
+            role: 'user',
+            content:
+              `You are about to run step ${index + 1} of the procedure "${procedure.triggerPattern}" ` +
+              `on the project at ${repoPath}: call ${step.service}:${step.tool}. ` +
+              `Reason step-by-step about what this step does, why it matters, and what you expect to happen. ` +
+              `Output your internal reasoning only.`,
+          },
+        ],
+        stream: false,
+        think: true,
+        options: { temperature: 0, num_predict: 500 },
+      }),
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      message?: { reasoning_content?: string; thinking?: string };
+    };
+    const reasoning = data.message?.reasoning_content ?? data.message?.thinking ?? '';
+    if (reasoning.length > 0) {
+      sink.thinkStart?.({ id: traceId });
+      sink.thinkToken?.({ id: traceId, delta: reasoning });
+      sink.thinkComplete?.({ id: traceId });
+    }
+  } catch {
+    /* reasoning is best-effort */
+  }
+}
+
+/**
  * Execute a procedure's steps against a real repo, gating write steps behind
  * the `approve` callback. Records the overall outcome in the store.
  */
@@ -212,6 +272,35 @@ export async function executeProcedure(
   options: ExecuteProcedureOptions,
 ): Promise<ExecuteProcedureResult> {
   const repoPath = options.repoPath;
+
+  // Dashboard instrumentation (best-effort): surface the procedure run in the
+  // dashboard's Procedures stream as a request, per-step logs, and a response.
+  const requestId = `procedure-${procedure.id.slice(0, 8)}-${Date.now()}`;
+  const startMs = Date.now();
+  let instrument: Instrumenter | undefined;
+  try {
+    const { getInstrumenter } = await import('../dashboard/instrument');
+    instrument = getInstrumenter();
+  } catch {
+    /* instrumentation is best-effort */
+  }
+  instrument?.requestStarted({
+    id: requestId,
+    tool: 'procedure',
+    operation: 'procedure_run',
+    inputHint: procedure.triggerPattern,
+  });
+  const stepLog = (base: ExecuteStepResult): void => {
+    const status = base.executed
+      ? base.error
+        ? 'ERROR'
+        : 'OK'
+      : base.approved === false
+        ? 'SKIPPED'
+        : 'PENDING';
+    instrument?.log('info', 'procedure', `${procedure.triggerPattern}: ${base.service}:${base.tool} ${status}`);
+  };
+
   // Default arg-filler threads the procedure's stored handoffShape so the local
   // LLM fills args using the tested format (task 47 wiring).
   const fillArgs =
@@ -243,9 +332,16 @@ export async function executeProcedure(
   const results: ExecuteStepResult[] = [];
   const pendingReview: ExecuteStepResult[] = [];
 
+  let stepIndex = 0;
   for (const step of procedure.steps) {
     const write = isWriteStep(step);
     const base: ExecuteStepResult = { service: step.service, tool: step.tool, write, verdict: write ? 'review' : 'auto', executed: false };
+
+    // Stream the model's reasoning about this step before it runs (opt-in).
+    if (options.thinkEachStep) {
+      await reasonAboutStep(procedure, step, repoPath, stepIndex).catch(() => undefined);
+    }
+    stepIndex++;
 
     try {
       const args = await fillArgs(step, repoPath);
@@ -259,6 +355,7 @@ export async function executeProcedure(
           results.push(base);
           pendingReview.push(base);
           options.onStep?.(base);
+          stepLog(base);
           continue;
         }
         // Capture the expected post-apply content from the reviewed diff BEFORE
@@ -277,6 +374,7 @@ export async function executeProcedure(
         base.error = `no adapter for service '${step.service}'`;
         results.push(base);
         options.onStep?.(base);
+        stepLog(base);
         continue;
       }
       const output = await invoke(adapter, step.service, step.tool, args, repoPath);
@@ -310,6 +408,7 @@ export async function executeProcedure(
     }
     results.push(base);
     options.onStep?.(base);
+    stepLog(base);
   }
 
   // Close lazily-created adapters.
@@ -327,6 +426,9 @@ export async function executeProcedure(
   if (recordOutcome && allExecuted) {
     store.recordOutcome(procedure.id, failed ? 'failure' : 'success');
   }
+
+  instrument?.responded({ id: requestId, ok, latencyMs: Date.now() - startMs });
+  instrument?.statsUpdated();
 
   return { procedureId: procedure.id, ok, allExecuted, results, pendingReview };
 }

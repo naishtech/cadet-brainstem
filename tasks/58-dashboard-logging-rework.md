@@ -3,7 +3,14 @@
 **Risk rationale:** Medium — web UI + EventBus event categorization; no change to classifier
 behavior. Low runtime risk but touches the dashboard store/view and tests.
 
-**Status:** Not started
+**Status:** Done — LogsPanel reworked to All | Steering | Procedures streams; thinking trace
+under Procedures. Implemented via **web-side inference from the `operation` field** (the
+approach the task explicitly permits) — no backend `category` field added.
+
+**Smoke-test fix:** `executeProcedure` is now instrumented (best-effort) to emit a `request`
+(`procedure_run`), per-step `log`s (source `procedure`), and a `response` + `stats.updated` so
+every procedure run — CLI, MCP, or test — surfaces as a logged entry in the Procedures stream
+(not just the fill thinking trace).
 **Phase:** Phase 15
 **Source:** `docs/plans/dashboard-llm-thinking-trace.md` §9.1 (split into tasks 57–59)
 **Order:** after task 59 (rename) and task 57 (thinking trace)
@@ -32,20 +39,26 @@ with the procedures-only thinking trace (task 57).
 
 ## Files
 
-- `src/dashboard/event-bus.ts` — event `category`
-- `src/dashboard/instrument.ts` — set `category` on published events (steering vs procedures)
-- `web/src/store.ts` — split steering/procedures streams
-- `web/src/components/LogsPanel.vue` — tabs/filter + scoped rendering
+- `web/src/types.ts` — `EventCategory` type + added the `llm.trace.think.*` events (task 57 gap)
+- `web/src/store.ts` — `categoryOfEvent`/`categoryForOperation` inference; `_reqCat` id map for
+  responses; `category` on `Trace`; `steeringLogs`/`procedureLogs`/`steeringTraces`/
+  `procedureTraces` getters; lazily create procedure traces from think events
+- `web/src/App.vue` — pass the categorized getters to LogsPanel
+- `web/src/components/LogsPanel.vue` — **All | Steering | Procedures** tabs + scoped rendering
+
+(No `src/dashboard/event-bus.ts` / `instrument.ts` change: categorization is inferred in the
+web store per the task's allowed alternative.)
 
 ## Test Updates
 
-- `test/dashboard-instrument.test.ts` — `category` on steering vs procedure events
-- `test/dashboard-event-bus.test.ts` — category round-trip
-- `web/src/components/__tests__/LogsPanel.test.ts` — tab filter shows Steering vs Procedures
+- `web/src/components/__tests__/LogsPanel.test.ts` — Steering vs Procedures tab filtering +
+  thinking trace under Procedures
+- `web/src/store.test.ts` (new) — category inference: steering/procedure routing, response
+  id-matching, think-event trace creation
 
 ## Acceptance Criteria
 
-- [ ] `npm test` (backend) + `cd web && npm test` — all pass.
-- [ ] `npm run build` — backend + web static build.
-- [ ] Dashboard shows **Steering** and **Procedures** streams separately; a procedure run and a
+- [x] `npm test` (backend) + `cd web && npm test` — all pass.
+- [x] `npm run build` — backend + web static build.
+- [x] Dashboard shows **Steering** and **Procedures** streams separately; a procedure run and a
       classify/steering decision each land in the right stream.

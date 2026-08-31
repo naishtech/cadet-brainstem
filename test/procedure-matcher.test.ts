@@ -184,6 +184,7 @@ describe('procedure matcher (repeatable)', () => {
       { procedure_id: p.id, repo: process.cwd(), approved: true },
       {
         procedureStore: store,
+        procedureThinkEachStep: false,
         procedureFillArgs: async () => ({ path: 'src/procedure/store.ts' }),
         procedureSerena: serena,
         procedureLeanctx: leanctx,

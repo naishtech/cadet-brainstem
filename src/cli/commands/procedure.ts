@@ -108,6 +108,7 @@ async function runProcedure(id: string, repo: string, yes: boolean): Promise<num
   const result = await executeProcedure(procedure, {
     repoPath: repo,
     store,
+    thinkEachStep: true,
     approve: async (step, args) => {
       if (yes) {
         console.log(`  [auto-approve] ${step.service}:${step.tool} ${JSON.stringify(args)}`);
