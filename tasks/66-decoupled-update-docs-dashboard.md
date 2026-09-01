@@ -1,6 +1,6 @@
 # 66 — Decoupled: update docs + dashboard
 
-**Status:** Planned (not yet implemented)
+**Status:** Done
 
 Part of the decoupled-architecture plan (`docs/plans/decoupled-architecture.md`).
 After tasks 62–65, reflect the new shape: brainstem measures (LeanCTX only) and

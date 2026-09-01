@@ -269,7 +269,8 @@ export class MetricsStore {
                 COALESCE(SUM(estimated_input_tokens), 0) AS input,
                 COALESCE(SUM(estimated_output_tokens), 0) AS output,
                 COALESCE(SUM(estimated_tokens_saved), 0) AS saved
-         FROM optimisation_events`,
+         FROM optimisation_events
+         WHERE tool = 'leanctx'`,
       )
       .get() as { eventCount: number; input: number; output: number; saved: number };
     return {
@@ -292,7 +293,7 @@ export class MetricsStore {
   getAverageCompressionRatio(): number | null {
     const row = this.db
       .prepare(
-        'SELECT AVG(compression_ratio) AS avgRatio FROM optimisation_events WHERE compression_ratio IS NOT NULL',
+        "SELECT AVG(compression_ratio) AS avgRatio FROM optimisation_events WHERE tool = 'leanctx' AND compression_ratio IS NOT NULL",
       )
       .get() as { avgRatio: number | null };
     return row.avgRatio === null ? null : Number(row.avgRatio);
@@ -502,7 +503,8 @@ export class MetricsStore {
     const rows = this.db
       .prepare(
         `SELECT ${column} AS key, COALESCE(SUM(estimated_tokens_saved), 0) AS estimatedTokensSaved
-         FROM optimisation_events
+        FROM optimisation_events
+        WHERE tool = 'leanctx'
          GROUP BY ${column}
          HAVING COALESCE(SUM(estimated_tokens_saved), 0) > 0
          ORDER BY estimatedTokensSaved DESC`,

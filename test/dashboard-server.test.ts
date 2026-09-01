@@ -24,7 +24,6 @@ afterEach(() => {
 
 const STATUS_FIXTURE: ToolStatus[] = [
   { name: 'ollama', kind: 'llm', available: true, detail: '0.5.1' },
-  { name: 'rtk', kind: 'rtk', available: false },
   { name: 'serena', kind: 'serena', available: true, detail: '1.0.0' },
   { name: 'leanctx', kind: 'leanctx', available: true },
 ];
@@ -162,11 +161,10 @@ describe('DashboardServer', () => {
     const res = await get(info.port, '/api/status');
     expect(res.status).toBe(200);
     const status = JSON.parse(res.body) as ToolStatus[];
-    expect(status).toHaveLength(4);
+    expect(status).toHaveLength(3);
     const ollama = status.find((s) => s.kind === 'llm');
     expect(ollama?.available).toBe(true);
     expect(ollama?.detail).toBe('0.5.1');
-    expect(status.find((s) => s.name === 'rtk')?.available).toBe(false);
     await server.stop();
   });
 
@@ -180,8 +178,8 @@ describe('DashboardServer', () => {
       task_type: 'investigation',
       complexity: 'low',
       risk: 'low',
-      tool: 'rtk',
-      operation: 'compress_command_output',
+      tool: 'leanctx',
+      operation: 'optimize_context',
       estimated_input_tokens: 1000,
       estimated_output_tokens: 100,
       estimated_tokens_saved: 900,

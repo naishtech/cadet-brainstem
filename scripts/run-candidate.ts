@@ -1,9 +1,8 @@
 /**
  * Run one curated candidate through the LOCAL LLM and report pass/fail.
  *
- * For each step the local LLM drives the relevant tool: RTK steps are executed
- * for real (compress_command_output via RtkAdapter); LeanCTX steps are executed
- * (ctx_read/ctx_explore); Serena edit steps are reported as intended write
+ * For each step the local LLM drives the relevant tool: LeanCTX steps are
+ * executed (ctx_read/ctx_explore); Serena edit steps are reported as intended write
  * actions (not auto-executed — they are requires_review). The LLM then gives a
  * final report and a self-assessed pass/fail.
  *
@@ -19,7 +18,6 @@ import { dirname } from 'node:path';
 import { basename } from 'node:path';
 import { promisify } from 'node:util';
 import { resolveBaseModel } from '../src/steering';
-import { RtkAdapter } from '../src/integrations/rtk';
 import { LeanCtxAdapter } from '../src/integrations/leanctx';
 import { SerenaAdapter } from '../src/integrations/serena';
 
@@ -140,22 +138,6 @@ async function llmJson(prompt: string, schema: object): Promise<Record<string, u
   if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
   const data = (await response.json()) as { message?: { content?: string } };
   return JSON.parse(data.message?.content ?? '{}') as Record<string, unknown>;
-}
-
-async function runRtkStep(step: CandidateStep, cwd: string): Promise<string> {
-  const plan = (await llmJson(
-    [
-      `You have a tool "rtk" that runs a shell command and returns its output.`,
-      `The working directory (artifact dir) is: ${cwd}`,
-      `Task: ${step.tool} (${JSON.stringify(step.args ?? {})}).`,
-      `Choose a concrete shell command. Respond with JSON: {"command": "<command>"}.`,
-    ].join('\n'),
-    { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
-  )) as { command?: string };
-  if (!plan.command) return '(no command proposed)';
-  const rtk = new RtkAdapter();
-  const result = await rtk.optimize({ command: plan.command, cwd });
-  return result.optimisedOutput || result.rawOutput;
 }
 
 async function runLeanStep(step: CandidateStep): Promise<string> {
@@ -412,7 +394,7 @@ async function main(): Promise<void> {
   const candidate = JSON.parse(readFileSync(file, 'utf8')) as Candidate;
   const sandbox = join(SANDBOX_ROOT, candidate.id);
   mkdirSync(sandbox, { recursive: true });
-  // Fresh git repo in the sandbox so RTK git steps and write steps are isolated.
+  // Fresh git repo in the sandbox so read and write steps are isolated.
   await execFileP('git', ['init', '-q'], { cwd: sandbox }).catch(() => undefined);
   // Copy the candidate's input fixture into the sandbox (file or directory).
   // For directories, copy the CONTENTS into the sandbox root so relative paths
@@ -472,10 +454,7 @@ async function main(): Promise<void> {
     process.stdout.write(`\n-- step ${step.service}:${step.tool} --\n`);
     const template = step.tool_template ?? candidate.tool_template;
     try {
-      if (step.service === 'rtk') {
-        const out = await runRtkStep(step, sandbox);
-        console.log('output:', out.slice(0, 500));
-      } else if (step.service === 'leanctx' && leanAdapter && template?.tool) {
+      if (step.service === 'leanctx' && leanAdapter && template?.tool) {
         // Template-driven: real LeanCTX tool call with LLM-filled parameters.
         const out = await runLeanToolStep(step, sandbox, leanAdapter, template, {
           ...(candidate.goal !== undefined ? { goal: candidate.goal } : {}),

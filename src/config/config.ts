@@ -45,7 +45,6 @@ const telemetrySchema = z.object({
 });
 
 const toolsSchema = z.object({
-  rtk: z.boolean(),
   serena: z.boolean(),
   leanctx: z.boolean(),
 });
@@ -111,7 +110,7 @@ export const defaultConfig: Config = {
   session: { max_turns: 30 },
   optimisation: { enabled: true, default_budget: 12000 },
   telemetry: { enabled: false },
-  tools: { rtk: true, serena: true, leanctx: true },
+  tools: { serena: true, leanctx: true },
   dashboard: {
     enabled: true,
     host: '127.0.0.1',

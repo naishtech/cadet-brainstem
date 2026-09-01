@@ -25,7 +25,6 @@ import { procedureCommand } from './commands/procedure';
 import { statsCommand } from './commands/stats';
 import { telemetryCommand } from './commands/telemetry';
 import { warmCommand } from './commands/warm';
-import { wrapCommand } from './commands/wrap';
 
 export const VERSION: string = pkg.version;
 
@@ -52,7 +51,6 @@ export const COMMANDS: readonly CliCommand[] = [
   hookSubagentStopCommand,
   hookStopCommand,
   mcpCommand,
-  wrapCommand,
 ];
 
 const COMMAND_MAP: ReadonlyMap<string, CliCommand> = new Map(

@@ -86,12 +86,11 @@ describe('parseHooksArgs', () => {
 });
 
 describe('buildHooksConfig', () => {
-  it('installs all default lifecycle events without PreToolUse', () => {
+  it('installs all default lifecycle events with the procedure review gate', () => {
     const config = buildHooksConfig('find_relevant_symbols');
     expect(config.hooks.SessionStart?.[0]!.command).toContain('hook-session-start');
     expect(config.hooks.UserPromptSubmit?.[0]!.command).toContain('hook-user-prompt');
-    // PreToolUse is off by default (too intrusive for daily dev).
-    expect(config.hooks.PreToolUse).toBeUndefined();
+    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-procedure-review');
     expect(config.hooks.PostToolUse?.[0]!.command).toContain('hook-post-tool');
     expect(config.hooks.PreCompact?.[0]!.command).toContain('hook-pre-compact');
     expect(config.hooks.SubagentStart?.[0]!.command).toContain('hook-subagent-start');
@@ -101,21 +100,21 @@ describe('buildHooksConfig', () => {
 
   it('installs PreToolUse redirect + remind only when pretool is true', () => {
     const config = buildHooksConfig('find_relevant_symbols', { pretool: true });
-    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-redirect');
-    expect(config.hooks.PreToolUse?.[1]!.command).toContain(
+    expect(config.hooks.PreToolUse?.[1]!.command).toContain('hook-redirect');
+    expect(config.hooks.PreToolUse?.[2]!.command).toContain(
       'hook-remind --tool find_relevant_symbols',
     );
   });
 
   it('installs ONLY hook-remind (no redirect) when remind is true', () => {
     const config = buildHooksConfig('find_relevant_symbols', { remind: true });
-    expect(config.hooks.PreToolUse).toHaveLength(1);
-    expect(config.hooks.PreToolUse?.[0]!.command).toContain('hook-remind --tool find_relevant_symbols');
-    expect(config.hooks.PreToolUse?.[0]!.command).not.toContain('hook-redirect');
+    expect(config.hooks.PreToolUse).toHaveLength(2);
+    expect(config.hooks.PreToolUse?.[1]!.command).toContain('hook-remind --tool find_relevant_symbols');
+    expect(config.hooks.PreToolUse?.[1]!.command).not.toContain('hook-redirect');
   });
 
-  it('leaves PreToolUse undefined when neither pretool nor remind is set', () => {
-    expect(buildHooksConfig('find_relevant_symbols').hooks.PreToolUse).toBeUndefined();
+  it('keeps the procedure review gate when neither redirect nor remind is set', () => {
+    expect(buildHooksConfig('find_relevant_symbols').hooks.PreToolUse).toHaveLength(1);
   });
 });
 

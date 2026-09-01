@@ -37,7 +37,6 @@ import type { Steering } from '../steering';
 import { PolicyEngine } from '../policy';
 import type { OptimisationStrategy } from '../policy';
 import { LeanCtxAdapter } from '../integrations/leanctx';
-import { RtkAdapter } from '../integrations/rtk';
 import { SerenaAdapter } from '../integrations/serena';
 import {
   getDefaultMetricsPath,
@@ -65,6 +64,10 @@ import {
   ProcedureStore,
   type Procedure,
   type ProcedureStep,
+  FileProcedureReviewState,
+  hashProcedureArgs,
+  reviewExpiry,
+  type ProcedureReviewState,
 } from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
@@ -228,8 +231,6 @@ export interface SerenaTools {
 
 export interface LeanCtxTools {
   optimize: LeanCtxAdapter['optimize'];
-  callTool: LeanCtxAdapter['callTool'];
-  listTools: LeanCtxAdapter['listTools'];
   close: () => Promise<void>;
 }
 
@@ -242,7 +243,6 @@ export interface McpDeps {
     inventoryText: string,
   ) => Promise<ContextAssessmentOutcome>;
   leanctx?: Partial<LeanCtxTools>;
-  rtk?: Pick<RtkAdapter, 'optimize'>;
   serena?: Partial<SerenaTools>;
   /** Local-LLM availability; drives the fast "warming up / down" degrade path. */
   llmStatus?: LlmStatusTracker;
@@ -255,6 +255,8 @@ export interface McpDeps {
   procedureStore?: ProcedureStore;
   /** Injectable arg-filler for procedure_apply (tests); defaults to the local LLM. */
   procedureFillArgs?: (step: ProcedureStep, repo: string) => Promise<Record<string, unknown>>;
+  /** Injectable review state; defaults to a short-lived local file store. */
+  procedureReviewState?: ProcedureReviewState;
   /** Injectable adapters for procedure_apply (tests); defaults to real ones. */
   procedureSerena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
@@ -274,7 +276,6 @@ interface ResolvedDeps {
     inventoryText: string,
   ) => Promise<ContextAssessmentOutcome>;
   leanctx: Partial<LeanCtxTools>;
-  rtk: Pick<RtkAdapter, 'optimize'>;
   serena: Partial<SerenaTools>;
   llmStatus: LlmStatusTracker;
   metricsPath: string;
@@ -298,7 +299,6 @@ function defaultRecorder(metricsPath: string): (event: OptimisationEvent) => voi
     }
   };
 }
-
 /**
  * Shared, process-lifetime adapter singletons. Each MCP tool call goes through
  * `resolveDeps`, which previously constructed a fresh `new SerenaAdapter()` (and
@@ -309,7 +309,6 @@ function defaultRecorder(metricsPath: string): (event: OptimisationEvent) => voi
  */
 const sharedSerena = new SerenaAdapter();
 const sharedLeanctx = new LeanCtxAdapter();
-const sharedRtk = new RtkAdapter();
 /** Shared local-LLM availability, reset per MCP server process. */
 const sharedLlmStatus = new LlmStatusTracker();
 
@@ -323,7 +322,6 @@ function resolveDeps(deps: McpDeps = {}): ResolvedDeps {
       ((steering) => new PolicyEngine().getStrategy(steering)),
     assess: deps.assess ?? assessWithFallback,
     leanctx: deps.leanctx ?? sharedLeanctx,
-    rtk: deps.rtk ?? sharedRtk,
     serena: deps.serena ?? sharedSerena,
     llmStatus: deps.llmStatus ?? sharedLlmStatus,
     metricsPath,
@@ -546,6 +544,7 @@ export interface ProcedureReviewArgs {
   procedure_id: string;
   repo: string;
   step_index?: number;
+  args?: Record<string, Record<string, unknown>>;
 }
 
 export interface ProcedureApplyArgs {
@@ -555,6 +554,8 @@ export interface ProcedureApplyArgs {
   approved: boolean;
   /** Optional per-tool arg overrides, e.g. { "create_text_file": {...} }. */
   args?: Record<string, Record<string, unknown>>;
+  /** Server-issued token returned by procedure_review. */
+  review_token?: string;
 }
 
 /**
@@ -583,9 +584,11 @@ export async function procedureReviewTool(
         ? writeSteps.filter(({ i }) => i === args.step_index)
         : writeSteps;
     const reviews: Array<Record<string, unknown>> = [];
+    const reviewedArgs: Record<string, Record<string, unknown>> = {};
     for (const { s } of targets) {
       try {
-        const filled = await defaultFillArgs(s, args.repo);
+        const filled = args.args?.[s.tool] ?? await defaultFillArgs(s, args.repo);
+        reviewedArgs[s.tool] = filled;
         const proposal = buildWriteDiff(s, filled, args.repo);
         reviews.push({
           service: s.service,
@@ -600,7 +603,24 @@ export async function procedureReviewTool(
         reviews.push({ service: s.service, tool: s.tool, error: (err as Error).message });
       }
     }
-    return { procedure_id: args.procedure_id, repo: args.repo, reviews };
+    const result: Record<string, unknown> = {
+      procedure_id: args.procedure_id,
+      repo: args.repo,
+      reviews,
+    };
+    if (writeSteps.length > 0 && reviews.length === targets.length) {
+      const state = deps.procedureReviewState ?? new FileProcedureReviewState();
+      const issued = state.issue({
+        procedureId: args.procedure_id,
+        repo: args.repo,
+        argsHash: hashProcedureArgs(reviewedArgs),
+        expiresAt: reviewExpiry(),
+      });
+      result.review_token = issued.token;
+      result.expires_at = issued.expiresAt;
+      result.reviewed_args = reviewedArgs;
+    }
+    return result;
   } finally {
     if (deps.procedureStore === undefined) {
       try {
@@ -629,6 +649,8 @@ export async function procedureApplyTool(
     return {
       procedure_id: args.procedure_id,
       ok: false,
+      code: 'APPROVAL_REQUIRED',
+      next_action: 'procedure_review',
       error: 'approved must be true to apply writes (review gate)',
     };
   }
@@ -638,18 +660,51 @@ export async function procedureApplyTool(
     if (procedure === null) {
       return { procedure_id: args.procedure_id, ok: false, error: `no procedure with id "${args.procedure_id}"` };
     }
+    const hasWrites = procedure.steps.some((step) => isWriteStep(step));
+    if (hasWrites) {
+      if (typeof args.review_token !== 'string' || args.review_token.length === 0) {
+        return {
+          procedure_id: args.procedure_id,
+          ok: false,
+          code: 'REVIEW_REQUIRED',
+          next_action: 'procedure_review',
+          error:
+            'procedure_review must complete before applying writes: call procedure_review first, ' +
+            'then re-invoke procedure_apply passing the returned review_token (and the same args) ' +
+            'with approved:true',
+        };
+      }
+      const reviewState = deps.procedureReviewState ?? new FileProcedureReviewState();
+      const review = reviewState.consume(args.review_token, {
+        procedureId: args.procedure_id,
+        repo: args.repo,
+        argsHash: hashProcedureArgs(args.args),
+      });
+      if (!review.ok) {
+        return {
+          procedure_id: args.procedure_id,
+          ok: false,
+          code: review.code,
+          next_action: 'procedure_review',
+          error: review.code === 'REVIEW_REQUIRED'
+            ? 'review token is missing, expired, or already used: re-run procedure_review and pass the fresh review_token with the same args'
+            : 'procedure arguments or repository do not match the reviewed change: pass the same args (reviewed_args) and repo that procedure_review used',
+        };
+      }
+    }
     const fillArgs =
       deps.procedureFillArgs ??
       (args.args !== undefined
         ? async (step: ProcedureStep, repo: string) =>
             args.args![step.tool] !== undefined ? args.args![step.tool]! : defaultFillArgs(step, repo)
         : undefined);
-    // Reuse the process-lifetime shared adapters. Previously `executeProcedure`
-    // lazily created a fresh `new SerenaAdapter()` (and LeanCtx) whenever none
-    // was injected, so every procedure_apply spawned its own
-    // `serena start-mcp-server` process — accumulating one instance per call.
-    const serenaAdapter = deps.procedureSerena ?? sharedSerena;
-    const leanctxAdapter = deps.procedureLeanctx ?? sharedLeanctx;
+    // Decoupled from the gateway: procedures own their connections.
+    // `executeProcedure` lazily creates + closes ephemeral serena/leanctx
+    // clients per run when none are injected, so procedures no longer require
+    // the server's process-lifetime adapter singletons. Callers may still
+    // inject clients (deps.procedureSerena / procedureLeanctx, used by tests).
+    const serenaAdapter = deps.procedureSerena;
+    const leanctxAdapter = deps.procedureLeanctx;
     const result = await executeProcedure(procedure, {
       repoPath: args.repo,
       store,
@@ -810,6 +865,16 @@ export async function steerTool(
     steering.tool_plan = plan;
   }
   const slimProcedures = procedures?.map(slimProcedure);
+  const procedureContract = procedures !== undefined && procedures.length > 0 && !outcome.degraded
+    ? procedures.slice(0, 1).map((p) => ({
+        procedure_id: p.id,
+        required_sequence: p.steps.some((step) => isWriteStep(step))
+          ? ['procedure_review', 'procedure_apply']
+          : ['procedure_apply'],
+        approval_required: p.steps.some((step) => isWriteStep(step)),
+        risk_tier: p.riskTier,
+      }))
+    : undefined;
   return {
     // Most important directions first (response_policy -> ... -> request_id).
     response_policy: compileResponsePolicy(steering.response_policy),
@@ -834,6 +899,7 @@ export async function steerTool(
     ...(llmUnavailable ? { procedures_unavailable: true } : {}),
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
     ...(slimProcedures !== undefined ? { procedures: slimProcedures } : {}),
+    ...(procedureContract !== undefined ? { procedure_contract: procedureContract } : {}),
     ...(slimProcedures !== undefined
       ? { procedures_review: compileProcedureReviews(procedures!) }
       : {}),
@@ -1063,347 +1129,6 @@ export async function activateProjectTool(
   };
 }
 
-export interface FindSymbolsArgs {
-  query: string;
-  cwd: string;
-  project?: string;
-  request_id?: string;
-}
-
-/** `find_relevant_symbols` — Serena semantic search for targeted context. */
-export async function findRelevantSymbolsTool(
-  args: FindSymbolsArgs,
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  if (typeof args.query !== 'string' || args.query.length === 0) {
-    throw new Error('find_relevant_symbols requires a non-empty string "query"');
-  }
-  if (typeof args.cwd !== 'string' || args.cwd.length === 0) {
-    throw new Error('find_relevant_symbols requires a non-empty string "cwd"');
-  }
-  const d = resolveDeps(deps);
-  if (d.serena.search === undefined) {
-    return { degraded: true, error: 'serena search unavailable' };
-  }
-  const requestId = resolveRequestId(args.request_id);
-  const searchStart = performance.now();
-  const result = await d.serena.search({
-    query: args.query,
-    cwd: args.cwd,
-    ...(args.project !== undefined ? { project: String(args.project) } : {}),
-  });
-  const searchLatencyMs = Math.round(performance.now() - searchStart);
-  const textBytes = Buffer.byteLength(result.rawText);
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'search',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'serena',
-    operation: 'find_relevant_symbols',
-    estimated_input_tokens: Math.round(textBytes / 4),
-    estimated_output_tokens: Math.round(textBytes / 4),
-    estimated_tokens_saved: 0,
-    compression_ratio: 1,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: searchLatencyMs,
-    symbols_found: result.symbols.length,
-    files_found: result.files.length,
-    request_id: requestId,
-  });
-  return {
-    query: result.query,
-    symbols: result.symbols,
-    files: result.files,
-    rawText: result.rawText,
-    degraded: result.degraded,
-    request_id: requestId,
-  };
-}
-
-export interface CompressOutputArgs {
-  command: string;
-  cwd?: string;
-  shell?: string;
-  request_id?: string;
-}
-
-export interface SerenaCallArgs {
-  tool: string;
-  arguments?: Record<string, unknown>;
-  cwd?: string;
-  project?: string;
-  request_id?: string;
-}
-
-/** `serena_call` — forward any call to any Serena tool (generic passthrough). */
-export async function serenaCallTool(
-  args: SerenaCallArgs,
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  if (typeof args.tool !== 'string' || args.tool.length === 0) {
-    throw new Error('serena_call requires a non-empty string "tool"');
-  }
-  const d = resolveDeps(deps);
-  if (d.serena.callTool === undefined) {
-    return { degraded: true, error: 'serena passthrough unavailable' };
-  }
-  const requestId = resolveRequestId(args.request_id);
-  const callStart = performance.now();
-  const result = await d.serena.callTool({
-    tool: args.tool,
-    ...(args.arguments !== undefined ? { arguments: args.arguments } : {}),
-    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
-    ...(args.project !== undefined ? { project: String(args.project) } : {}),
-  });
-  const callLatencyMs = Math.round(performance.now() - callStart);
-  const textBytes = Buffer.byteLength(result.rawText);
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'search',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'serena',
-    operation: args.tool,
-    estimated_input_tokens: Math.round(
-      Buffer.byteLength(JSON.stringify(args.arguments ?? {})) / 4,
-    ),
-    estimated_output_tokens: Math.round(textBytes / 4),
-    estimated_tokens_saved: 0,
-    compression_ratio: null,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: callLatencyMs,
-    request_id: requestId,
-  });
-  return {
-    tool: result.tool,
-    result: result.result,
-    degraded: result.degraded,
-    request_id: requestId,
-  };
-}
-
-export interface SerenaListArgs {
-  cwd?: string;
-  project?: string;
-  request_id?: string;
-}
-
-/** `serena_list_tools` — list what Serena currently exposes (discovery). */
-export async function serenaListToolsTool(
-  args: SerenaListArgs = {},
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  const d = resolveDeps(deps);
-  if (d.serena.listTools === undefined) {
-    return { tools: [], degraded: true, error: 'serena passthrough unavailable' };
-  }
-  const requestId = resolveRequestId(args.request_id);
-  const callStart = performance.now();
-  const result = await d.serena.listTools({
-    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
-    ...(args.project !== undefined ? { project: String(args.project) } : {}),
-  });
-  const callLatencyMs = Math.round(performance.now() - callStart);
-  const textBytes = Buffer.byteLength(
-    JSON.stringify(result.tools.map((t) => t.name)),
-  );
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'search',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'serena',
-    operation: 'list_tools',
-    estimated_input_tokens: 0,
-    estimated_output_tokens: Math.round(textBytes / 4),
-    estimated_tokens_saved: 0,
-    compression_ratio: null,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: callLatencyMs,
-    request_id: requestId,
-  });
-  return {
-    tools: result.tools.map((t) => t.name),
-    degraded: result.degraded,
-    request_id: requestId,
-  };
-}
-
-export interface LeanCtxCallArgs {
-  /** LeanCTX tool name, e.g. ctx_read, ctx_shell, ctx_search, ctx_explore. */
-  tool: string;
-  /** Arguments forwarded verbatim to the LeanCTX tool. */
-  arguments?: Record<string, unknown>;
-  /** Project directory (defaults to the server cwd). */
-  cwd?: string;
-  request_id?: string;
-}
-
-/** `leanctx_call` — forward any call to any `ctx_*` tool over MCP. */
-export async function leanctxCallTool(
-  args: LeanCtxCallArgs,
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  if (typeof args.tool !== 'string' || args.tool.length === 0) {
-    throw new Error('leanctx_call requires a non-empty string "tool"');
-  }
-  const d = resolveDeps(deps);
-  if (d.leanctx.callTool === undefined) {
-    return { degraded: true, error: 'leanctx passthrough unavailable' };
-  }
-  const requestId = resolveRequestId(args.request_id);
-  const callStart = performance.now();
-  const result = await d.leanctx.callTool({
-    tool: args.tool,
-    ...(args.arguments !== undefined ? { arguments: args.arguments } : {}),
-    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
-  });
-  const callLatencyMs = Math.round(performance.now() - callStart);
-  const textBytes = Buffer.byteLength(result.rawText);
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'search',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'leanctx',
-    operation: args.tool,
-    estimated_input_tokens: Math.round(
-      Buffer.byteLength(JSON.stringify(args.arguments ?? {})) / 4,
-    ),
-    estimated_output_tokens: Math.round(textBytes / 4),
-    estimated_tokens_saved: 0,
-    compression_ratio: null,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: callLatencyMs,
-    request_id: requestId,
-  });
-  return {
-    tool: result.tool,
-    result: result.result,
-    degraded: result.degraded,
-    request_id: requestId,
-  };
-}
-
-export interface LeanCtxListArgs {
-  cwd?: string;
-  request_id?: string;
-}
-
-/** `leanctx_list_tools` — list what LeanCTX currently exposes (discovery). */
-export async function leanctxListToolsTool(
-  args: LeanCtxListArgs = {},
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  const d = resolveDeps(deps);
-  if (d.leanctx.listTools === undefined) {
-    return { tools: [], degraded: true, error: 'leanctx passthrough unavailable' };
-  }
-  const requestId = resolveRequestId(args.request_id);
-  const callStart = performance.now();
-  const result = await d.leanctx.listTools({
-    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
-  });
-  const callLatencyMs = Math.round(performance.now() - callStart);
-  const textBytes = Buffer.byteLength(
-    JSON.stringify(result.tools.map((t) => t.name)),
-  );
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'search',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'leanctx',
-    operation: 'list_tools',
-    estimated_input_tokens: 0,
-    estimated_output_tokens: Math.round(textBytes / 4),
-    estimated_tokens_saved: 0,
-    compression_ratio: null,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: callLatencyMs,
-    request_id: requestId,
-  });
-  return {
-    tools: result.tools.map((t) => t.name),
-    degraded: result.degraded,
-    request_id: requestId,
-  };
-}
-
-/**
- * `compress_command_output` — run a read-only command and return its
- * RTK-reduced output. The full raw output is never sent back (that is the
- * point); its size is reported so savings are measurable. The command is
- * passed through as-is to the platform shell (cmd.exe on Windows) unless a
- * `shell` is given (e.g. "bash" for git-bash).
- */
-export async function compressCommandOutputTool(
-  args: CompressOutputArgs,
-  deps: McpDeps = {},
-): Promise<Record<string, unknown>> {
-  if (typeof args.command !== 'string' || args.command.trim().length === 0) {
-    throw new Error(
-      'compress_command_output requires a non-empty string "command"',
-    );
-  }
-  const d = resolveDeps(deps);
-  const requestId = resolveRequestId(args.request_id);
-  const rtkStart = performance.now();
-  const result = await d.rtk.optimize({
-    command: args.command,
-    ...(args.cwd !== undefined ? { cwd: String(args.cwd) } : {}),
-    ...(args.shell !== undefined ? { shell: String(args.shell) } : {}),
-  });
-  const rtkLatencyMs = Math.round(performance.now() - rtkStart);
-  d.record({
-    timestamp: new Date().toISOString(),
-    session_id: MCP_SESSION_ID,
-    task_type: 'investigation',
-    complexity: 'low',
-    risk: 'low',
-    tool: 'rtk',
-    operation: 'compress_command_output',
-    estimated_input_tokens: result.estimatedTokensBefore,
-    estimated_output_tokens: result.estimatedTokensAfter,
-    estimated_tokens_saved: result.estimatedTokensSaved,
-    compression_ratio:
-      result.rawOutputSize > 0
-        ? result.optimisedOutputSize / result.rawOutputSize
-        : null,
-    optimisation_strategy: null,
-    degraded: result.degraded,
-    latency_ms: rtkLatencyMs,
-    request_id: requestId,
-  });
-  const note =
-    result.estimatedTokensSaved === 0 && !result.degraded
-      ? 'nothing to compress — output is small or already compact (0 tokens saved)'
-      : undefined;
-  return {
-    command: result.command,
-    optimisedOutput: result.optimisedOutput,
-    rawOutputSize: result.rawOutputSize,
-    optimisedOutputSize: result.optimisedOutputSize,
-    estimatedTokensBefore: result.estimatedTokensBefore,
-    estimatedTokensAfter: result.estimatedTokensAfter,
-    estimatedTokensSaved: result.estimatedTokensSaved,
-    degraded: result.degraded,
-    request_id: requestId,
-    ...(note !== undefined ? { note } : {}),
-  };
-}
-
 export interface AssessContextArgs {
   request_id: string;
   task?: string;
@@ -1584,171 +1309,6 @@ const TOOL_DEFS = [
     },
   },
   {
-    name: 'find_relevant_symbols',
-    description:
-      'Find symbols relevant to a query using Serena semantic search. Returns symbols and files ' +
-      'so you can read only the relevant context.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Symbol name / path pattern to find.',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Project directory.',
-        },
-        project: {
-          type: 'string',
-          description: 'Optional Serena project name/path (defaults to cwd).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-      required: ['query', 'cwd'],
-    },
-  },
-  {
-    name: 'serena_call',
-    description:
-      'Call any tool exposed by the Serena MCP server (symbol search, referencing ' +
-      'symbols, rename, diagnostics, etc.) by forwarding the request. Use ' +
-      'serena_list_tools to see what Serena currently exposes; for a typed symbol ' +
-      'search prefer find_relevant_symbols.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        tool: {
-          type: 'string',
-          description: 'Serena tool name, e.g. find_symbol, find_referencing_symbols, rename_symbol.',
-        },
-        arguments: {
-          type: 'object',
-          description: 'Arguments forwarded verbatim to the Serena tool.',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Project directory (defaults to the server cwd).',
-        },
-        project: {
-          type: 'string',
-          description: 'Optional Serena project name/path (defaults to cwd).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-      required: ['tool'],
-    },
-  },
-  {
-    name: 'serena_list_tools',
-    description:
-      'List the tools currently exposed by the Serena MCP server (names + schemas) ' +
-      'so the agent can call any of them via serena_call without hardcoding.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: {
-          type: 'string',
-          description: 'Project directory (defaults to the server cwd).',
-        },
-        project: {
-          type: 'string',
-          description: 'Optional Serena project name/path (defaults to cwd).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-    },
-  },
-  {
-    name: 'leanctx_call',
-    description:
-      'Call any tool exposed by the LeanCTX MCP server (ctx_read, ctx_shell, ' +
-      'ctx_search, ctx_explore, ctx_callgraph, ctx_knowledge, ctx_gain, etc.) by ' +
-      'forwarding the request. Use leanctx_list_tools to see what LeanCTX exposes; ' +
-      'for a policy-driven file compile prefer optimize_context.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        tool: {
-          type: 'string',
-          description:
-            'LeanCTX tool name, e.g. ctx_read, ctx_shell, ctx_search, ctx_explore, ctx_callgraph, ctx_gain.',
-        },
-        arguments: {
-          type: 'object',
-          description: 'Arguments forwarded verbatim to the LeanCTX tool.',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Project directory (defaults to the server cwd).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-      required: ['tool'],
-    },
-  },
-  {
-    name: 'leanctx_list_tools',
-    description:
-      'List the tools currently exposed by the LeanCTX MCP server (names + schemas) ' +
-      'so the agent can call any of them via leanctx_call without hardcoding.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: {
-          type: 'string',
-          description: 'Project directory (defaults to the server cwd).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-    },
-  },
-  {
-    name: 'compress_command_output',
-    description:
-      'Run a read-only command and return its RTK-compressed output. Only helps on noisy/large ' +
-      'output (git status, ls, tests). On Windows commands run in cmd by default — pass '
-      + '"shell": "bash" to use git-bash. The command is passed through as-is.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description: 'Read-only command to run, e.g. "git status".',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Optional working directory.',
-        },
-        shell: {
-          type: 'string',
-          description:
-            'Shell to run the command in (defaults to the platform shell, cmd.exe on Windows; pass "bash" for git-bash).',
-        },
-        request_id: {
-          type: 'string',
-          description: 'Optional shared id linking this call to a logical flow.',
-        },
-      },
-      required: ['command'],
-    },
-  },
-  {
     name: 'chat_memory_store',
     description:
       'Persist and retrieve agent memories in a local SQLite store. Use action ' +
@@ -1875,33 +1435,6 @@ export async function handleToolCall(
       case 'optimize_context':
         result = await optimizeContextTool(
           args as unknown as OptimizeContextArgs,
-          deps,
-        );
-        break;
-      case 'find_relevant_symbols':
-        result = await findRelevantSymbolsTool(
-          args as unknown as FindSymbolsArgs,
-          deps,
-        );
-        break;
-      case 'serena_call':
-        result = await serenaCallTool(args as unknown as SerenaCallArgs, deps);
-        break;
-      case 'serena_list_tools':
-        result = await serenaListToolsTool(args as unknown as SerenaListArgs, deps);
-        break;
-      case 'leanctx_call':
-        result = await leanctxCallTool(args as unknown as LeanCtxCallArgs, deps);
-        break;
-      case 'leanctx_list_tools':
-        result = await leanctxListToolsTool(
-          args as unknown as LeanCtxListArgs,
-          deps,
-        );
-        break;
-      case 'compress_command_output':
-        result = await compressCommandOutputTool(
-          args as unknown as CompressOutputArgs,
           deps,
         );
         break;

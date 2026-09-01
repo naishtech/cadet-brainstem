@@ -41,10 +41,9 @@ function makeReport(
     node: { name: 'node', available: true, detail: 'v25.2.1' },
     npm: { name: 'npm', available: true, detail: '11.6.2' },
     ollama: { name: 'ollama', available: true, detail: 'http://localhost:11434' },
-    rtk: { name: 'rtk', available: true },
     serena: { name: 'serena', available: true },
     leanctx: { name: 'leanctx', available: true },
-    availableTools: ['rtk', 'serena', 'leanctx'],
+    availableTools: ['serena', 'leanctx'],
     missingTools: [],
   };
   return { ...base, ...overrides };
@@ -111,9 +110,8 @@ describe('runInit', () => {
 
   it('does not attempt installs when the user declines consent', async () => {
     const report = makeReport({
-      rtk: { name: 'rtk', available: false },
       availableTools: ['serena', 'leanctx'],
-      missingTools: ['rtk'],
+      missingTools: [],
     });
 
     await runInit({
@@ -128,16 +126,11 @@ describe('runInit', () => {
     expect(pullOllamaModelMock).not.toHaveBeenCalled();
   });
 
-  it('installs a missing Windows tool when the user consents', async () => {
-    downloadAndExtractZipMock.mockResolvedValue({
-      ok: true,
-      binPath: 'C:\\Users\\dev\\.local\\bin\\rtk.exe',
-    });
+  it('does not install removed integrations', async () => {
     const report = makeReport({
       platform: 'windows',
-      rtk: { name: 'rtk', available: false },
       availableTools: ['serena', 'leanctx'],
-      missingTools: ['rtk'],
+      missingTools: [],
     });
 
     await runInit({
@@ -148,11 +141,7 @@ describe('runInit', () => {
       log: () => undefined,
     });
 
-    expect(downloadAndExtractZipMock).toHaveBeenCalledWith(
-      'https://example.com/rtk.zip',
-      expect.stringContaining('.local'),
-      'rtk',
-    );
+    expect(downloadAndExtractZipMock).not.toHaveBeenCalled();
   });
 
   it('pulls the steering model when the user consents', async () => {
@@ -193,7 +182,7 @@ describe('runInit', () => {
   it('prints a clear summary including missing tools', async () => {
     const report = makeReport({
       serena: { name: 'serena', available: false },
-      availableTools: ['rtk', 'leanctx'],
+      availableTools: ['leanctx'],
       missingTools: ['serena'],
     });
     const lines: string[] = [];

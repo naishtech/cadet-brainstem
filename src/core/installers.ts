@@ -13,8 +13,6 @@ export const OLLAMA_MODEL = 'qwen3:4b';
  * GitHub release). These are the documented Windows install path
  * (docs/requirements.md).
  */
-export const RTK_WINDOWS_URL =
-  'https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-pc-windows-msvc.zip';
 export const LEANCTX_WINDOWS_URL =
   'https://github.com/yvgude/lean-ctx/releases/latest/download/lean-ctx-x86_64-pc-windows-msvc.zip';
 

@@ -62,12 +62,10 @@ describe('detectEnvironment', () => {
     expect(report.node.available).toBe(true);
     expect(report.npm.available).toBe(true);
     expect(report.ollama.available).toBe(true);
-    expect(report.rtk.available).toBe(true);
     expect(report.serena.available).toBe(true);
     expect(report.leanctx.available).toBe(true);
     expect(report.missingTools).toEqual([]);
-    expect(report.availableTools.sort()).toEqual(['leanctx', 'rtk', 'serena']);
-    expect(report.rtk.detail).toContain('0.45.0');
+    expect(report.availableTools.sort()).toEqual(['leanctx', 'serena']);
     expect(report.ollama.detail).toContain('http');
   });
 
@@ -78,11 +76,10 @@ describe('detectEnvironment', () => {
     const report = await detectEnvironment();
 
     expect(report.ollama.available).toBe(false);
-    expect(report.rtk.available).toBe(false);
     expect(report.serena.available).toBe(false);
     expect(report.leanctx.available).toBe(false);
     expect(report.availableTools).toEqual([]);
-    expect(report.missingTools.sort()).toEqual(['leanctx', 'rtk', 'serena']);
+    expect(report.missingTools.sort()).toEqual(['leanctx', 'serena']);
   });
 
   it('does not throw when ollama is unreachable but tools exist', async () => {
@@ -91,7 +88,6 @@ describe('detectEnvironment', () => {
 
     await expect(detectEnvironment()).resolves.toMatchObject({
       ollama: { available: false },
-      rtk: { available: true },
     });
   });
 });

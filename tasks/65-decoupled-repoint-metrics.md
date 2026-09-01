@@ -1,6 +1,6 @@
 # 65 — Decoupled: re-point metrics to LeanCTX-only
 
-**Status:** Planned (not yet implemented)
+**Status:** Done
 
 Part of the decoupled-architecture plan (`docs/plans/decoupled-architecture.md`).
 After tasks 63–64, LeanCTX is the sole source of real token-savings. Metrics
@@ -24,3 +24,8 @@ aggregation must reflect only LeanCTX and stop surfacing zeroed Serena/RTK rows.
 ## Acceptance criteria
 - `cadet-brainstem stats` "Savings by tool" lists only `leanctx`.
 - No zeroed serena/rtk savings rows contribute to totals.
+
+## Verification
+- Token totals, compression ratios, and savings breakdowns now aggregate only
+  LeanCTX events; general event and call telemetry remains available.
+- `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` pass.

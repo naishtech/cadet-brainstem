@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Decoupled Brainstem from the Serena and LeanCTX proxy surfaces; Brainstem
+  now exposes steering, procedures, and `optimize_context` measurement while
+  clients use Serena directly for navigation.
+- Removed RTK integration and report token savings from LeanCTX events only.
+
 ## [0.3.0] - 2026-08-31
 
 ### Changed

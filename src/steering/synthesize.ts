@@ -79,10 +79,9 @@ const TOOL_RULES: ToolRule[] = [
     priority: 2,
   },
   {
-    // Action-oriented only: "CLI commands" (documenting them) should NOT
-    // trigger shell compression, so avoid the broad nouns `command`/`output`.
+    // Action-oriented shell work should still gather context through LeanCTX.
     keywords: ['build', 'compile', 'run', 'execute', 'deploy', 'shell', 'docker', 'log', 'ci', 'pipeline'],
-    tool: 'compress_command_output',
+    tool: 'optimize_context',
     intent: 'compress noisy command/build/test output for cheap analysis',
     priority: 1,
   },

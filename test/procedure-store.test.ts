@@ -96,7 +96,7 @@ describe('ProcedureStore', () => {
     const id = store.seedProcedure({
       triggerPattern: 'run tests',
       keywords: ['test'],
-      steps: [{ service: 'rtk', tool: 'compress_command_output' }],
+      steps: [{ service: 'leanctx', tool: 'ctx_read' }],
       riskTier: 'auto_execute',
     });
     expect(store.recordOutcome(id, 'success')).toBe(true);
@@ -139,7 +139,7 @@ describe('ProcedureStore', () => {
     const provenId = store.seedProcedure({
       triggerPattern: 'run tests',
       keywords: ['test', 'run'],
-      steps: [{ service: 'rtk', tool: 'compress_command_output' }],
+      steps: [{ service: 'leanctx', tool: 'ctx_read' }],
       riskTier: 'auto_execute',
     });
     store.recordOutcome(provenId, 'success');

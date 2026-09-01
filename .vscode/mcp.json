@@ -4,6 +4,12 @@
       "type": "stdio",
       "command": "cadet-brainstem",
       "args": ["mcp"]
+    },
+     "serena": {
+      "command": "serena",
+      "args": [
+        "start-mcp-server"
+      ]
     }
   }
 }

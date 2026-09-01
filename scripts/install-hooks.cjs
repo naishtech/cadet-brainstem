@@ -22,6 +22,7 @@ function buildDefaultHooksConfig() {
     timeout === undefined ? { type: 'command', command } : { type: 'command', command, timeout };
   return {
     hooks: {
+      PreToolUse: [hook('cadet-brainstem hook-procedure-review')],
       SessionStart: [hook('cadet-brainstem hook-session-start')],
       UserPromptSubmit: [hook('cadet-brainstem hook-user-prompt', STEERING_HOOK_TIMEOUT_MS)],
       PostToolUse: [hook('cadet-brainstem hook-post-tool')],

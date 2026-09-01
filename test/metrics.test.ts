@@ -118,7 +118,6 @@ describe('MetricsStore (in-memory)', () => {
     store.record(makeEvent({ tool: 'rtk', estimated_tokens_saved: 50 }));
     expect(store.getSavingsByTool()).toEqual([
       { key: 'leanctx', estimatedTokensSaved: 300 },
-      { key: 'rtk', estimatedTokensSaved: 150 },
     ]);
   });
 

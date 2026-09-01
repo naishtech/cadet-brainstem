@@ -23,7 +23,7 @@ describe('VS Code integration files', () => {
     expect(server?.args).toContain('mcp');
   });
 
-  it('ships runnable VS Code tasks including a wrap example', () => {
+  it('ships runnable VS Code tasks', () => {
     const tasks = JSON.parse(read('.vscode/tasks.json')) as {
       tasks?: Array<{ label?: string }>;
     };
@@ -31,15 +31,12 @@ describe('VS Code integration files', () => {
     expect(labels).toContain('cadet: init');
     expect(labels).toContain('cadet: doctor');
     expect(labels).toContain('cadet: stats');
-    expect(labels).toContain('cadet: wrap (git status)');
   });
 
-  it('AGENTS.md steers the agent to the tools and wrapper', () => {
+  it('AGENTS.md steers the agent to the tools', () => {
     const agents = read('AGENTS.md');
     expect(agents).toContain('optimize_context');
-    expect(agents).toContain('find_relevant_symbols');
-    expect(agents).toContain('compress_command_output');
-    expect(agents).toContain('cadet-brainstem wrap');
+    expect(agents).toContain('native MCP server');
   });
 
   it('documents the VS Code integration including wrap tasks', () => {

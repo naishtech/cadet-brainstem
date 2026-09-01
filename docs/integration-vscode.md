@@ -8,7 +8,7 @@ How to use Cadet Brainstem from VS Code to reduce agent token usage.
    - from this repo: `npm link` (creates the global command), or
    - once published: `npm i -g cadet-brainstem`.
 2. Install the integration tools — see `docs/requirements.md`
-   (Ollama + model, RTK, LeanCTX, Serena).
+  (Ollama + model, LeanCTX, Serena).
 
 ## 1. Register the MCP server (Copilot Chat)
 
@@ -20,8 +20,6 @@ can then call:
    and return the deterministic optimisation strategy. Call this first.
 - `optimize_context` — steering the task, return the LeanCTX-compressed
   representation of a file/directory.
-- `find_relevant_symbols` — Serena semantic search for task-relevant symbols.
-- `compress_command_output` — RTK-reduced output for a command.
 - `chat_memory_store` — persist / retrieve agent memories (local SQLite):
   check before starting work, store facts that are expensive to rediscover.
 
@@ -31,8 +29,8 @@ running until the client disconnects).
 ## 2. Steer the agent
 
 `AGENTS.md` (repo root) tells the agent to call `steering` at the start of
-every turn, then prefer `optimize_context` / `find_relevant_symbols` for large
-context reads and `wrap` for noisy commands. It also tells the agent to check
+every turn, then prefer `optimize_context` for large
+context reads and noisy commands. It also tells the agent to check
 `chat_memory_store` before starting work and, at the end of each response, to
 review the conversation and store memories that match the `memory_policy` —
 facts that are expensive to rediscover (decisions, constraints, verified
@@ -75,18 +73,21 @@ loop (this file is local/untracked — copy it into your repo):
 
 - **`remind`** — when the agent makes many consecutive raw code-search/read
   calls (`Bash`, `grep_search`, `read_file`), deny with a nudge to use
-  `leanctx_call` instead:
-  `cadet-brainstem hook-remind --tool leanctx_call`
-- **`procedure-review`** — when the agent calls `procedure_apply` (applies a
-  write procedure) **without** `approved: true`, deny and return the concrete
-  reviewable diff so the change is surfaced for user approval. With
-  `approved: true` it allows. Other tools pass through:
+  `optimize_context` instead:
+  `cadet-brainstem hook-remind --tool optimize_context`
+- **`procedure-review`** — while a matched `requires_review` procedure is
+  active, deny direct native writes so the agent must use the review flow.
+  Also deny `procedure_apply` without a matching, unexpired review token and
+  explicit `approved: true`; read-only tools and the procedure MCP calls pass
+  through:
   `cadet-brainstem hook-procedure-review`
 
 The write-review flow is: `steering` flags a write procedure →
-`procedure_review` shows the diff → user approves →
-`procedure_apply {approved: true}` applies (and `executeProcedure` verifies the
-applied file matches the reviewed diff).
+`procedure_review {procedure_id, repo, args}` shows the diff and returns a
+short-lived `review_token` → user approves the exact reviewed change →
+`procedure_apply {procedure_id, repo, args, review_token, approved: true}`
+applies it. The server binds the token to the procedure, repository, and exact
+arguments, and rejects replayed or mismatched approvals.
 
 ## Users of other repos
 

@@ -57,7 +57,6 @@ describe('command routing', () => {
       'hook-subagent-stop',
       'hook-stop',
       'mcp',
-      'wrap',
     ]);
   });
 

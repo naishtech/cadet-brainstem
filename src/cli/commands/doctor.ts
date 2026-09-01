@@ -174,10 +174,6 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
 
   // Integration tools (non-critical — they degrade gracefully).
   const toolHints: Record<string, (platform: string) => string> = {
-    rtk: (platform) =>
-      platform === 'windows'
-        ? 'Download rtk-x86_64-pc-windows-msvc.zip from https://github.com/rtk-ai/rtk/releases and extract rtk.exe to ~/.local/bin'
-        : 'Install per https://github.com/rtk-ai/rtk',
     serena: () =>
       'Install per its own documentation, then verify: serena --version',
     leanctx: (platform) =>
@@ -186,11 +182,10 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<number> {
         : 'Install per https://github.com/yvgude/lean-ctx',
   };
   const labels: Record<string, string> = {
-    rtk: 'RTK',
     serena: 'Serena',
     leanctx: 'LeanCTX',
   };
-  for (const name of ['rtk', 'serena', 'leanctx'] as const) {
+  for (const name of ['serena', 'leanctx'] as const) {
     const tool = report[name];
     checks.push(
       doctorCheck({

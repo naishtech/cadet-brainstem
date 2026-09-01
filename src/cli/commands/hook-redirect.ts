@@ -12,7 +12,7 @@ import { recordMetrics } from './hook-lifecycle';
  * traffic flows through the brainstem MCP:
  *   - code search / directory dumps  → find_relevant_symbols   (Serena-backed)
  *   - full-file code reads           → optimize_context        (LeanCTX-backed)
- *   - noisy shell commands           → compress_command_output (RTK-backed)
+ *   - noisy shell commands           → optimize_context (LeanCTX-backed)
  *
  * Rationale (from live adoption stats): recommendation-only steering
  * (`tool_plan.recommended_tools` + `follow_tool_plan`) is largely ignored — the
@@ -43,15 +43,14 @@ const LIST_SHELL_COMMANDS = ['ls', 'find', 'tree', 'dir'];
 /** Shell commands that read file content (redirect → optimize_context). */
 const READ_SHELL_COMMANDS = ['cat', 'head', 'tail', 'sed', 'less', 'more', 'bat', 'get-content', 'gc'];
 
-/** Native tool names that execute shell commands (candidate for RTK redirect). */
+/** Native tool names that execute shell commands (candidate for LeanCTX redirect). */
 const SHELL_TOOL_NAMES = ['run_in_terminal', 'terminal', 'bash', 'powershell', 'shell', 'cmd', 'execute_command', 'run_command'];
 
 /**
  * True when a shell command is READ-ONLY and its output is likely large — the
- * only case worth redirecting to compress_command_output (which runs a read-only
- * command through RTK). State-changing commands (npm install, git commit/push,
- * builds that produce artifacts) MUST NOT be redirected: they have to actually
- * run, and compress_command_output is read-only.
+ * only case worth redirecting to optimize_context. State-changing commands (npm
+ * install, git commit/push, builds that produce artifacts) MUST NOT be redirected:
+ * they have to actually run.
  */
 function isReadonlyNoisyShell(cmd: string): boolean {
   const lower = cmd.trim().toLowerCase();
@@ -174,7 +173,7 @@ interface HookOutput {
 /** A detected native tool that should be redirected to a cadet tool. */
 export interface RedirectTarget {
   /** cadet MCP tool the model should call instead. */
-  cadetTool: 'find_relevant_symbols' | 'optimize_context' | 'compress_command_output';
+  cadetTool: 'find_relevant_symbols' | 'optimize_context';
   /** Per-session counter category used for the safety valve. */
   category: 'search' | 'list' | 'read' | 'shell';
   /** What to pass as the cadet tool's primary input (path/pattern), if derivable. */
@@ -263,11 +262,11 @@ export function redirectForTool(
     };
   }
 
-  // Noisy shell command — build/test/git/etc → compress_command_output (RTK).
+  // Noisy shell command — build/test/git/etc → optimize_context (LeanCTX).
   const noisy = isNoisyShellCall(toolName, toolInput);
   if (noisy !== undefined) {
     return {
-      cadetTool: 'compress_command_output',
+      cadetTool: 'optimize_context',
       category: 'shell',
       inputHint: noisy.cmd,
     };
@@ -335,10 +334,9 @@ function denyOutput(target: RedirectTarget): HookOutput {
       instruction = `Use find_relevant_symbols to locate symbols/patterns across the project${hint} instead of a raw search/directory dump.`;
       break;
     case 'optimize_context':
-      instruction = `Use optimize_context with target ${target.inputHint ?? '<path>'} to get the compressed file context instead of a raw full-file read${hint}.`;
-      break;
-    case 'compress_command_output':
-      instruction = `Use compress_command_output with command "${target.inputHint ?? '<cmd>'}" to run it and return RTK-compressed output instead of a raw shell dump${hint}.`;
+      instruction = target.category === 'shell'
+        ? `Use optimize_context to gather concise context for the shell command "${target.inputHint ?? '<cmd>'}" instead of a raw shell dump${hint}.`
+        : `Use optimize_context with target ${target.inputHint ?? '<path>'} to get concise file context instead of a raw full-file read${hint}.`;
       break;
   }
   return {
@@ -454,7 +452,7 @@ export async function runHookRedirect(
   // find_relevant_symbols (the model still gets the same search results).
   // Reads and shell are SOFT-redirected (allow + remind): hard-denying them
   // would block legitimate file reads needed for edits and state-changing /
-  // necessary shell commands (install/test/build), which compress_command_output
+  // necessary shell commands (install/test/build), which optimize_context
   // (read-only) cannot replace.
   if (target.category === 'search' || target.category === 'list') {
     writeOut(JSON.stringify(denyOutput(target)));

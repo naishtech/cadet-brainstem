@@ -7,37 +7,35 @@ function tool(name: string, available: boolean, detail?: string) {
 }
 
 function report(
-  overrides: Partial<Pick<EnvironmentReport, 'ollama' | 'rtk' | 'serena' | 'leanctx'>> = {},
+  overrides: Partial<Pick<EnvironmentReport, 'ollama' | 'serena' | 'leanctx'>> = {},
 ): EnvironmentReport {
   return {
     platform: 'linux',
     node: tool('node', true, 'v20'),
     npm: tool('npm', true, '9.0'),
     ollama: tool('ollama', true, 'http://localhost:11434'),
-    rtk: tool('rtk', false),
     serena: tool('serena', true, '1.0.0'),
     leanctx: tool('leanctx', true, '2.0.0'),
     availableTools: ['serena', 'leanctx'],
-    missingTools: ['rtk'],
+    missingTools: [],
     ...overrides,
   };
 }
 
 describe('getServiceStatus', () => {
-  it('reports all four services with kinds', async () => {
+  it('reports all retained services with kinds', async () => {
     const status = await getServiceStatus({
       model: 'qwen3:4b',
       detect: async () => report(),
       modelAvailable: async () => true,
     });
-    expect(status).toHaveLength(4);
-    expect(status.map((s) => s.kind)).toEqual(['llm', 'rtk', 'serena', 'leanctx']);
+    expect(status).toHaveLength(3);
+    expect(status.map((s) => s.kind)).toEqual(['llm', 'serena', 'leanctx']);
     expect(status.find((s) => s.name === 'ollama')).toMatchObject({
       available: true,
       kind: 'llm',
       detail: 'qwen3:4b',
     });
-    expect(status.find((s) => s.name === 'rtk')?.available).toBe(false);
     expect(status.find((s) => s.name === 'serena')?.detail).toBe('1.0.0');
   });
 

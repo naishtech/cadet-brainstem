@@ -13,7 +13,6 @@ import {
 import { INIT_BANNER } from '../banner';
 import {
   LEANCTX_WINDOWS_URL,
-  RTK_WINDOWS_URL,
   downloadAndExtractZip,
   pullOllamaModel,
   startOllamaDocker,
@@ -112,12 +111,9 @@ async function offerInstallations(
   for (const tool of report.missingTools) {
     log('');
     log(`Missing: ${tool}`);
-    if (tool === 'rtk' || tool === 'leanctx') {
-      const url = tool === 'rtk' ? RTK_WINDOWS_URL : LEANCTX_WINDOWS_URL;
-      const repoUrl =
-        tool === 'rtk'
-          ? 'https://github.com/rtk-ai/rtk/releases'
-          : 'https://github.com/yvgude/lean-ctx/releases';
+    if (tool === 'leanctx') {
+      const url = LEANCTX_WINDOWS_URL;
+      const repoUrl = 'https://github.com/yvgude/lean-ctx/releases';
       const binDir = join(os.homedir(), '.local', 'bin');
       log(
         `  Manual: download the Windows release zip from ${repoUrl} and extract it to ${binDir}.`,
@@ -164,7 +160,6 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log(`Node:     ${formatAvailability(report.node)}`);
   log(`npm:      ${formatAvailability(report.npm)}`);
   log(`Ollama:   ${formatAvailability(report.ollama)}`);
-  log(`RTK:      ${formatAvailability(report.rtk)}`);
   log(`Serena:   ${formatAvailability(report.serena)}`);
   log(`LeanCTX:  ${formatAvailability(report.leanctx)}`);
   log('');
@@ -214,7 +209,7 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('}');
   log('');
   log('The "cadet-brainstem" MCP server will then appear in Copilot Chat,');
-  log('exposing steer, optimize_context, find_relevant_symbols, compress_command_output and chat_memory_store.');
+  log('exposing steer, optimize_context, find_relevant_symbols and chat_memory_store.');
   log('Docs: https://github.com/naishtech/cadet-brainstem/blob/main/docs/integration-vscode.md');
   log('');
   log('Tell your agent how to use it (paste into your agent prompts / AGENTS.md):');
@@ -223,8 +218,7 @@ export async function runInit(deps: InitDeps = {}): Promise<number> {
   log('   runs the local LLM and returns the recommended strategy plus a `response_policy`');
   log('   and a `memory_policy`; parse and follow both in every reply. Then use the Cadet');
   log('   Brainstem tools to save context: call optimize_context before reading a large');
-  log('   file; use find_relevant_symbols before broad searches; call compress_command_output');
-  log('   for noisy command output (pass "shell": "bash" if you are in git-bash on Windows).');
+  log('   file or analyzing noisy command output; use find_relevant_symbols before broad searches.');
   log('   Use chat_memory_store to check memory before starting work and to store facts that');
   log('   are expensive to rediscover; never store secrets. If a tool is unavailable, fall');
   log('   back to the normal read."');

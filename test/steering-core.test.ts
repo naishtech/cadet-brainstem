@@ -284,11 +284,6 @@ describe('parseSteering', () => {
     expect(parsed.tool_plan).toEqual({
       recommended_tools: [
         { name: 'optimize_context', intent: 'extract context', priority: 2 },
-        {
-          name: 'compress_command_output',
-          intent: 'compress noisy command output for cheap analysis',
-          priority: 0,
-        },
       ],
     });
   });
