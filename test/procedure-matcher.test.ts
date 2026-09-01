@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { steerTool, procedureApplyTool, procedureReviewTool } from '../src/mcp';
-import { ProcedureStore } from '../src/procedure';
+import { MemoryProcedureReviewState, ProcedureStore } from '../src/procedure';
 
 const tempDirs: string[] = [];
 
@@ -187,6 +187,49 @@ describe('procedure matcher (repeatable)', () => {
     )) as any;
     expect(result.ok).toBe(false);
     expect(result.error).toContain('approved must be true');
+    store.close();
+  });
+
+  it('requires a matching review before applying a write procedure', async () => {
+    const repo = makeTempDir();
+    const target = join(repo, 'a.ts');
+    writeFileSync(target, 'const value = 1;\n', 'utf8');
+    const store = seededStore();
+    const state = new MemoryProcedureReviewState();
+    store.seedProcedure({
+      triggerPattern: 'Replace content in a file',
+      keywords: ['replace', 'content', 'file'],
+      steps: [{ service: 'serena', tool: 'replace_content' }],
+      riskTier: 'requires_review',
+    });
+    const p = store.findMatches(['replace', 'content', 'file'], 'replace content in a file')[0]!;
+    const args = { replace_content: { relative_path: 'a.ts', needle: '1', repl: '2', mode: 'literal' } };
+    const beforeReview = (await procedureApplyTool(
+      { procedure_id: p.id, repo, approved: true, args },
+      { procedureStore: store, procedureReviewState: state },
+    )) as any;
+    expect(beforeReview.code).toBe('REVIEW_REQUIRED');
+
+    const review = (await procedureReviewTool(
+      { procedure_id: p.id, repo, args },
+      { procedureStore: store, procedureReviewState: state },
+    )) as any;
+    expect(review.review_token).toEqual(expect.any(String));
+    const applied = (await procedureApplyTool(
+      { procedure_id: p.id, repo, approved: true, args, review_token: review.review_token },
+      {
+        procedureStore: store,
+        procedureReviewState: state,
+        procedureThinkEachStep: false,
+        procedureSerena: { callTool: async () => ({ rawText: 'ok' }) },
+      },
+    )) as any;
+    expect(applied.ok).toBe(true);
+    const replay = (await procedureApplyTool(
+      { procedure_id: p.id, repo, approved: true, args, review_token: review.review_token },
+      { procedureStore: store, procedureReviewState: state },
+    )) as any;
+    expect(replay.code).toBe('REVIEW_REQUIRED');
     store.close();
   });
 

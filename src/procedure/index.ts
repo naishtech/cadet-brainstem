@@ -1,5 +1,12 @@
 export { ProcedureStore, getDefaultProcedurePath } from './store';
 export { executeProcedure, defaultFillArgs, isWriteStep } from './execute';
+export {
+  FileProcedureReviewState,
+  MemoryProcedureReviewState,
+  hashProcedureArgs,
+  reviewExpiry,
+} from './review-state';
+export type { ProcedureReviewState, ProcedureReviewRecord } from './review-state';
 export { buildWriteDiff } from './review';
 export type {
   ExecuteProcedureOptions,

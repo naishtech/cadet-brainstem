@@ -196,9 +196,19 @@ export function buildHooksConfig(
           timeout: STEERING_HOOK_TIMEOUT_MS,
         },
       ],
+      PreToolUse: [
+        {
+          type: 'command',
+          command: 'cadet-brainstem hook-procedure-review',
+        },
+      ],
       ...(opts.pretool === true
         ? {
             PreToolUse: [
+              {
+                type: 'command',
+                command: 'cadet-brainstem hook-procedure-review',
+              },
               {
                 // Redirects native code search / directory dumps to the cadet
                 // compressed tools — forces real adoption instead of
@@ -218,6 +228,10 @@ export function buildHooksConfig(
               // after repeated raw search/read bursts, without hard-denying
               // native tools.
               PreToolUse: [
+                {
+                  type: 'command',
+                  command: 'cadet-brainstem hook-procedure-review',
+                },
                 {
                   type: 'command',
                   command: `cadet-brainstem hook-remind --tool ${tool}`,

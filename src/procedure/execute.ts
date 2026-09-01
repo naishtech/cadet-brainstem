@@ -180,7 +180,28 @@ export async function defaultFillArgs(
     sink.thinkToken?.({ id: traceId, delta: reasoning });
     sink.thinkComplete?.({ id: traceId });
   }
-  return (JSON.parse(data.message?.content ?? '{}') as { arguments?: Record<string, unknown> }).arguments ?? {};
+  const raw = data.message?.content?.trim() ?? '';
+  if (raw.length === 0) {
+    throw new Error(
+      `Ollama returned an empty response while filling args for "${step.service}:${step.tool}" ` +
+        `(model ${resolveBaseModel()}); the model may be unresponsive or the prompt was too constrained.`,
+    );
+  }
+  let parsed: { arguments?: Record<string, unknown> };
+  try {
+    parsed = JSON.parse(raw) as { arguments?: Record<string, unknown> };
+  } catch (err) {
+    throw new Error(
+      `Ollama returned invalid JSON while filling args for "${step.service}:${step.tool}": ` +
+        `${(err as Error).message}. Raw: ${raw.slice(0, 200)}`,
+    );
+  }
+  if (parsed.arguments === undefined || typeof parsed.arguments !== 'object') {
+    throw new Error(
+      `Ollama response for "${step.service}:${step.tool}" is missing an "arguments" object. Raw: ${raw.slice(0, 200)}`,
+    );
+  }
+  return parsed.arguments;
 }
 
 /** Reduce path-like args to be repo-relative (the local LLM over-specifies paths). */

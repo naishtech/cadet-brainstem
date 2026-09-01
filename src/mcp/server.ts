@@ -64,6 +64,10 @@ import {
   ProcedureStore,
   type Procedure,
   type ProcedureStep,
+  FileProcedureReviewState,
+  hashProcedureArgs,
+  reviewExpiry,
+  type ProcedureReviewState,
 } from '../procedure';
 
 /** Stable session id stamped on events recorded by MCP tool calls. */
@@ -251,6 +255,8 @@ export interface McpDeps {
   procedureStore?: ProcedureStore;
   /** Injectable arg-filler for procedure_apply (tests); defaults to the local LLM. */
   procedureFillArgs?: (step: ProcedureStep, repo: string) => Promise<Record<string, unknown>>;
+  /** Injectable review state; defaults to a short-lived local file store. */
+  procedureReviewState?: ProcedureReviewState;
   /** Injectable adapters for procedure_apply (tests); defaults to real ones. */
   procedureSerena?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
   procedureLeanctx?: { callTool(args: unknown): Promise<{ rawText: string; degraded?: boolean }> };
@@ -538,6 +544,7 @@ export interface ProcedureReviewArgs {
   procedure_id: string;
   repo: string;
   step_index?: number;
+  args?: Record<string, Record<string, unknown>>;
 }
 
 export interface ProcedureApplyArgs {
@@ -547,6 +554,8 @@ export interface ProcedureApplyArgs {
   approved: boolean;
   /** Optional per-tool arg overrides, e.g. { "create_text_file": {...} }. */
   args?: Record<string, Record<string, unknown>>;
+  /** Server-issued token returned by procedure_review. */
+  review_token?: string;
 }
 
 /**
@@ -575,9 +584,11 @@ export async function procedureReviewTool(
         ? writeSteps.filter(({ i }) => i === args.step_index)
         : writeSteps;
     const reviews: Array<Record<string, unknown>> = [];
+    const reviewedArgs: Record<string, Record<string, unknown>> = {};
     for (const { s } of targets) {
       try {
-        const filled = await defaultFillArgs(s, args.repo);
+        const filled = args.args?.[s.tool] ?? await defaultFillArgs(s, args.repo);
+        reviewedArgs[s.tool] = filled;
         const proposal = buildWriteDiff(s, filled, args.repo);
         reviews.push({
           service: s.service,
@@ -592,7 +603,24 @@ export async function procedureReviewTool(
         reviews.push({ service: s.service, tool: s.tool, error: (err as Error).message });
       }
     }
-    return { procedure_id: args.procedure_id, repo: args.repo, reviews };
+    const result: Record<string, unknown> = {
+      procedure_id: args.procedure_id,
+      repo: args.repo,
+      reviews,
+    };
+    if (writeSteps.length > 0 && reviews.length === targets.length) {
+      const state = deps.procedureReviewState ?? new FileProcedureReviewState();
+      const issued = state.issue({
+        procedureId: args.procedure_id,
+        repo: args.repo,
+        argsHash: hashProcedureArgs(reviewedArgs),
+        expiresAt: reviewExpiry(),
+      });
+      result.review_token = issued.token;
+      result.expires_at = issued.expiresAt;
+      result.reviewed_args = reviewedArgs;
+    }
+    return result;
   } finally {
     if (deps.procedureStore === undefined) {
       try {
@@ -621,6 +649,8 @@ export async function procedureApplyTool(
     return {
       procedure_id: args.procedure_id,
       ok: false,
+      code: 'APPROVAL_REQUIRED',
+      next_action: 'procedure_review',
       error: 'approved must be true to apply writes (review gate)',
     };
   }
@@ -629,6 +659,35 @@ export async function procedureApplyTool(
     const procedure = store.get(args.procedure_id);
     if (procedure === null) {
       return { procedure_id: args.procedure_id, ok: false, error: `no procedure with id "${args.procedure_id}"` };
+    }
+    const hasWrites = procedure.steps.some((step) => isWriteStep(step));
+    if (hasWrites) {
+      if (typeof args.review_token !== 'string' || args.review_token.length === 0) {
+        return {
+          procedure_id: args.procedure_id,
+          ok: false,
+          code: 'REVIEW_REQUIRED',
+          next_action: 'procedure_review',
+          error: 'procedure_review must complete before applying writes',
+        };
+      }
+      const reviewState = deps.procedureReviewState ?? new FileProcedureReviewState();
+      const review = reviewState.consume(args.review_token, {
+        procedureId: args.procedure_id,
+        repo: args.repo,
+        argsHash: hashProcedureArgs(args.args),
+      });
+      if (!review.ok) {
+        return {
+          procedure_id: args.procedure_id,
+          ok: false,
+          code: review.code,
+          next_action: 'procedure_review',
+          error: review.code === 'REVIEW_REQUIRED'
+            ? 'review token is missing, expired, or already used'
+            : 'procedure arguments or repository do not match the reviewed change',
+        };
+      }
     }
     const fillArgs =
       deps.procedureFillArgs ??
@@ -803,6 +862,16 @@ export async function steerTool(
     steering.tool_plan = plan;
   }
   const slimProcedures = procedures?.map(slimProcedure);
+  const procedureContract = procedures !== undefined && procedures.length > 0 && !outcome.degraded
+    ? procedures.slice(0, 1).map((p) => ({
+        procedure_id: p.id,
+        required_sequence: p.steps.some((step) => isWriteStep(step))
+          ? ['procedure_review', 'procedure_apply']
+          : ['procedure_apply'],
+        approval_required: p.steps.some((step) => isWriteStep(step)),
+        risk_tier: p.riskTier,
+      }))
+    : undefined;
   return {
     // Most important directions first (response_policy -> ... -> request_id).
     response_policy: compileResponsePolicy(steering.response_policy),
@@ -827,6 +896,7 @@ export async function steerTool(
     ...(llmUnavailable ? { procedures_unavailable: true } : {}),
     ...(relevant_memories !== undefined ? { relevant_memories } : {}),
     ...(slimProcedures !== undefined ? { procedures: slimProcedures } : {}),
+    ...(procedureContract !== undefined ? { procedure_contract: procedureContract } : {}),
     ...(slimProcedures !== undefined
       ? { procedures_review: compileProcedureReviews(procedures!) }
       : {}),

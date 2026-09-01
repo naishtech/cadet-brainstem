@@ -76,15 +76,16 @@ loop (this file is local/untracked — copy it into your repo):
   `optimize_context` instead:
   `cadet-brainstem hook-remind --tool optimize_context`
 - **`procedure-review`** — when the agent calls `procedure_apply` (applies a
-  write procedure) **without** `approved: true`, deny and return the concrete
-  reviewable diff so the change is surfaced for user approval. With
-  `approved: true` it allows. Other tools pass through:
+  write procedure) without a matching, unexpired review token and explicit
+  `approved: true`, deny the call. Other tools pass through:
   `cadet-brainstem hook-procedure-review`
 
 The write-review flow is: `steering` flags a write procedure →
-`procedure_review` shows the diff → user approves →
-`procedure_apply {approved: true}` applies (and `executeProcedure` verifies the
-applied file matches the reviewed diff).
+`procedure_review {procedure_id, repo, args}` shows the diff and returns a
+short-lived `review_token` → user approves the exact reviewed change →
+`procedure_apply {procedure_id, repo, args, review_token, approved: true}`
+applies it. The server binds the token to the procedure, repository, and exact
+arguments, and rejects replayed or mismatched approvals.
 
 ## Users of other repos
 

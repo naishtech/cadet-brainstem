@@ -105,15 +105,16 @@ cadet-brainstem hooks --pretool   # writes ~/.copilot/hooks/cadet-brainstem.json
 ```
 
 This registers every lifecycle event, each wired to a `cadet-brainstem hook-*`
-handler. `PreToolUse` is **opt-in** via `--pretool` — it intercepts every tool
-call and proved too intrusive for daily dev, so it is off by default:
+handler. The procedure review gate is always enabled; the broader redirect and
+reminder hooks remain **opt-in** via `--pretool` because they intercept every
+tool call and proved too intrusive for daily dev:
 
 | Event | Handler | What it saves |
 | --- | --- | --- |
 | `SessionStart` | `hook-session-start` | Primes the session with memory hints + the recommended tool |
 | `UserPromptSubmit` | `hook-user-prompt` | Classifies the prompt and injects the strategy deterministically |
+| `PreToolUse` | `hook-procedure-review` | Denies write `procedure_apply` without a matching review token and explicit approval |
 | `PreToolUse` *(opt-in)* | `hook-redirect` + `hook-remind` | Redirects native search/list (hard-deny) and read/shell (soft-nudge) to cadet MCP tools; reminds after |
-| `PreToolUse` *(opt-in)* | `hook-procedure-review` | Denies `procedure_apply` without approval and surfaces the reviewable diff |
 | `PostToolUse` | `hook-post-tool` | Records token-saving metrics per tool call |
 | `PreCompact` | `hook-pre-compact` | Exports important context to memory before truncation |
 | `SubagentStart` | `hook-subagent-start` | Classifies the subtask, injects a cheap-path primer |
@@ -153,10 +154,12 @@ MCP tools (everything flows through the brainstem MCP): `hook-redirect`
 shell commands (allow + a reminder to use `optimize_context` instead — so the agent is never blocked from
 reading a file it needs to edit or running a necessary command). `hook-remind`
 nudges toward the recommended tool when the agent still over-uses raw
-`grep`/`read`. `hook-procedure-review` denies `procedure_apply` unless the call
-carries `approved:true`, and surfaces the concrete diff so a human can review
-a write before it lands. The `UserPromptSubmit` and `PreCompact` hooks do the
-heavy token-saving: classifying each prompt and exporting context to memory
+`grep`/`read`. `hook-procedure-review` denies write `procedure_apply` unless the
+call carries an unexpired server-issued review token bound to the exact
+procedure, repository, and arguments, plus `approved:true`; it surfaces the
+concrete diff so a human can review a write before it lands. The
+`UserPromptSubmit` and `PreCompact` hooks do the heavy token-saving: classifying
+each prompt and exporting context to memory.
 before truncation.
 
 #### Troubleshooting
