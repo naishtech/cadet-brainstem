@@ -24,10 +24,9 @@ function makeReport(
     node: { name: 'node', available: true, detail: 'v25.2.1' },
     npm: { name: 'npm', available: true, detail: '11.6.2' },
     ollama: { name: 'ollama', available: true, detail: 'http://localhost:11434' },
-    rtk: { name: 'rtk', available: true, detail: 'rtk 0.45.0' },
     serena: { name: 'serena', available: true, detail: 'Serena 1.7.0' },
     leanctx: { name: 'leanctx', available: true, detail: 'lean-ctx 3.9.19' },
-    availableTools: ['rtk', 'serena', 'leanctx'],
+    availableTools: ['serena', 'leanctx'],
     missingTools: [],
   };
   return { ...base, ...overrides };
@@ -89,7 +88,6 @@ describe('runDoctor', () => {
     expect(out).toContain('✓ npm');
     expect(out).toContain('✓ Ollama');
     expect(out).toContain('✓ Steering model');
-    expect(out).toContain('✓ RTK');
     expect(out).toContain('✓ Serena');
     expect(out).toContain('✓ LeanCTX');
     expect(out).toContain('✓ Configuration');
@@ -112,18 +110,15 @@ describe('runDoctor', () => {
   it('warns for missing integration tools with actionable Windows fixes', async () => {
     const { configPath, metricsPath } = createHealthyState();
     const report = makeReport({
-      rtk: { name: 'rtk', available: false },
       serena: { name: 'serena', available: false },
       leanctx: { name: 'leanctx', available: false },
       availableTools: [],
-      missingTools: ['rtk', 'serena', 'leanctx'],
+      missingTools: ['serena', 'leanctx'],
     });
     const { exit, lines } = await run({ report, configPath, metricsPath });
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
-    expect(out).toContain('✗ RTK');
-    expect(out).toContain('rtk-x86_64-pc-windows-msvc.zip');
     expect(out).toContain('✗ Serena');
     expect(out).toContain('serena --version');
     expect(out).toContain('✗ LeanCTX');

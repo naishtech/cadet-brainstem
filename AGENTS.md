@@ -15,7 +15,7 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
   and `tool_plan.recommended_tools` (prioritized tool recommendations with
   intent) to decide how to use the tools below for the rest of that request.
 - Honor the returned `reminders` (short tool-anchored directives, e.g. "Use
-  RTK for git output", "Use LeanCTX to expand shell output") and any `subtasks`
+  LeanCTX for context optimization") and any `subtasks`
   (additional detected task types).
 - The returned `response_policy` is an object the cloud LLM must follow when
   composing its reply: `directives` (per-task behavioral directives, e.g.
@@ -51,15 +51,11 @@ tool for every user request.
 - Before reading a **large file**, call the `optimize_context` MCP tool with the
   current task and the file path. It returns the LeanCTX-compressed
   representation (map/aggressive modes) instead of the raw file.
-- Before dumping a directory or broad search results, call the
-  `find_relevant_symbols` MCP tool with a symbol/path pattern and the project
-  directory. Read only the returned files/symbols.
-- For the **full** Serena capability (rename, referencing symbols, diagnostics,
-  edits, etc.), call `serena_list_tools` once to see what Serena currently
-  exposes, then `serena_call` to invoke any of them (forwarded verbatim). New
-  Serena tools work automatically — no hardcoded list.
-- If you need noisy command output as context, call `compress_command_output`
-  with the command instead of pasting raw terminal output.
+- Use Serena's native MCP server directly for semantic navigation and broad
+  search when needed.
+- Use Serena's native MCP server directly for semantic navigation, rename,
+  references, diagnostics, and edits.
+- Use `optimize_context` when noisy command output needs concise context.
 - Thread one `request_id` through the tools in a logical flow (reuse the id
   `steering` returns). After gathering context, call `assess_context` with
   that id to ask whether the signal is sufficient and what to gather next.
@@ -71,7 +67,7 @@ tool for every user request.
   ```
   cadet-brainstem wrap -- <command>
   ```
-  It prints the RTK-reduced output. Use `--raw` to see the original.
+  It runs the command through the normal shell.
 
 ## Rules
 

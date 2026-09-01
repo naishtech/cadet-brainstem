@@ -8,14 +8,8 @@ import {
   assessContextTool,
   chatMemoryStoreTool,
   steerTool,
-  compressCommandOutputTool,
-  findRelevantSymbolsTool,
   handleToolCall,
-  leanctxCallTool,
-  leanctxListToolsTool,
   optimizeContextTool,
-  serenaCallTool,
-  serenaListToolsTool,
   type McpDeps,
 } from '../src/mcp';
 import {
@@ -25,6 +19,7 @@ import {
 } from '../src/steering';
 import type { OptimisationStrategy } from '../src/policy';
 import { MetricsStore } from '../src/metrics';
+
 import { MemoryStore } from '../src/memory';
 
 function makeSteering(): SteeringOutcome {
@@ -138,12 +133,7 @@ function makeDeps(overrides: Partial<McpDeps> = {}) {
   const deps: McpDeps = {
     steer,
     getStrategy,
-    leanctx: {
-      optimize: leanctxOptimize,
-      callTool: leanctxForward,
-      listTools: leanctxList,
-    },
-    rtk: { optimize: rtkOptimize },
+    leanctx: { optimize: leanctxOptimize },
     serena: { search: serenaSearch, callTool: serenaForward, listTools: serenaList },
     metricsPath,
     ...overrides,
@@ -409,104 +399,9 @@ describe('steering', () => {
   });
 });
 
-describe('find_relevant_symbols', () => {
-  it('returns symbols/files and records a serena event', async () => {
-    const { deps, serenaSearch } = makeDeps();
-
-    const result = await findRelevantSymbolsTool(
-      { query: 'Foo', cwd: 'E:/proj' },
-      deps,
-    );
-
-    expect(result.files).toEqual(['src/foo.ts']);
-    expect(result.degraded).toBe(false);
-    expect(serenaSearch).toHaveBeenCalledWith(
-      expect.objectContaining({ query: 'Foo', cwd: 'E:/proj' }),
-    );
-    // Serena records hit-rate (symbols/files), not token savings — so it does
-    // not appear under "Savings by tool" (filtered to >0) but is tracked here.
-    expect(savingsByTool(metricsPath).serena).toBeUndefined();
-    expect(callStatsByTool(metricsPath).serena?.calls).toBe(1);
-    const serenaRow = firstRowForTool(metricsPath, 'serena');
-    expect(serenaRow.symbols_found).toBe(1);
-    expect(serenaRow.files_found).toBe(1);
-    expect(serenaRow.request_id).toBeTruthy();
-    expect(serenaRow.degraded).toBe(0);
-  });
-
-  it('rejects missing query/cwd', async () => {
-    const { deps } = makeDeps();
-    await expect(
-      findRelevantSymbolsTool({ query: '', cwd: 'E:/proj' }, deps),
-    ).rejects.toThrow('non-empty string "query"');
-    await expect(
-      findRelevantSymbolsTool({ query: 'Foo', cwd: '' }, deps),
-    ).rejects.toThrow('non-empty string "cwd"');
-  });
-});
-
-describe('serena_call', () => {
-  it('forwards any Serena tool and records a serena event', async () => {
-    const { deps, serenaForward } = makeDeps();
-
-    const result = await serenaCallTool(
-      {
-        tool: 'find_referencing_symbols',
-        arguments: { name_path_pattern: 'Foo' },
-        cwd: 'E:/proj',
-      },
-      deps,
-    );
-
-    expect(result.degraded).toBe(false);
-    expect(result.tool).toBe('find_referencing_symbols');
-    expect(serenaForward).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tool: 'find_referencing_symbols',
-        arguments: { name_path_pattern: 'Foo' },
-        cwd: 'E:/proj',
-      }),
-    );
-    expect(callsByTool(metricsPath).serena).toBe(1);
-    const row = firstRowForTool(metricsPath, 'serena');
-    expect(row.operation).toBe('find_referencing_symbols');
-    expect(row.request_id).toBeTruthy();
-  });
-
-  it('rejects an empty tool', async () => {
-    const { deps } = makeDeps();
-    await expect(serenaCallTool({ tool: '' }, deps)).rejects.toThrow('tool');
-  });
-
-  it('degrades gracefully when the passthrough is unavailable', async () => {
-    const { deps } = makeDeps({ serena: {} });
-    const result = await serenaCallTool({ tool: 'find_symbol' }, deps);
-    expect(result.degraded).toBe(true);
-  });
-});
-
-describe('serena_list_tools', () => {
-  it('lists the tools Serena currently exposes and records an event', async () => {
-    const { deps, serenaList } = makeDeps();
-
-    const result = await serenaListToolsTool({ cwd: 'E:/proj' }, deps);
-
-    expect(result.tools).toEqual(['find_symbol', 'rename_symbol']);
-    expect(result.degraded).toBe(false);
-    expect(serenaList).toHaveBeenCalled();
-    expect(callsByTool(metricsPath).serena).toBe(1);
-    expect(firstRowForTool(metricsPath, 'serena').operation).toBe('list_tools');
-  });
-
-  it('degrades gracefully when the passthrough is unavailable', async () => {
-    const { deps } = makeDeps({ serena: {} });
-    const result = await serenaListToolsTool({ cwd: 'E:/proj' }, deps);
-    expect(result.tools).toEqual([]);
-    expect(result.degraded).toBe(true);
-  });
-});
-
-describe('leanctx_call', () => {
+/* Legacy LeanCTX proxy tests were removed with the public proxy surface. */
+/*
+describe.skip('leanctx_call', () => {
   it('forwards any ctx_* tool and records a leanctx event', async () => {
     const { deps, leanctxForward } = makeDeps();
 
@@ -546,7 +441,7 @@ describe('leanctx_call', () => {
   });
 });
 
-describe('leanctx_list_tools', () => {
+describe.skip('leanctx_list_tools', () => {
   it('lists the tools LeanCTX currently exposes and records an event', async () => {
     const { deps, leanctxList } = makeDeps();
 
@@ -567,7 +462,7 @@ describe('leanctx_list_tools', () => {
   });
 });
 
-describe('compress_command_output', () => {
+describe.skip('compress_command_output', () => {
   it('returns the reduced output (not the raw text) and records rtk savings', async () => {
     const { deps, rtkOptimize } = makeDeps();
 
@@ -621,6 +516,7 @@ describe('compress_command_output', () => {
     expect(result.note).toContain('nothing to compress');
   });
 });
+*/
 
 describe('chat_memory_store', () => {
   it('round-trips store -> search -> get -> update -> delete and records a memory event', async () => {
@@ -790,12 +686,12 @@ describe('handleToolCall', () => {
   it('returns JSON text for a valid call', async () => {
     const { deps } = makeDeps();
     const res = await handleToolCall(
-      'find_relevant_symbols',
-      { query: 'Foo', cwd: 'E:/proj' },
+      'optimize_context',
+      { task: 'inspect Foo', target: 'E:/proj/src/foo.ts' },
       deps,
     );
     expect(res.isError).toBeUndefined();
-    expect(res.content[0]?.text).toContain('src/foo.ts');
+    expect(res.content[0]?.text).toContain('"context": "compressed"');
   });
 
   it('returns isError for invalid arguments', async () => {
@@ -836,11 +732,11 @@ describe('handleToolCall', () => {
     const { deps } = makeDeps();
     const bad = { ...deps, metricsPath: join(dir, 'no-such-dir', 'm.db') };
     const res = await handleToolCall(
-      'compress_command_output',
-      { command: 'git status' },
+      'optimize_context',
+      { task: 'debug the loader', target: 'src/foo.ts' },
       bad,
     );
     expect(res.isError).toBeUndefined();
-    expect(res.content[0]?.text).toContain('short');
+    expect(res.content[0]?.text).toContain('compressed');
   });
 });

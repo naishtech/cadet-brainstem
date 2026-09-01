@@ -203,9 +203,9 @@ describe('runHookPostTool', () => {
     expect(exit).toBe(0);
     expect(JSON.parse(outputs[0]!).continue).toBe(true);
     const store = new MetricsStore(metricsPath);
-    const totals = store.getTotals();
+    const eventCount = store.count();
     store.close();
-    expect(totals.eventCount).toBeGreaterThan(0);
+    expect(eventCount).toBeGreaterThan(0);
   });
 
   it('publishes request/response/stats.updated to the dashboard', async () => {

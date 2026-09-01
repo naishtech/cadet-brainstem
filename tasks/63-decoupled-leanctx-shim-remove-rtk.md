@@ -1,6 +1,6 @@
 # 63 — Decoupled: LeanCTX measurement shim; remove RTK adapter
 
-**Status:** Planned (not yet implemented)
+**Status:** Done
 
 Part of the decoupled-architecture plan (`docs/plans/decoupled-architecture.md`).
 Brainstem should not be a full proxy of LeanCTX — only a thin measurement
@@ -28,3 +28,8 @@ come from `leanctx`).
 ## Acceptance criteria
 - `optimize_context` still records `estimated_tokens_saved` / `compression_ratio`.
 - No `rtk` / `compress_command_output` references remain in `src/`.
+
+## Verification
+- Removed the generic LeanCTX gateway proxy and RTK integration.
+- Preserved LeanCTX `callTool` internally for procedure execution.
+- `npm run typecheck`, `npm run lint`, and `npm test` pass.

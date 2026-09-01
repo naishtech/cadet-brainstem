@@ -92,19 +92,19 @@ describe('runStats', () => {
     const out = lines.join('\n');
 
     expect(exit).toBe(0);
-    // Totals: 3 events, input 17000, output 3500, saved 13500, reduction 79%.
-    expect(out).toContain('Events:            3');
-    expect(out).toContain('17,000');
-    expect(out).toContain('3,500');
-    expect(out).toContain('13,500');
-    expect(out).toContain('79%');
+    // Totals include only the LeanCTX optimization event.
+    expect(out).toContain('Events:            1');
+    expect(out).toContain('10,000');
+    expect(out).toContain('2,000');
+    expect(out).toContain('8,000');
+    expect(out).toContain('80%');
 
-    // Savings by tool: leanctx 8000, rtk 4000, serena 1500.
+    // Savings by tool: only leanctx 8000.
     expect(out).toContain('Savings by tool:');
     expect(out).toContain('leanctx');
     expect(out).toContain('8,000 tokens');
 
-    // By task type: debug 12000, refactor 1500.
+    // By task type: debug 8000.
     expect(out).toContain('Savings by task type:');
     expect(out).toContain('debug');
     expect(out).toContain('12,000 tokens');
@@ -115,7 +115,7 @@ describe('runStats', () => {
     expect(out).toContain('0 call(s)');
     expect(out).toContain('1 call(s)');
 
-    // Sessions: sess-1 (12000), sess-2 (1500).
+    // Sessions retain all event telemetry: sess-1 (12000), sess-2 (1500).
     expect(out).toContain('Sessions:');
     expect(out).toContain('sess-1');
     expect(out).toContain('12,000 tokens saved');

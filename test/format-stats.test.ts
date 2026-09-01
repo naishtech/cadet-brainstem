@@ -48,8 +48,8 @@ describe('formatStats', () => {
         task_type: 'investigation',
         complexity: 'low',
         risk: 'low',
-        tool: 'rtk',
-        operation: 'compress_command_output',
+        tool: 'leanctx',
+        operation: 'optimize_context',
         estimated_input_tokens: 1000,
         estimated_output_tokens: 100,
         estimated_tokens_saved: 900,
@@ -63,7 +63,7 @@ describe('formatStats', () => {
         complexity: 'medium',
         risk: 'low',
         tool: 'serena',
-        operation: 'find_relevant_symbols',
+        operation: 'search',
         estimated_input_tokens: 2000,
         estimated_output_tokens: 200,
         estimated_tokens_saved: 100,
@@ -74,23 +74,20 @@ describe('formatStats', () => {
       const payload = formatStats(store);
       expect(payload.estimated).toBe(true);
       expect(payload.count).toBe(2);
-      expect(payload.totals.eventCount).toBe(2);
-      expect(payload.totals.inputTokens).toBe(3000);
-      expect(payload.totals.outputTokens).toBe(300);
-      expect(payload.totals.tokensSaved).toBe(1000);
-      // 1000 / 3000 = 33.33... -> 33
-      expect(payload.totals.reductionPct).toBe(33);
-      // savings by tool: rtk 900, serena 100 (both > 0)
+      expect(payload.totals.eventCount).toBe(1);
+      expect(payload.totals.inputTokens).toBe(1000);
+      expect(payload.totals.outputTokens).toBe(100);
+      expect(payload.totals.tokensSaved).toBe(900);
+      expect(payload.totals.reductionPct).toBe(90);
+      // Savings by tool: only LeanCTX contributes.
       expect(payload.savingsByTool).toEqual([
-        { key: 'rtk', estimatedTokensSaved: 900 },
-        { key: 'serena', estimatedTokensSaved: 100 },
+        { key: 'leanctx', estimatedTokensSaved: 900 },
       ]);
       expect(payload.savingsByTaskType).toEqual([
         { key: 'investigation', estimatedTokensSaved: 900 },
-        { key: 'coding', estimatedTokensSaved: 100 },
       ]);
       expect(payload.sessions).toHaveLength(2);
-      expect(payload.mostExpensiveOperations[0]!.operation).toBe('find_relevant_symbols');
+      expect(payload.mostExpensiveOperations[0]!.operation).toBe('search');
     } finally {
       store.close();
     }

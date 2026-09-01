@@ -49,7 +49,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
       log('');
       log('No optimisation events recorded yet.');
       log(
-        'Use the MCP `optimize_context` / `compress_command_output` tools (or `wrap`) to start tracking savings.',
+        'Use the MCP `optimize_context` tool to start tracking savings.',
       );
       return 0;
     }
@@ -79,7 +79,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     log('Savings by tool:');
     if (byTool.length === 0) {
       log(
-        '  (none recorded yet — use compress_command_output / optimize_context to start saving tokens)',
+        '  (none recorded yet — use optimize_context to start saving tokens)',
       );
     } else {
       for (const row of byTool) {
@@ -104,7 +104,7 @@ export async function runStats(deps: StatsDeps = {}): Promise<number> {
     log('');
     log('Local tool calls:');
     const callStatMap = new Map(callStats.map((c) => [c.tool, c]));
-    for (const tool of ['ollama', 'rtk', 'serena', 'leanctx', 'memory']) {
+    for (const tool of ['ollama', 'serena', 'leanctx', 'memory']) {
       const stat = callStatMap.get(tool);
       const calls = stat?.calls ?? 0;
       const degraded = stat?.degraded ?? 0;

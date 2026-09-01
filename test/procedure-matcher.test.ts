@@ -43,7 +43,7 @@ function seededStore(): ProcedureStore {
   store.seedProcedure({
     triggerPattern: 'Compress a command output',
     keywords: ['compress', 'command', 'output', 'rtk', 'shell'],
-    steps: [{ service: 'rtk', tool: 'compress_command_output' }],
+    steps: [{ service: 'leanctx', tool: 'ctx_read' }],
     riskTier: 'auto_execute',
   });
   store.seedProcedure({

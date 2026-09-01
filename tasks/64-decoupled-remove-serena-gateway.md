@@ -1,6 +1,6 @@
 # 64 — Decoupled: remove Serena gateway + proxy tools
 
-**Status:** Planned (not yet implemented)
+**Status:** Done
 
 Part of the decoupled-architecture plan (`docs/plans/decoupled-architecture.md`).
 Serena produces no token-savings metric (all events record
@@ -25,3 +25,8 @@ talk to Serena directly; brainstem should not proxy its API.
 - No `serena_call` / `serena_list_tools` / `find_relevant_symbols` tools exposed
   by the MCP server.
 - No serena proxy references remain in `src/mcp/`.
+
+## Verification
+- Removed the three public Serena proxy handlers, tool definitions, dispatch
+  branches, and exports; retained `SerenaAdapter` for procedure execution.
+- `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` pass.

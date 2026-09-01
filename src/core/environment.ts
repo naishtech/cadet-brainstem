@@ -3,8 +3,6 @@ import { promisify } from 'node:util';
 import { DEFAULT_OLLAMA_HOST, isOllamaAvailable } from '../steering';
 import { LeanCtxAdapter } from '../integrations/leanctx';
 import { LEAN_CTX_BIN } from '../integrations/leanctx/adapter';
-import { RtkAdapter } from '../integrations/rtk';
-import { RTK_BIN } from '../integrations/rtk/adapter';
 import { SerenaAdapter } from '../integrations/serena';
 import { SERENA_BIN } from '../integrations/serena/adapter';
 import type { ContextOptimizer } from './context-optimizer';
@@ -26,10 +24,9 @@ export interface EnvironmentReport {
   node: ToolAvailability;
   npm: ToolAvailability;
   ollama: ToolAvailability;
-  rtk: ToolAvailability;
   serena: ToolAvailability;
   leanctx: ToolAvailability;
-  /** Integration tools (rtk/serena/leanctx) that are installed & reachable. */
+  /** Integration tools (serena/leanctx) that are installed & reachable. */
   availableTools: string[];
   /** Integration tools that are missing. */
   missingTools: string[];
@@ -79,7 +76,6 @@ async function getVersion(bin: string, shell = false): Promise<string | undefine
  */
 const VERSION_BIN: Record<string, string> = {
   leanctx: LEAN_CTX_BIN,
-  rtk: RTK_BIN,
   serena: SERENA_BIN,
 };
 
@@ -126,16 +122,15 @@ export async function detectEnvironment(
   host = process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST,
 ): Promise<EnvironmentReport> {
   const platform = detectPlatform();
-  const [node, npm, ollama, rtk, serena, leanctx] = await Promise.all([
+  const [node, npm, ollama, serena, leanctx] = await Promise.all([
     detectNode(),
     detectNpm(),
     detectOllama(host),
-    detectTool(new RtkAdapter()),
     detectTool(new SerenaAdapter()),
     detectTool(new LeanCtxAdapter()),
   ]);
 
-  const tools = [rtk, serena, leanctx];
+  const tools = [serena, leanctx];
   const availableTools = tools
     .filter((tool) => tool.available)
     .map((tool) => tool.name);
@@ -148,7 +143,6 @@ export async function detectEnvironment(
     node,
     npm,
     ollama,
-    rtk,
     serena,
     leanctx,
     availableTools,

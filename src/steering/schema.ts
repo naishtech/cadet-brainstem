@@ -69,10 +69,7 @@ export const LANGUAGE_STANDARD_DESCRIPTIONS: Record<LanguageStandard, string> = 
 export const TOOL_NAMES = [
   'optimize_context',
   'find_relevant_symbols',
-  'compress_command_output',
   'chat_memory_store',
-  'leanctx_call',
-  'leanctx_list_tools',
   'procedure_review',
   'procedure_apply',
 ] as const;
@@ -89,11 +86,7 @@ export const toolPlanSchema = z.object({
 export const RECOMMENDED_TOOL_INTENTS: Record<ToolName, string> = {
   optimize_context: 'extract and compress the relevant file context',
   find_relevant_symbols: 'semantic search for relevant symbols across the project',
-  compress_command_output: 'compress noisy command output for cheap analysis',
   chat_memory_store: 'consult stored project memories as optional evidence',
-  leanctx_call:
-    'invoke a LeanCTX tool, e.g. ctx_shell for aggressive shell-output compression',
-  leanctx_list_tools: 'discover the tools the LeanCTX MCP server exposes',
   procedure_review: 'preview a matched procedure against the repo before applying it',
   procedure_apply: 'execute a matched procedure against the repo',
 };
@@ -145,8 +138,8 @@ export interface EvidencePlan {
 
 /**
  * A single tool-anchored reminder (replaces the one-line `guidance`). `tool`
- * is a hint label (advisory — may be a tool name or a category like `git`,
- * `shell`, `rtk`); `message` is one short concrete directive.
+ * is a hint label (advisory — may be a tool name or a category like `git` or
+ * `shell`); `message` is one short concrete directive.
  */
 export interface Reminder {
   tool: string;

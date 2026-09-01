@@ -44,7 +44,6 @@
     "seed:procedures": "tsx scripts/seed-procedures.ts",
     "smoke:procedures": "tsx scripts/procedure-matcher-smoke.ts",
     "e2e:agent-loop": "tsx scripts/agent-loop-write-e2e.ts",
-    "benchmark:shell": "tsx scripts/benchmark-shell-compression.ts",
     "mcp:smoke": "npm run build && tsx scripts/mcp-steer-e2e.ts",
     "postinstall": "node scripts/install-hooks.cjs && node scripts/install-leanctx.cjs",
     "release": "bash scripts/bump-version.sh patch && npm publish",

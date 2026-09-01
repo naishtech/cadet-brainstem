@@ -71,14 +71,6 @@ const SEED: SeedProcedureInput[] = [
       'To list the project tree, ask the local LLM to call ctx_tree with { path: "." }.',
   },
   {
-    triggerPattern: 'Compress a command output',
-    keywords: ['compress', 'command', 'output', 'rtk', 'shell'],
-    steps: [{ service: 'rtk', tool: 'compress_command_output', args: {} }],
-    riskTier: 'auto_execute', // read-only, local
-    handoffShape:
-      'To compress a command output, ask the local LLM to run rtk on a concrete, safe read-only command (git status, ls). NOTE: the local model is weak at choosing the command — provide the exact command.',
-  },
-  {
     triggerPattern: 'Create a file',
     keywords: ['create', 'file', 'write', 'new', 'serena'],
     steps: [{ service: 'serena', tool: 'create_text_file', args: {} }],

@@ -5,12 +5,41 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeProcedure, isWriteStep, ProcedureStore, type Procedure } from '../src/procedure';
 
+const { serenaCalls, leanctxCalls } = vi.hoisted(() => ({
+  serenaCalls: [] as unknown[],
+  leanctxCalls: [] as unknown[],
+}));
+
+vi.mock('../src/integrations/serena', () => ({
+  SerenaAdapter: class {
+    async callTool(request: unknown): Promise<{ rawText: string }> {
+      serenaCalls.push(request);
+      return { rawText: 'serena ok' };
+    }
+
+    async close(): Promise<void> {}
+  },
+}));
+
+vi.mock('../src/integrations/leanctx', () => ({
+  LeanCtxAdapter: class {
+    async callTool(request: unknown): Promise<{ rawText: string }> {
+      leanctxCalls.push(request);
+      return { rawText: 'leanctx ok' };
+    }
+
+    async close(): Promise<void> {}
+  },
+}));
+
 let dir: string;
 let dbPath: string;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'to-exec-'));
   dbPath = join(dir, 'procedures.db');
+  serenaCalls.length = 0;
+  leanctxCalls.length = 0;
 });
 
 afterEach(() => {
@@ -64,6 +93,32 @@ describe('isWriteStep', () => {
 });
 
 describe('executeProcedure (review gate)', () => {
+  it('creates ephemeral service clients when none are injected', async () => {
+    const procedure = makeProcedure({
+      steps: [
+        { service: 'serena', tool: 'find_symbol' },
+        { service: 'leanctx', tool: 'ctx_read' },
+      ],
+    });
+    const result = await executeProcedure(procedure, {
+      repoPath: dir,
+      fillArgs: async () => ({}),
+      recordOutcome: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.results.map((step) => step.executed)).toEqual([true, true]);
+    expect(serenaCalls).toEqual([
+      {
+        tool: 'activate_project',
+        arguments: { project: dir },
+        cwd: dir,
+      },
+      { tool: 'find_symbol', arguments: {}, cwd: dir },
+    ]);
+    expect(leanctxCalls).toEqual([{ tool: 'ctx_read', arguments: {}, cwd: dir }]);
+  });
+
   it('auto-executes read-only steps and records success', async () => {
     const store = new ProcedureStore(dbPath);
     const procedure = seed(store);

@@ -73,15 +73,6 @@ export interface LeanCtxToolResult {
   degraded: boolean;
 }
 
-export interface LeanCtxListRequest {
-  cwd?: string;
-}
-
-export interface LeanCtxListResult {
-  tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
-  degraded: boolean;
-}
-
 /** A live, reusable connection to a single `lean-ctx mcp` server process. */
 interface LeanCtxSession {
   client: Client;
@@ -247,24 +238,6 @@ export class LeanCtxAdapter implements ContextOptimizer {
       });
     } catch {
       return { tool, result: null, rawText: '', degraded: true };
-    }
-  }
-
-  /** List the tools LeanCTX currently exposes (dynamic discovery). */
-  async listTools(request: LeanCtxListRequest = {}): Promise<LeanCtxListResult> {
-    const cwd = request.cwd ?? process.cwd();
-    try {
-      return await this.retryOnConnection(cwd, async (session) => {
-        const result = await session.client.listTools();
-        const tools = (result.tools ?? []).map((tool) => ({
-          name: tool.name,
-          ...(tool.description !== undefined ? { description: tool.description } : {}),
-          ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : {}),
-        }));
-        return { tools, degraded: false };
-      });
-    } catch {
-      return { tools: [], degraded: true };
     }
   }
 

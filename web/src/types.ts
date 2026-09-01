@@ -1,4 +1,4 @@
-export type ServiceKind = 'llm' | 'rtk' | 'serena' | 'leanctx';
+export type ServiceKind = 'llm' | 'serena' | 'leanctx';
 
 export interface ToolStatus {
   name: string;

@@ -2,7 +2,7 @@ import { DEFAULT_OLLAMA_HOST, isModelAvailable } from '../steering';
 import { loadConfig } from '../config';
 import { detectEnvironment } from '../core/environment';
 
-export type ServiceKind = 'llm' | 'rtk' | 'serena' | 'leanctx';
+export type ServiceKind = 'llm' | 'serena' | 'leanctx';
 
 /** Service status for the dashboard status icons (design doc §5.5). */
 export interface ToolStatus {
@@ -27,8 +27,8 @@ export interface GetServiceStatusOptions {
 }
 
 /**
- * Resolve live status for the four dashboard services (design doc §5.5):
- * the local LLM (Ollama + steering model), RTK, Serena, and LeanCTX.
+ * Resolve live status for the three dashboard services (design doc §5.5):
+ * the local LLM (Ollama + steering model), Serena, and LeanCTX.
  *
  * The LLM is "available" only when Ollama is reachable AND the configured
  * steering model is present. Detection never throws — missing tools degrade
@@ -73,12 +73,6 @@ export async function getServiceStatus(
       kind: 'llm',
       available: llmAvailable,
       ...(llmDetail !== undefined ? { detail: llmDetail } : {}),
-    },
-    {
-      name: 'rtk',
-      kind: 'rtk',
-      available: env.rtk.available,
-      ...(env.rtk.detail !== undefined ? { detail: env.rtk.detail } : {}),
     },
     {
       name: 'serena',

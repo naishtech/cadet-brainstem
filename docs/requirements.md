@@ -16,16 +16,6 @@ What you need installed to run Cadet Brainstem and its integrations.
 
 ## Integration tools
 
-### RTK (terminal/output reduction) — https://github.com/rtk-ai/rtk
-
-A single Rust binary that compresses command output before it reaches the agent.
-
-**Windows:** download `rtk-x86_64-pc-windows-msvc.zip` from the [releases page](https://github.com/rtk-ai/rtk/releases), extract it, and put `rtk.exe` on your PATH (e.g. `~/.local/bin`).
-
-Note: the `install.sh` script is **Linux/macOS only** — it does NOT support Windows/Git Bash (errors with "Unsupported operating system"). On Windows use the zip above.
-
-Verify: `rtk --version`
-
 ### LeanCTX (context intelligence / compression) — https://github.com/yvgude/lean-ctx
 
 A local Rust binary that decides what context an agent reads and how it is represented.

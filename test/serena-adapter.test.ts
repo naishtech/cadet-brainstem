@@ -1,7 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { SerenaAdapter, parseSymbols } from '../src/integrations/serena/index';
 import type { OptimisationStrategy } from '../src/policy/index';
 
@@ -231,43 +228,3 @@ describe('SerenaAdapter', () => {
   });
 });
 
-describe('MCP dispatch reuses ONE shared Serena instance (no respawn per call)', () => {
-  let dir: string;
-  let metricsPath: string;
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'cts-serena-singleton-'));
-    metricsPath = join(dir, 'metrics.db');
-  });
-
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
-    vi.resetModules();
-  });
-
-  it('spawns a single serena process across multiple find_relevant_symbols calls', async () => {
-    // Reset the module registry so `src/mcp/server.ts`'s shared adapter
-    // singleton starts fresh (otherwise a prior test may have already connected).
-    vi.resetModules();
-    mcpMock.transportOpts = [];
-    const { handleToolCall } = await import('../src/mcp');
-
-    // Two separate MCP tool calls, NO injected serena adapter.
-    await handleToolCall(
-      'find_relevant_symbols',
-      { query: 'Config', cwd: 'E:/proj' },
-      { metricsPath },
-    );
-    await handleToolCall(
-      'find_relevant_symbols',
-      { query: 'Other', cwd: 'E:/proj' },
-      { metricsPath },
-    );
-
-    // The shared adapter connected once and reused the session for the 2nd call,
-    // so only ONE serena MCP server process was ever spawned (was 2 before the
-    // singleton fix: a new adapter spawned a fresh process per call).
-    expect(mcpMock.transportOpts).toHaveLength(1);
-    expect(mcpMock.calls.filter((c) => c.name === 'find_symbol')).toHaveLength(2);
-  }, 20000);
-});

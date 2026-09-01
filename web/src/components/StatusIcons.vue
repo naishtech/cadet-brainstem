@@ -5,7 +5,6 @@ defineProps<{ services: ToolStatus[] }>();
 
 const KIND_LABEL: Record<string, string> = {
   llm: 'LLM',
-  rtk: 'RTK',
   serena: 'SERENA',
   leanctx: 'LEANCTX',
 };

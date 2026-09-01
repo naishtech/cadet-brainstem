@@ -5,7 +5,7 @@
  * behind a common interface so they can be swapped later (design doc §2).
  */
 export interface ContextOptimizer {
-  /** Stable identifier for the tool, e.g. 'rtk'. */
+  /** Stable identifier for the optimizing tool. */
   name: string;
 
   /** Whether the tool is installed/available in the current environment. */

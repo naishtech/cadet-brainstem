@@ -8,7 +8,7 @@ How to use Cadet Brainstem from VS Code to reduce agent token usage.
    - from this repo: `npm link` (creates the global command), or
    - once published: `npm i -g cadet-brainstem`.
 2. Install the integration tools — see `docs/requirements.md`
-   (Ollama + model, RTK, LeanCTX, Serena).
+  (Ollama + model, LeanCTX, Serena).
 
 ## 1. Register the MCP server (Copilot Chat)
 
@@ -20,8 +20,6 @@ can then call:
    and return the deterministic optimisation strategy. Call this first.
 - `optimize_context` — steering the task, return the LeanCTX-compressed
   representation of a file/directory.
-- `find_relevant_symbols` — Serena semantic search for task-relevant symbols.
-- `compress_command_output` — RTK-reduced output for a command.
 - `chat_memory_store` — persist / retrieve agent memories (local SQLite):
   check before starting work, store facts that are expensive to rediscover.
 
@@ -31,8 +29,8 @@ running until the client disconnects).
 ## 2. Steer the agent
 
 `AGENTS.md` (repo root) tells the agent to call `steering` at the start of
-every turn, then prefer `optimize_context` / `find_relevant_symbols` for large
-context reads and `wrap` for noisy commands. It also tells the agent to check
+every turn, then prefer `optimize_context` for large
+context reads and noisy commands. It also tells the agent to check
 `chat_memory_store` before starting work and, at the end of each response, to
 review the conversation and store memories that match the `memory_policy` —
 facts that are expensive to rediscover (decisions, constraints, verified
@@ -75,8 +73,8 @@ loop (this file is local/untracked — copy it into your repo):
 
 - **`remind`** — when the agent makes many consecutive raw code-search/read
   calls (`Bash`, `grep_search`, `read_file`), deny with a nudge to use
-  `leanctx_call` instead:
-  `cadet-brainstem hook-remind --tool leanctx_call`
+  `optimize_context` instead:
+  `cadet-brainstem hook-remind --tool optimize_context`
 - **`procedure-review`** — when the agent calls `procedure_apply` (applies a
   write procedure) **without** `approved: true`, deny and return the concrete
   reviewable diff so the change is surfaced for user approval. With

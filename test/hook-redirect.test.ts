@@ -88,19 +88,19 @@ describe('redirectForTool', () => {
     expect(redirectForTool('read_file', { file_path: 'assets/font.woff2' })).toBeUndefined();
   });
 
-  it('redirects read-only noisy shell commands to compress_command_output (RTK)', () => {
+  it('redirects read-only noisy shell commands to optimize_context', () => {
     expect(redirectForTool('run_in_terminal', { cmd: 'git status' })).toEqual({
-      cadetTool: 'compress_command_output',
+      cadetTool: 'optimize_context',
       category: 'shell',
       inputHint: 'git status',
     });
     expect(redirectForTool('terminal', { command: 'git diff' })).toEqual({
-      cadetTool: 'compress_command_output',
+      cadetTool: 'optimize_context',
       category: 'shell',
       inputHint: 'git diff',
     });
     expect(redirectForTool('run_in_terminal', { cmd: 'vitest run' })).toEqual({
-      cadetTool: 'compress_command_output',
+      cadetTool: 'optimize_context',
       category: 'shell',
       inputHint: 'vitest run',
     });
@@ -204,7 +204,7 @@ describe('runHookRedirect', () => {
       hookSpecificOutput: { permissionDecision: string; additionalContext?: string };
     };
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
-    expect(parsed.hookSpecificOutput.additionalContext).toContain('compress_command_output');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('optimize_context');
   });
 
   it('allows through after the deny threshold (safety valve)', async () => {

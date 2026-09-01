@@ -18,17 +18,17 @@ export const PROCEDURE_SOURCES = ['manually_seeded', 'learned_from_usage'] as co
 export type ProcedureSource = (typeof PROCEDURE_SOURCES)[number];
 
 /** Local services the local LLM can execute on behalf of the cloud LLM. */
-export const PROCEDURE_SERVICES = ['leanctx', 'serena', 'rtk'] as const;
+export const PROCEDURE_SERVICES = ['leanctx', 'serena'] as const;
 export type ProcedureService = (typeof PROCEDURE_SERVICES)[number];
 
 /**
  * A single executable step mapped to a local service/capability invocation.
  * Not a generic shell command — the local LLM executes these read-only
- * capabilities (LeanCTX, Serena, RTK).
+ * capabilities (LeanCTX, Serena).
  */
 export interface ProcedureStep {
   service: ProcedureService;
-  /** Local tool name, e.g. ctx_read, find_symbol, compress_command_output. */
+  /** Local tool name, e.g. ctx_read or find_symbol. */
   tool: string;
   /** Arguments resolved at execution time. */
   args?: Record<string, unknown>;
