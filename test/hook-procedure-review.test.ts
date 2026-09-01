@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runHookProcedureReview } from '../src/cli/commands/hook-procedure-review';
+import { setActiveProcedure } from '../src/cli/commands/hook-lifecycle';
 import { ProcedureStore } from '../src/procedure';
 
 let dir: string;
@@ -43,6 +44,46 @@ describe('runHookProcedureReview', () => {
     });
     const parsed = JSON.parse(out[0]!);
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
+  });
+
+  it('denies direct writes while a review-required procedure is active', async () => {
+    setActiveProcedure('s1', {
+      procedureId: 'procedure-1',
+      triggerPattern: 'Create a file',
+      repo: dir,
+      write: true,
+      expiresAt: Date.now() + 60_000,
+    }, { stateDir: dir });
+    const out: string[] = [];
+    await runHookProcedureReview({
+      readStdin: async () => payload({ session_id: 's1', tool_name: 'create_file' }),
+      writeOut: (line) => out.push(line),
+      stateDir: dir,
+    });
+    const parsed = JSON.parse(out[0]!);
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('procedure_review');
+  });
+
+  it('denies shell redirection while a review-required procedure is active', async () => {
+    setActiveProcedure('s2', {
+      procedureId: 'procedure-1',
+      triggerPattern: 'Create a file',
+      repo: dir,
+      write: true,
+      expiresAt: Date.now() + 60_000,
+    }, { stateDir: dir });
+    const out: string[] = [];
+    await runHookProcedureReview({
+      readStdin: async () => payload({
+        session_id: 's2',
+        tool_name: 'run_in_terminal',
+        tool_input: { command: 'echo content > output.txt' },
+      }),
+      writeOut: (line) => out.push(line),
+      stateDir: dir,
+    });
+    expect(JSON.parse(out[0]!).hookSpecificOutput.permissionDecision).toBe('deny');
   });
 
   it('allows procedure_apply with approved:true', async () => {

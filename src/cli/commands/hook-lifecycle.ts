@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -15,7 +15,7 @@ import {
   type Steering,
 } from '../../steering';
 
-import { getDefaultProcedurePath, ProcedureStore } from '../../procedure';
+import { getDefaultProcedurePath, isWriteStep, ProcedureStore } from '../../procedure';
 import { getTraceSink } from '../../dashboard/trace';
 import { getEventBus, type DashboardEvent } from '../../dashboard/event-bus';
 import type { CliCommand } from '../types';
@@ -211,11 +211,58 @@ export function searchMemory(
   }
 }
 
-function stateDirFor(deps: HookLifecycleDeps): string {
+export function stateDirFor(deps: HookLifecycleDeps): string {
   return (
     deps.stateDir ??
     join(os.homedir(), '.local', 'state', 'cadet-brainstem', 'hooks')
   );
+}
+
+export interface ActiveProcedureState {
+  procedureId: string;
+  triggerPattern: string;
+  repo: string;
+  write: boolean;
+  expiresAt: number;
+}
+
+function activeProcedurePath(sessionId: string, deps: HookLifecycleDeps = {}): string {
+  return join(stateDirFor(deps), `${sessionId}.procedure.json`);
+}
+
+export function setActiveProcedure(
+  sessionId: string,
+  state: ActiveProcedureState | undefined,
+  deps: HookLifecycleDeps = {},
+): void {
+  try {
+    const path = activeProcedurePath(sessionId, deps);
+    if (state === undefined) {
+      if (existsSync(path)) rmSync(path, { force: true });
+      return;
+    }
+    mkdirSync(stateDirFor(deps), { recursive: true });
+    writeFileSync(path, JSON.stringify(state), 'utf8');
+  } catch {
+    // best-effort
+  }
+}
+
+export function getActiveProcedure(
+  sessionId: string,
+  deps: HookLifecycleDeps = {},
+): ActiveProcedureState | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(activeProcedurePath(sessionId, deps), 'utf8')) as ActiveProcedureState;
+    return parsed.write === true &&
+      typeof parsed.procedureId === 'string' &&
+      typeof parsed.expiresAt === 'number' &&
+      parsed.expiresAt > Date.now()
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Remove persisted hook state for a session (Stop cleanup). */
@@ -231,6 +278,10 @@ export function cleanupSessionState(
     const file = join(stateDirFor(deps), `${sessionId}.json`);
     if (existsSync(file)) {
       rmSync(file, { force: true });
+    }
+    const procedureFile = activeProcedurePath(sessionId, deps);
+    if (existsSync(procedureFile)) {
+      rmSync(procedureFile, { force: true });
     }
   } catch {
     // best-effort
@@ -339,12 +390,27 @@ export async function runHookUserPrompt(
   // procedures so the cloud LLM knows it can hand off execution to the local
   // LLM (mirrors the MCP steerTool `procedures` field). Best effort — never
   // breaks steering if the store is missing or empty.
+  setActiveProcedure(sessionId, undefined, deps);
   try {
     const store = new ProcedureStore(
       process.env.CADET_BRAINSTEM_PROCEDURES ?? getDefaultProcedurePath(),
     );
     try {
       const procedures = store.findMatches(synthesized.entities ?? [], prompt);
+        const writeProcedure = procedures.find((p) => p.steps.some(isWriteStep));
+        setActiveProcedure(
+          sessionId,
+          writeProcedure === undefined
+            ? undefined
+            : {
+                procedureId: writeProcedure.id,
+                triggerPattern: writeProcedure.triggerPattern,
+                repo: payload.cwd ?? process.cwd(),
+                write: true,
+                expiresAt: Date.now() + 10 * 60 * 1000,
+              },
+          deps,
+        );
       if (procedures.length > 0) {
         const lines = procedures.map((p) => {
           const steps = p.steps.map((s) => `${s.service}:${s.tool}`).join(' -> ');

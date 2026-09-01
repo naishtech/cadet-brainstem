@@ -75,9 +75,11 @@ loop (this file is local/untracked — copy it into your repo):
   calls (`Bash`, `grep_search`, `read_file`), deny with a nudge to use
   `optimize_context` instead:
   `cadet-brainstem hook-remind --tool optimize_context`
-- **`procedure-review`** — when the agent calls `procedure_apply` (applies a
-  write procedure) without a matching, unexpired review token and explicit
-  `approved: true`, deny the call. Other tools pass through:
+- **`procedure-review`** — while a matched `requires_review` procedure is
+  active, deny direct native writes so the agent must use the review flow.
+  Also deny `procedure_apply` without a matching, unexpired review token and
+  explicit `approved: true`; read-only tools and the procedure MCP calls pass
+  through:
   `cadet-brainstem hook-procedure-review`
 
 The write-review flow is: `steering` flags a write procedure →

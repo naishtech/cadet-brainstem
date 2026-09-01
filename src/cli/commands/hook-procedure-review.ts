@@ -17,7 +17,7 @@ import {
   isWriteStep,
   ProcedureStore,
 } from '../../procedure';
-import { readPayload, type HookPayload } from './hook-lifecycle';
+import { getActiveProcedure, readPayload, type HookPayload, type HookLifecycleDeps } from './hook-lifecycle';
 import type { CliCommand } from '../types';
 
 export interface ProcedureReviewHookDeps {
@@ -25,7 +25,22 @@ export interface ProcedureReviewHookDeps {
   writeOut?: (line: string) => void;
   /** Injectable procedure store (tests). */
   store?: ProcedureStore;
+  stateDir?: string;
 }
+
+const DIRECT_WRITE_TOOLS = new Set([
+  'create_file',
+  'create_text_file',
+  'replace_string_in_file',
+  'apply_patch',
+  'edit_file',
+  'replace_content',
+  'insert_after_symbol',
+  'insert_before_symbol',
+  'rename_symbol',
+  'safe_delete_symbol',
+  'write_file',
+]);
 
 /** Build the reviewable diff text for a procedure's write steps (best-effort). */
 export async function buildReviewText(
@@ -91,6 +106,25 @@ export async function runHookProcedureReview(
   };
 
   const toolName = String(payload.tool_name ?? payload.toolName ?? '').toLowerCase();
+  const sessionId = payload.session_id ?? payload.sessionId ?? 'unknown';
+  const active = getActiveProcedure(sessionId, { stateDir: deps.stateDir } as HookLifecycleDeps);
+  const hookRepo = payload.cwd ?? process.cwd();
+  if (active !== undefined && active.repo === hookRepo && toolName !== 'procedure_review' && toolName !== 'procedure_apply') {
+    const baseName = toolName.split('.').pop() ?? toolName;
+    const input = (payload.tool_input ?? payload.toolInput ?? {}) as Record<string, unknown>;
+    const command = String(input.command ?? input.cmd ?? '').trim().toLowerCase();
+    const directWrite = DIRECT_WRITE_TOOLS.has(baseName) ||
+      (['run_in_terminal', 'bash', 'powershell', 'shell', 'cmd'].some((name) => baseName.includes(name)) &&
+        /(^|\s)(>>?|del|erase|rm|remove-item|set-content|add-content|copy|move|mv|cp)(\s|$)/.test(command));
+    if (directWrite) {
+      emit(
+        'deny',
+        `A review-required procedure is active: "${active.triggerPattern}" (${active.procedureId}). ` +
+          'Do not write directly. Call procedure_review first, wait for user approval, then call procedure_apply.',
+      );
+      return 0;
+    }
+  }
   if (toolName !== 'procedure_apply') {
     emit('allow');
     return 0;

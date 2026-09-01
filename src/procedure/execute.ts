@@ -140,8 +140,12 @@ export async function defaultFillArgs(
   const host = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
   // Lazily import to avoid a hard steering dependency at module load.
   const { resolveBaseModel } = await import('../steering');
-  // Procedures always reason so the dashboard shows the model's thinking.
-  const think = true;
+  // Arg filling is mechanical, so reasoning is disabled. With `think: true` on
+  // qwen3:4b the chain-of-thought consumed the whole num_predict budget and
+  // Ollama returned an empty `content`, which threw here (regression guarded by
+  // test/procedure-live-fill.integration.test.ts). The dashboard think-trace
+  // still renders if the model ever returns reasoning_content.
+  const think = false;
   const hints = argHintsFor(step.tool);
   const traceId = `procedure-fill-${Date.now()}`;
   const sink = (await import('../dashboard/trace')).getTraceSink();
@@ -194,6 +198,7 @@ export async function defaultFillArgs(
     throw new Error(
       `Ollama returned invalid JSON while filling args for "${step.service}:${step.tool}": ` +
         `${(err as Error).message}. Raw: ${raw.slice(0, 200)}`,
+      { cause: err },
     );
   }
   if (parsed.arguments === undefined || typeof parsed.arguments !== 'object') {

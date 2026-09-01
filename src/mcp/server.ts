@@ -668,7 +668,10 @@ export async function procedureApplyTool(
           ok: false,
           code: 'REVIEW_REQUIRED',
           next_action: 'procedure_review',
-          error: 'procedure_review must complete before applying writes',
+          error:
+            'procedure_review must complete before applying writes: call procedure_review first, ' +
+            'then re-invoke procedure_apply passing the returned review_token (and the same args) ' +
+            'with approved:true',
         };
       }
       const reviewState = deps.procedureReviewState ?? new FileProcedureReviewState();
@@ -684,8 +687,8 @@ export async function procedureApplyTool(
           code: review.code,
           next_action: 'procedure_review',
           error: review.code === 'REVIEW_REQUIRED'
-            ? 'review token is missing, expired, or already used'
-            : 'procedure arguments or repository do not match the reviewed change',
+            ? 'review token is missing, expired, or already used: re-run procedure_review and pass the fresh review_token with the same args'
+            : 'procedure arguments or repository do not match the reviewed change: pass the same args (reviewed_args) and repo that procedure_review used',
         };
       }
     }

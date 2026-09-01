@@ -113,7 +113,7 @@ tool call and proved too intrusive for daily dev:
 | --- | --- | --- |
 | `SessionStart` | `hook-session-start` | Primes the session with memory hints + the recommended tool |
 | `UserPromptSubmit` | `hook-user-prompt` | Classifies the prompt and injects the strategy deterministically |
-| `PreToolUse` | `hook-procedure-review` | Denies write `procedure_apply` without a matching review token and explicit approval |
+| `PreToolUse` | `hook-procedure-review` | Denies native write-tool bypasses for active review-required procedures, and gates write `procedure_apply` behind a matching review token and explicit approval |
 | `PreToolUse` *(opt-in)* | `hook-redirect` + `hook-remind` | Redirects native search/list (hard-deny) and read/shell (soft-nudge) to cadet MCP tools; reminds after |
 | `PostToolUse` | `hook-post-tool` | Records token-saving metrics per tool call |
 | `PreCompact` | `hook-pre-compact` | Exports important context to memory before truncation |

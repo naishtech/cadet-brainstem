@@ -29,6 +29,22 @@ registered in `.vscode/mcp.json`) and as a **command wrapper**
 - If `steering` is unavailable, continue with the tools below using defaults —
   never block on it.
 
+### If `steering` is not in your toolset
+
+Some agent hosts gate MCP tools behind activation groups to keep the initial
+toolset small. The `steering`, `assess_context`, and `optimize_context` tools
+may be in such a group and not visible at session start.
+
+If `steering` is unavailable at the start of a request:
+1. Look for a host activation tool (for example, `activate_group_0`).
+2. Read its description to confirm it exposes the steering tools.
+3. Call it to activate the group.
+4. Retry `steering`.
+
+Do not skip `steering` only because it is hidden. Activate the group first,
+then call `steering`. If no activation tool exists and `steering` is still
+unavailable, continue with the defaults above.
+
 This instruction guides the agent; MCP itself cannot force a client to invoke a
 tool for every user request.
 
@@ -68,6 +84,22 @@ tool for every user request.
   cadet-brainstem wrap -- <command>
   ```
   It runs the command through the normal shell.
+
+## Procedure write handoff (review gate)
+
+Write procedures (`riskTier: requires_review`) follow a two-step handoff. Do
+not apply them directly.
+
+1. **Preview** — call `procedure_review` with the procedure id, repo, and the
+   args for the write step. It returns a reviewable diff plus a `review_token`
+   and `reviewed_args`.
+2. **Apply after approval** — call `procedure_apply` with `approved: true`,
+   and pass back the **same `review_token` and the same `args`** that
+   `procedure_review` returned. `procedure_apply` refuses to run if the token
+   is missing or if the args/repo differ from the reviewed change.
+
+Do not bypass this gate with a direct file write unless the user approves a
+fallback when the gate is unavailable.
 
 ## Rules
 
